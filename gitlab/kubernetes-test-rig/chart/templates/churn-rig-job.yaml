@@ -24,6 +24,7 @@ spec:
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
         {{- include "rig.credentialStagingInit" . | nindent 8 }}
+        {{- include "rig.waitForElasticsearch" . | nindent 8 }}
       containers:
         - name: churn-rig
           image: {{ .Values.image.python | quote }}

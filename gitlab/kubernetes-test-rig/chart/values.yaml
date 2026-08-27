@@ -155,6 +155,11 @@ elasticsearch:
   # instead.
   insecureTls: false
 
+  # How long each job waits for the cluster to start answering before giving
+  # up. Helm and Argo create the cluster and these jobs together, so on a
+  # fresh install the tools would otherwise race Elasticsearch and lose.
+  waitSeconds: 600
+
   # An in-cluster, ECK-managed Elasticsearch, templated from this project's
   # manifests/elasticsearch.yaml. Requires the ECK operator already
   # installed (see manifests/README.md); this chart does not install the

@@ -36,6 +36,7 @@ spec:
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
         {{- include "rig.credentialStagingInit" . | nindent 8 }}
+        {{- include "rig.waitForElasticsearch" . | nindent 8 }}
       containers:
         - name: qualify
           image: {{ .Values.image.python | quote }}

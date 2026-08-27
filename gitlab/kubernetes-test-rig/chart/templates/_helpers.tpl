@@ -253,3 +253,45 @@ rig.sourceVolumes needs.
     name: {{ include "rig.fullname" . }}-es-ca-cert
 {{- end }}
 {{- end -}}
+
+{{/*
+Wait for Elasticsearch to answer before starting a tool that needs it.
+
+Helm and Argo both create the Elasticsearch resource and these Jobs in the same
+pass, so on a fresh install the load generator reaches the cluster before it is
+listening and exits on "Connection refused". Retrying inside the tool would
+hide a real outage; waiting here does not, because it waits only once, at the
+start, and gives up loudly.
+
+Any HTTP answer counts, including 401. The point is that something is
+listening, not that this container can authenticate.
+*/}}
+{{- define "rig.waitForElasticsearch" -}}
+- name: wait-for-elasticsearch
+  image: {{ .Values.image.python | quote }}
+  env:
+    - name: ES_URL
+      value: {{ include "rig.esUrl" . | quote }}
+    - name: WAIT_SECONDS
+      value: {{ .Values.elasticsearch.waitSeconds | int64 | quote }}
+  command:
+    - python3
+    - -c
+    - |
+      import os, ssl, time, urllib.request, urllib.error
+      url, deadline = os.environ["ES_URL"], time.time() + int(os.environ["WAIT_SECONDS"])
+      ctx = ssl.create_default_context()
+      ctx.check_hostname = False
+      ctx.verify_mode = ssl.CERT_NONE
+      last = "no attempt made"
+      while time.time() < deadline:
+          try:
+              urllib.request.urlopen(url, timeout=5, context=ctx)
+              print(f"{url} is answering"); raise SystemExit(0)
+          except urllib.error.HTTPError as exc:
+              print(f"{url} is answering (HTTP {exc.code})"); raise SystemExit(0)
+          except Exception as exc:
+              last = f"{type(exc).__name__}: {exc}"
+          time.sleep(5)
+      raise SystemExit(f"{url} did not answer within {os.environ['WAIT_SECONDS']}s. Last: {last}")
+{{- end -}}
