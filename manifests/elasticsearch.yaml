@@ -70,3 +70,16 @@ spec:
                   memory: 16Gi
                 limits:
                   memory: 16Gi
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                # The frozen shared cache above is a file on this
+                # volume. ECK's default of 1Gi cannot hold a 2gb
+                # cache, and the node dies at boot saying so on any
+                # storage class that enforces its size.
+                storage: 10Gi

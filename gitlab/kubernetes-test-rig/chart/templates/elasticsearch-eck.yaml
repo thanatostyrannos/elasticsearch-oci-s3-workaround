@@ -82,4 +82,21 @@ spec:
                   memory: {{ .Values.elasticsearch.eck.memoryRequest | quote }}
                 limits:
                   memory: {{ .Values.elasticsearch.eck.memoryLimit | quote }}
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                # The frozen shared cache is a file on THIS volume, so this
+                # must exceed sharedCacheSize with room for indices as well.
+                # ECK's own default is 1Gi, which a 2gb cache cannot fit into;
+                # a storage class that does not enforce its size hides that,
+                # and one that does refuses to start the node.
+                storage: {{ .Values.elasticsearch.eck.storageSize | quote }}
+            {{- if .Values.elasticsearch.eck.storageClassName }}
+            storageClassName: {{ .Values.elasticsearch.eck.storageClassName | quote }}
+            {{- end }}
 {{- end }}

@@ -118,6 +118,13 @@ Frozen indices are mounted as partial searchable snapshots, and without a
 shared cache configured the frozen phase fails and ILM stalls. 2gb was enough
 for everything below.
 
+**The cache is a file on the node's data volume, so that volume has to be
+bigger than the cache.** Elasticsearch allocates the whole cache file at boot
+and refuses to start if it does not fit, saying `Not enough free space ... for
+cache file of size`. ECK's default claim is 1Gi, which a 2gb cache cannot fit
+into. Ask for 10Gi. A storage class that does not enforce its own size will let
+a too-small claim appear to work, which is not the same as it being right.
+
 The node we measured on ran an 8g heap in a 16Gi container. Smaller will work
 for a lower ingest rate. The audit itself runs outside the cluster and its
 memory use is discussed under storage below.
@@ -190,7 +197,7 @@ Measured on the published run, which ingested for 89 minutes:
 | Bucket space leaked | 270.2 MB | Objects no live snapshot referenced |
 | Leak rate | 181.9 MB per hour | At these settings. Scales with ingest rate and snapshot cadence |
 | Per snapshot expiry | about 3 MB | One expiry per minute at this cadence |
-| Elasticsearch data volume | 1 GiB was sufficient | One backing index, rollover held back |
+| Elasticsearch data volume | 10 GiB, and it must exceed the shared cache | The frozen shared cache is a file on this volume. The measured run used a 1 GiB claim, which only worked because that storage class did not enforce its size |
 | Frozen shared cache | 2 GiB | Configured, not measured at capacity |
 
 Budget bucket space for the leak rate times how long you intend to run, and

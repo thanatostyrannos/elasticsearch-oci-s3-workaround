@@ -169,6 +169,14 @@ elasticsearch:
     # partial searchable snapshot and the churn rig's frozen phase stalls.
     # It counts against the container memory limit alongside the heap.
     sharedCacheSize: "2gb"
+    # The shared cache above is a FILE ON THIS VOLUME, so this has to be
+    # bigger than it, with room for the indices too. ECK defaults to 1Gi,
+    # which a 2gb cache cannot fit into: the node then dies at boot with
+    # "Not enough free space ... for cache file of size". A storage class
+    # that does not enforce its own size hides this, which is exactly how it
+    # went unnoticed here until the chart met one that does.
+    storageSize: "10Gi"
+    storageClassName: ""    # empty uses the cluster default StorageClass
     disableTls: true        # matches manifests/elasticsearch.yaml: plain HTTP on 9200
     # The OCI S3-compatibility client Elasticsearch itself uses to register
     # a repository with --s3-client oci. Leave namespace/region empty if you
