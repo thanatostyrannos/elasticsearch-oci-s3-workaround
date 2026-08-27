@@ -6,6 +6,51 @@
 **Scope:** `git archive` export of that commit. Tracked files only, 530 files,
 135 Python modules, 20,246 lines scanned by Bandit.
 
+## Scanner results, this commit
+
+Three scanners, one artifact each in [`scans/`](scans/), overwritten on every
+run rather than accumulating dated copies.
+
+| Scanner | Findings | Highest severity |
+|---|---|---|
+| bandit | 3 | LOW |
+| semgrep | 12 | ERROR, all three of them the same rule |
+| trivy | 132 | MEDIUM |
+
+**bandit went from 6 MEDIUM to 0.** Every URL is checked for an http or https
+scheme before it is opened, at the argument parser and again at the transport.
+The unverified TLS context is built only inside the branch `--insecure`
+already gated, so verification is the default rather than the fallback. The
+three remaining LOW findings are a variable initialised to an empty string
+before being read from a file, and the deliberate use of subprocess to run the
+audit and the delete tool as separate processes, which is the design rather
+than an oversight.
+
+**trivy went from 19 HIGH to 0.** Every container now runs non-root with a
+read-only root filesystem, no privilege escalation and all capabilities
+dropped. What remains is 132 LOW and MEDIUM Kubernetes advisories on a lab
+rig, not on anything an operator runs in production.
+
+**trivy also found four HIGH secrets, and they were real.** An RSA private key
+sat in a local Terraform state backup. It was never committed, was ignored by
+git, appeared in no release, and the key itself had already been destroyed
+with the tenancy it belonged to. The file is shredded and a rescan reports
+zero. Worth recording because of how it surfaced: the first scan artifact
+captured ten copies of the key it had just found, and a later one embedded the
+commit author's email address. A scan result is not automatically safe to
+publish because it is a scan result. This project's own committed-credential
+guard caught both before either reached a remote.
+
+**semgrep's three `use-defused-xml` findings are false positives with a real
+mitigation behind them.** `defusedxml` is a third-party package and this
+project has none, by design, verified at zero third-party imports across 141
+files. The exposure is closed without it: `refuse_doctype` in
+`generation_chain/sources/s3.py` refuses any body carrying a DOCTYPE before
+parsing begins, and internal entities cannot be declared without one, so
+billion laughs has nowhere to live. Two neuter guards pin the behaviour, so
+removing the refusal turns a named test red. semgrep matches the import, not
+the guard, and cannot see the difference.
+
 ## Overall risk: MODERATE
 
 No real secret was found. The only secret-scanner hits are the synthetic

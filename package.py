@@ -68,7 +68,7 @@ PACKAGED_TREES = (
     # them, and .xml/.ckl so the STIG checklist ships in the format the STIG
     # tooling actually reads. A compliance claim an assessor cannot open in
     # their own tool is a claim they have to take on trust.
-    ("docs", (".md", ".json", ".xml", ".ckl")),
+    ("docs", (".md", ".json", ".xml", ".ckl", ".cklb")),
     # The operator-facing loop runner and its example config. Someone testing
     # this has a shell, not necessarily anything else.
     ("scripts", (".sh", ".example")),

@@ -26,7 +26,7 @@ directory.
 |---|---|
 | [delete-campaign/](delete-campaign/README.md) | Twelve reclaim cycles run by `generation_chain` against a live, moving repository. Audit, dry run, execute and restore check per cycle. Evidence of the tool that ships. |
 | [regression-10/](regression-10/README.md) | Ten audit-then-delete cycles against a live repository after a week of changes. 31,534 objects deleted, zero failed, zero unconfirmed, restore intact. |
-| [oci-s3-compatibility/](oci-s3-compatibility/README.md) | What Oracle's endpoint accepts and rejects, measured on a real bucket. The fault reproduced, and the three algorithms that work. |
+| [What Oracle's endpoint accepts](../docs/oci-s3-compatibility.md) | What Oracle's endpoint accepts and rejects, measured on a real bucket. The fault reproduced, and the three algorithms that work. |
 | [blast-radius-remeasure/](blast-radius-remeasure/README.md) | What a wrong delete costs, measured rather than argued. Tool-agnostic: it deletes blobs directly and observes what Elasticsearch then reports. |
 | [methodology.md](methodology.md) | How the validation was done, written so someone else can run it. The sweep commands are history; the mounted-index and restore measurements are current. |
 | [campaign-data.md](campaign-data.md) | Raw data from the two live-rig campaigns: every orphan key with its shard path, size, dates and classification, plus sizing, mounted linkage and restore proof. |

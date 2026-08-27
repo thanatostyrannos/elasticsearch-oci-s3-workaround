@@ -26,6 +26,32 @@ commit, it is marked Not Reviewed. Nothing was guessed into Not a Finding.
 | II | 4 | 5 | 89 | 132 | 230 |
 | III | 0 | 0 | 11 | 11 | 22 |
 
+## The machine-readable checklist
+
+[`elasticsearch-oci-s3-workaround.cklb`](elasticsearch-oci-s3-workaround.cklb)
+opens in STIG Viewer. It is built from DISA's own Application Security and
+Development STIG, V6R4, benchmark dated 01 Oct 2025, so every rule carries
+DISA's title, discussion, check content and fix text rather than anything
+restated here.
+
+**It records 16 determinations and leaves 270 not reviewed.** That does not
+match the summary table above, and the difference is deliberate.
+
+The 16 are the controls this assessment examined against the source and wrote
+down a basis for. Each one carries that basis in its finding details, naming
+the file and the mechanism it rests on, so a reviewer can check the claim
+rather than take it.
+
+The 113 counted as Not Applicable above were judged during the assessment but
+never individually recorded. A count is not a determination. Asserting 113 Not
+Applicable in a file an assessor imports, without a per-rule justification
+behind any of them, would put a number in front of someone that nothing
+supports. They stay not reviewed until each one has a reason written next to
+it.
+
+So the checklist understates what was looked at and overstates what remains.
+That is the safe direction for an artifact somebody else signs.
+
 ## On the size of the Not Applicable bucket
 
 This is a headless, single-operator command line tool. It has no interactive

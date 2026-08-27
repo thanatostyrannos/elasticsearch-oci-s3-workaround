@@ -1394,7 +1394,7 @@ invalidates its own approval.
 
 Snapshots share segment blobs, so a `__<blobid>` object is usually reachable
 from more than one snapshot and its key tells you nothing about how many.
-[Blast radius](docs/blast-radius.md) works through what that sharing costs when
-a delete is wrong, and it names the tools above throughout, because it was
-written while they were the tools.
+[Blast radius](docs/blast-radius.md) works through what that sharing costs
+when a delete is wrong, written while the retired tools were the tools and
+updated since for `generation_chain`.
 

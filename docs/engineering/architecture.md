@@ -465,6 +465,72 @@ rejects. Everything else in the system either cannot reach the store at all,
 can only read it, or (the churn rig) can only write new objects, never
 remove the ones it wrote through the normal repository client path.
 
+### 4a. Ports, protocols and services
+
+The table above says what talks to what. This one says it in the shape a
+network team or a PPSM registration needs: a port, a protocol, a direction and
+a reason. Addresses are placeholders because they differ per site. Everything
+else is a property of the tool and does not.
+
+```mermaid
+flowchart LR
+    subgraph Origin["Where the tool runs (one of these)"]
+        Host["Operator host or jump box<br/>10.x.x.x"]
+        Runner["GitLab runner<br/>10.x.x.x"]
+        Pod["Kubernetes pod<br/>cluster CIDR"]
+    end
+
+    ES["Elasticsearch<br/>es.example.internal<br/>TCP 9200"]
+    S3["S3 Compatibility endpoint<br/>NAMESPACE.compat.objectstorage.REGION.oraclecloud.com<br/>TCP 443"]
+    MIN["MinIO, lab only<br/>10.x.x.x<br/>TCP 9000"]
+    GIT["Source repository, deployed modes only<br/>TCP 443 or TCP 22"]
+    K8S["Kubernetes API, CI deploy only<br/>TCP 6443"]
+
+    Host -->|"TCP 9200 out, HTTPS, REST GET"| ES
+    Host -->|"TCP 443 out, HTTPS, S3 GET and HEAD"| S3
+    Runner -->|"TCP 9200 out, HTTPS"| ES
+    Runner -->|"TCP 443 out, HTTPS"| S3
+    Runner -->|"TCP 443 or 22 out, git clone"| GIT
+    Runner -->|"TCP 6443 out, rig pipeline only"| K8S
+    Pod -->|"TCP 9200 out, in cluster or egress"| ES
+    Pod -->|"TCP 443 out, HTTPS"| S3
+    Pod -->|"TCP 9000 out, lab control only"| MIN
+    Pod -->|"TCP 443 or 22 out, git clone"| GIT
+
+    Listen["No listening port.<br/>The tool binds nothing and accepts no inbound connection.<br/>No inbound firewall rule is required for it."]
+```
+
+**Every connection is outbound and client initiated. The tool never listens.**
+It opens no socket for inbound traffic in any mode, so a PPSM registration
+needs no inbound entry for it, and a host firewall can deny inbound to these
+processes entirely without affecting them.
+
+| Port | Protocol | Service | Direction | Source | Destination | Purpose | Data crossing |
+|---|---|---|---|---|---|---|---|
+| 9200 | TCP / HTTPS | Elasticsearch REST | Outbound | wherever the tool runs | Elasticsearch cluster | Ask which objects a mounted searchable snapshot protects. `GET` only | Snapshot and index names, index UUIDs. No document content |
+| 443 | TCP / HTTPS | Amazon S3 Compatibility API | Outbound | wherever the tool runs | object storage endpoint | List the repository and read its metadata. `GET` and `HEAD` for the audit | Object keys, sizes, and repository metadata blobs |
+| 443 | TCP / HTTPS | Amazon S3 Compatibility API | Outbound | wherever the delete tool runs | object storage endpoint | The batch delete, `POST /<bucket>?delete`. **The only egress that removes data** | The keys named by an approved manifest |
+| 9000 | TCP / HTTP or HTTPS | MinIO | Outbound | lab rig only | MinIO service | A local control store, so a test needs no cloud credential. Not used in production | Same as the S3 rows |
+| 443 or 22 | TCP / HTTPS or SSH | git | Outbound | CI runner or Kubernetes pod | wherever the source is hosted | Deployed modes clone the tool at start. Not used when running by hand | Source code only |
+| 6443 | TCP / HTTPS | Kubernetes API | Outbound | CI runner | cluster API server | Only the rig pipeline, to deploy the chart. The read-only scan never contacts it | Kubernetes manifests |
+
+Ports 9200, 9000 and 6443 are defaults and are frequently changed. Take them
+from your own configuration rather than from this table. 443 is fixed by the
+object storage endpoint being HTTPS.
+
+**What to fill in per site.** The destination address for Elasticsearch, the
+object storage namespace and region in the endpoint hostname, the source range
+for wherever you run this, and any egress proxy in between. Nothing else in the
+table varies: the methods, the direction and the absence of a listener are
+properties of the code, and the read-only guarantee is enforced at the
+transport rather than by configuration.
+
+**For an accreditation boundary.** The audit crosses the boundary to read and
+cannot write, because its transport permits `GET` and `HEAD` and refuses
+anything else. The delete tool crosses it to remove objects an operator
+approved by digest. Those are different processes with different justifications
+and they should be registered as such, not as one application with two modes.
+
 ## 5. The fault itself
 
 Working path against genuine AWS S3 or a compliant store, versus the failing

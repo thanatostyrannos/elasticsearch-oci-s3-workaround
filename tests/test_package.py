@@ -115,6 +115,10 @@ class TheReleaseLeavesTheLabBehind(TheReleaseCarriesWhatAnOperatorNeeds):
         self.assertEqual(self._prefixed("tests"), set())
 
     def test_no_captured_evidence_ships(self):
+        # The one write-up worth handing to an operator, what Oracle's S3
+        # Compatibility API actually does, now lives in docs/ and ships from
+        # there. What is left under evidence/ is captured run output and
+        # campaign notes about tools that no longer exist.
         self.assertEqual(self._prefixed("evidence"), set())
 
     def test_no_terraform_ships(self):
