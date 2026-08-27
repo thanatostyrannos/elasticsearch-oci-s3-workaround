@@ -3,8 +3,8 @@
 # Two things live here and they are deliberately not the same pipeline.
 #
 #   audit      read-only, safe, meant for a schedule. It cannot delete: the
-#              read path allows GET, HEAD and the POST that lists a bucket,
-#              and refuses anything else at the transport.
+#              read path allows GET and HEAD, and nothing else. POST and
+#              DELETE are unreachable, refused at the transport.
 #
 #   qualify    the full rig. It mutates your cluster, runs for hours, and
 #              deletes objects when you let it. Manual only, never scheduled.

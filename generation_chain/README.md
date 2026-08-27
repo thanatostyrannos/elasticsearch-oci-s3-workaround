@@ -2,7 +2,7 @@
 
 Reads an Elasticsearch snapshot repository and names the objects a delete
 operation should have removed and did not. It reads, and it never deletes: the
-HTTP layer sets `ALLOWED_METHODS = frozenset({"GET", "HEAD"})` behind an assert,
+HTTP layer sets `ALLOWED_METHODS = frozenset({"GET", "HEAD"})` refused at the transport,
 so DELETE is unreachable rather than merely unused. What comes out is a manifest
 a person reads before anything is removed.
 

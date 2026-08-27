@@ -1,6 +1,6 @@
 {{/*
 python3 -m generation_chain, read-only, on a schedule. Its HTTP transport
-permits GET and HEAD, and the one POST that lists a bucket, and refuses
+permits GET and HEAD and nothing else, and refuses
 anything else. It does not import the package that deletes. This is the one
 piece of this chart safe to run unattended; the qualify Job is deliberately
 never a CronJob for the same reason.

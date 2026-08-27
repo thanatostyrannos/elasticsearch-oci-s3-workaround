@@ -33,7 +33,7 @@ The replacement has landed, and it is two commands rather than one.
 as `python3 -m generation_chain`. It reproduces Elasticsearch's own shard-local
 set difference and condemns a blob on its PRESENCE in a deleted snapshot's file
 list, never on its absence from a live set the tool computed. It has no delete
-path at all: its HTTP layer allows GET and HEAD behind an assert. A read that
+path at all: its HTTP layer allows GET and HEAD refused at the transport. A read that
 fails there makes the manifest shorter rather than wrong, which is the whole
 difference from the three tools above.
 

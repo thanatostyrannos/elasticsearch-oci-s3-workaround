@@ -1,7 +1,7 @@
 # The read-only audit, packaged for a private GitLab instance.
 #
 # This pipeline runs `python3 -m generation_chain`. That tool's HTTP transport
-# permits GET and HEAD, and the one POST that lists a bucket, and raises on
+# permits GET and HEAD and nothing else, and raises on
 # anything else. It does not import the package that deletes. There is no
 # --execute flag here because the audit does not have one: deleting is a
 # separate tool, `generation_chain.reclaim`, and this pipeline never calls it.

@@ -16,7 +16,7 @@ their own Elasticsearch, and their own Oracle Object Storage bucket.
 Start with `readonly-scan`. It answers "how much is leaking, and where" for
 any repository you can reach, and there is no way to make it remove
 anything: the audit's HTTP transport permits `GET` and `HEAD`, and the one
-`POST` that lists a bucket, and refuses anything else at the transport
+nothing else, and refuses any other method at the transport
 level. It does not import the package that deletes.
 
 Move to `kubernetes-test-rig` once you have a manifest from the scan and

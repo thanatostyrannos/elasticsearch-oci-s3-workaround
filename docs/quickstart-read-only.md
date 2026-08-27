@@ -1,8 +1,9 @@
 # Reading a leaking repository, without deleting anything
 
-**Nothing on this page can delete anything.** The read path allows `GET`,
-`HEAD` and the `POST` that lists a bucket, and refuses anything else at the
-transport, so it cannot remove an object even if you ask it to.
+**Nothing on this page can delete anything.** The read path allows `GET` and
+`HEAD` and nothing else. `POST` and `DELETE` are not merely unused, they are
+unreachable: the transport refuses any other method rather than trusting a
+caller to behave. Listing a bucket is a `GET`.
 
 When you want the space back, read
 [testing in your own OCI environment](testing-in-your-oci-environment.md) and

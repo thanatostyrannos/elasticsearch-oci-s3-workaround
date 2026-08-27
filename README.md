@@ -813,7 +813,7 @@ exist to measure and to check.
 
 | Tool | Purpose |
 |---|---|
-| [`generation_chain/`](generation_chain/README.md) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, behind an assert. Output is a manifest a person reads. See [its README](generation_chain/README.md) for the safety condition, the exit codes, and what it cannot see. |
+| [`generation_chain/`](generation_chain/README.md) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [its README](generation_chain/README.md) for the safety condition, the exit codes, and what it cannot see. |
 | [`generation_chain/reclaim/`](generation_chain/reclaim/) | Deletes the keys in an approved manifest, in batches, with `Content-MD5`. Dry run by default. `--execute` requires `--approve-digest` and `--approve-rows` from that dry run, so an edited manifest cannot be executed. It contains no reference to Elasticsearch: the veto is applied when the manifest is derived. |
 | [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [generating load](docs/generating-load.md). |
 | [`verify_restorable.py`](verify_restorable.py) | Restores an index from the repository and counts documents. The only check that survives the others passing. |
@@ -1381,7 +1381,7 @@ on them, and nothing stops you deleting one that is load bearing. Pass
 manifest. It can never add one.
 
 The audit itself has no delete path. Its HTTP layer allows GET and HEAD and
-nothing else, behind an assert, so no change to it can quietly add one.
+nothing else, refused at the transport, so no change to it can quietly add one.
 
 Reclaiming is a separate tool, `generation_chain.reclaim`, run against a manifest
 the audit produced and a person has read. Dry run is the default and `--execute`

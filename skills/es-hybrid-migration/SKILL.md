@@ -504,7 +504,7 @@ it.
 
 Two commands, and the split is the design.
 [`python3 -m generation_chain`](../../generation_chain/README.md) reads and
-cannot delete: its HTTP layer allows GET and HEAD behind an assert.
+cannot delete: its HTTP layer allows GET and HEAD refused at the transport.
 `python3 -m generation_chain.reclaim` deletes and derives nothing: it removes
 exactly the keys a manifest names, in the order given. Between the two sits a
 person reading that manifest.

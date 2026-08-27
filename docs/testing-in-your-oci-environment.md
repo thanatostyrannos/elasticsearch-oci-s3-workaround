@@ -205,9 +205,11 @@ remember that nothing reclaims it until you run the delete path. A run left
 going overnight at these settings would leave about 1.5 GB behind.
 
 The audit holds the repository listing in memory while it works, so its own
-memory use scales with object count rather than object size. `--memory-mb` makes
-it refuse before reading rather than fail partway through. This is a real
-limit and it is tracked as
+memory use scales with object count rather than object size. `--max-ram`, or
+the older `--memory-mb`, does not refuse the whole run up front: it sizes how
+many shard directories are read at once. Only a single shard directory too
+large to hold even on its own refuses before it is read, with exit code 5. This
+is a real limit and it is tracked as
 [issue #7](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/7).
 
 ## Step 5: start the load generator
@@ -305,9 +307,10 @@ python3 -m generation_chain \
 `generation_chain` is the audit, and it is the only command in this document
 until you reach step 7.
 
-This reads and reports. It cannot delete: the read path allows `GET`, `HEAD`
-and the `POST` that lists a bucket, and refuses anything else at the transport
-rather than trusting a caller to behave. The count and reclaimable size print
+This reads and reports. It cannot delete: the read path allows `GET` and `HEAD`
+and nothing else, refusing any other method at the transport rather than
+trusting a caller to behave. Listing a bucket is a `GET`, so `POST` and
+`DELETE` are unreachable rather than merely unused. The count and reclaimable size print
 to your screen as it works, and `--manifest` writes every orphaned object to a
 tab separated file.
 
