@@ -64,9 +64,11 @@ FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 # Directories shipped whole, by extension.
 PACKAGED_TREES = (
     ("generation_chain", (".py",)),
-    # .json so the raw security scan artifacts ship beside the reports they
-    # were built from. A report nobody can check is an assertion.
-    ("docs", (".md", ".json")),
+    # .json so the raw scanner artifacts ship beside the reports built from
+    # them, and .xml/.ckl so the STIG checklist ships in the format the STIG
+    # tooling actually reads. A compliance claim an assessor cannot open in
+    # their own tool is a claim they have to take on trust.
+    ("docs", (".md", ".json", ".xml", ".ckl")),
     # The operator-facing loop runner and its example config. Someone testing
     # this has a shell, not necessarily anything else.
     ("scripts", (".sh", ".example")),

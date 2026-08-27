@@ -45,7 +45,7 @@ spec:
               raise SystemExit("minio did not answer within 300s")
       containers:
         - name: mc
-          image: minio/mc:RELEASE.2025-01-17T23-25-27Z
+          image: minio/mc:RELEASE.2025-01-17T23-25-50Z
           command:
             - /bin/sh
             - -c
