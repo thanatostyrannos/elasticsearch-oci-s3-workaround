@@ -336,3 +336,43 @@ listening, not that this container can authenticate.
           time.sleep(5)
       raise SystemExit(f"{url} did not answer within {os.environ['WAIT_SECONDS']}s. Last: {last}")
 {{- end -}}
+
+{{/*
+Tear down a previous rig before starting a new one.
+
+snapshot_churn_rig.py refuses to run when its state file already exists,
+because a second rig writing over a first one's policies and data stream would
+leave neither recoverable. The refusal is right. What was missing is that the
+state file lives on a PersistentVolumeClaim, which outlives the Job, so a
+second install of this chart always met the refusal and stopped:
+
+    state file /state/rig-state.json already exists; a previous run was not
+    torn down. Run teardown first, or point --state-file elsewhere and pick a
+    fresh --prefix
+
+This does what that message says. It runs only when the file is there, so a
+first install skips it, and it uses the same arguments the teardown job uses,
+so it removes exactly what the previous run created.
+*/}}
+{{- define "rig.teardownStaleStateInit" -}}
+{{- if .Values.churnRig.teardownStaleState }}
+- name: teardown-stale-state
+  image: {{ .Values.image.python | quote }}
+  workingDir: {{ include "rig.workdir" . }}
+  command:
+    - sh
+    - -c
+    - |
+      set -eu
+      if [ ! -f {{ .Values.churnRig.stateFilePath | quote }} ]; then
+        echo "no previous state file; nothing to tear down"
+        exit 0
+      fi
+      echo "a previous rig left state behind; tearing it down first"
+      python3 snapshot_churn_rig.py teardown "$@"
+    - --
+    {{- include "rig.teardownArgs" . | nindent 4 }}
+  volumeMounts:
+    {{- include "rig.teardownVolumeMounts" . | nindent 4 }}
+{{- end }}
+{{- end -}}

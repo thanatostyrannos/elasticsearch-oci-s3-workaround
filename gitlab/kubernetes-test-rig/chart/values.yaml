@@ -227,6 +227,11 @@ ingress:
 # find. Defaults match the published run recorded in FACTS.md.
 churnRig:
   enabled: true
+  # Run teardown first when a previous rig left its state file on the volume.
+  # The state file outlives the Job, so without this a second install of this
+  # chart meets the rig's own refusal and stops. Set false if you would rather
+  # be told to clean up by hand than have the chart remove the previous run.
+  teardownStaleState: true
   # namespace: (cluster:) --es/--user/--password-file/--ca-cert/--insecure
   # come from the shared `elasticsearch` and `credentials` blocks above.
   prefix: "leaktest"              # (namespace:) unique namespace for everything this run
