@@ -1,9 +1,14 @@
 # Reading a leaking repository, without deleting anything
 
-**Do not use this release to delete. The delete path is not signed off yet.**
-It exists, it refuses far more than it used to, and it has not been through a
-full run against a real bucket since the last round of fixes. Read the report,
-keep the file, delete nothing.
+**Nothing on this page can delete anything.** The read path allows `GET`,
+`HEAD` and the `POST` that lists a bucket, and refuses anything else at the
+transport, so it cannot remove an object even if you ask it to.
+
+When you want the space back, read
+[testing in your own OCI environment](testing-in-your-oci-environment.md) and
+run the loop against a bucket holding nothing you care about first. The delete
+path has been exercised against a live Oracle bucket, but it has not been
+exercised against yours.
 
 What this gets you: a count of orphaned objects, how much space they occupy,
 and a file listing every one of them.

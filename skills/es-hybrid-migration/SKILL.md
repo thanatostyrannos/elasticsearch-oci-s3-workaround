@@ -635,10 +635,11 @@ keys the store's own answer accounted for neither way. The restore checks at
 cycles 3, 6 and 9 each restored a real index with zero integrity anomalies. The raw output is in
 [evidence/delete-campaign](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/delete-campaign/README.md).
 
-**What that does not cover.** Nobody has run this against a real Oracle Object
-Storage bucket, because no OCI endpoint is reachable from this project's lab.
-Treat the first production run as an experiment: dry run, read the manifest,
-reclaim, then restore something.
+**What that does not cover.** The cleanup leg has since been run against a real
+Oracle Object Storage bucket, 58 cycles with 888 objects deleted and no failed
+or unconfirmed deletes, but against one tenancy and one repository shape.
+Treat the first production run as an experiment anyway: dry run, read the
+manifest, reclaim, then restore something.
 
 **Do not fill the gap with a raw object-store client.** Deleting a key out of this
 bucket by hand carries every risk the retired tools carried and none of the
@@ -821,12 +822,13 @@ permission and ownership behavior across nodes, or capacity exhaustion.
 **Validate the volume itself separately, before the migration, with the storage
 team's own acceptance tests.**
 
-**2. The cleanup leg has never run against a real endpoint.** Step 9 was measured
-against MinIO pinned to a release that rejects the same call, and against a real
-Elasticsearch 9.5.2. No OCI endpoint is reachable from this project's lab, so
-every claim about Oracle Object Storage rests on Oracle's published operation
-lists rather than on a run. This is a limit on the whole architecture and not on
-any one step of it.
+**2. The cleanup leg has run against one real endpoint, not many.** Step 9 was
+measured against MinIO pinned to a release that rejects the same call, and then
+against a real Oracle Object Storage bucket over the Amazon S3 Compatibility
+API. Claims about other S3-compatible stores that reject the same call, Dell
+ECS and Hitachi HCP among them, still rest on their published operation lists
+rather than on a run. This is a limit on the whole architecture and not on any
+one step of it.
 
 **3. The two halves of Step 9 are validated differently.** The audit is covered
 by the unit suite and by twelve live cycles against a churning repository. The

@@ -17,7 +17,7 @@ Do not "upgrade" it; losing the fault is losing the rig's purpose.
 
 ```bash
 CTX="--context rancher-desktop"   # never your production context
-# 1. ECK operator (downloaded, not vendored here — ~850KB of CRDs):
+# 1. ECK operator (downloaded, not vendored here, about 850KB of CRDs):
 curl -fsSL https://download.elastic.co/downloads/eck/3.5.0/crds.yaml | kubectl $CTX create -f -
 curl -fsSL https://download.elastic.co/downloads/eck/3.5.0/operator.yaml | kubectl $CTX apply -f -
 # 2. Substitute every CHANGEME. See "What you must substitute" below; there

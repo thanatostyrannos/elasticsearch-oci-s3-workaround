@@ -22,3 +22,6 @@ credentials.json
 *.tfvars
 !*.tfvars.example
 .terraform/
+
+# Release archives are published on the release page, not carried in history.
+dist/

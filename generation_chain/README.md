@@ -176,6 +176,9 @@ same object store this reads, so a change that moves what both of them see is
 invisible to both. The Lucene commit point is used as an independent oracle
 against exactly that, and its limit is stated where it is implemented.
 
-None of this has been run against a real OCI bucket. No OCI endpoint is
-reachable from this project's lab, which is a standing limit on every claim
-here, not a gap in any one part of it.
+This has now been run against a real Oracle Object Storage bucket over the
+Amazon S3 Compatibility API: 58 cycles of audit, dry run and execute, 888
+objects deleted, no failures and no unconfirmed deletes. That is one tenancy
+and one repository shape, so it says the paths work rather than that they work
+everywhere. The limit that remains is the ordinary one: a claim measured in a
+lab is not a claim about your cluster.

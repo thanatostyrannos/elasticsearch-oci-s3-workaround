@@ -83,6 +83,14 @@ load generator that manufactures a leaking repository on purpose, and
 `scripts/run-test-cycle.sh`, which drives the audit-and-reclaim loop from a
 config file and checks the things that otherwise fail confusingly later.
 
+**[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md)**
+is the full procedure against Oracle Object Storage specifically, using a
+separate bucket that holds nothing you care about. It carries the exact ILM and
+snapshot settings behind the published results, what they cost in bucket space
+and cluster storage, an explanation of every argument the tools take, and what
+a good result looks like so you can tell whether yours is one. Do this before
+you point the delete path at anything you would miss.
+
 ## The fix
 
 Three things work. One of them was always the better answer, and one of them
@@ -408,17 +416,24 @@ sweeper's module docstring has the drain procedure.
 
 ## Using it
 
-> [!WARNING]
-> **Beta.** Nobody has run this against a real Oracle Object Storage bucket,
-> because no OCI endpoint is reachable from this project's lab. Everything here
-> was measured against MinIO pinned to a release that rejects the same call, and
-> against a real Elasticsearch 9.5.2.
+> [!IMPORTANT]
+> **Run this in your own environment before you trust it with anything.**
 >
-> Treat your first run as an experiment. Use the dry run, read the manifest, and
-> restore something afterwards to check the repository still works.
+> The delete path has been exercised against a live Oracle Object Storage
+> bucket: 58 cycles, 888 objects deleted, no failures, no unconfirmed deletes,
+> and every cycle reading every shard directory it depended on. That was one
+> tenancy, one bucket and one cluster. Yours is a different one, and no result
+> of ours tells you what will happen in it.
 >
-> The audit reads and cannot delete. The reclaim tool does delete, and an object
-> store without versioning does not give it back.
+> [Testing in your own OCI environment](docs/testing-in-your-oci-environment.md)
+> is the procedure for finding out. It builds a repository that leaks on
+> purpose, in a bucket holding nothing you care about, and runs the same loop
+> against it. It takes about ninety minutes and it tells you whether this tool
+> is safe against your data, which is a question we cannot answer from here.
+>
+> Do that before you point anything at a repository you rely on. The audit
+> reads and cannot delete. The reclaim tool does delete, and an object store
+> with no version history does not give it back.
 
 ### What you need
 

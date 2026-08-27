@@ -1,0 +1,139 @@
+# Package, scan the package, hash it, and publish all three together.
+#
+# The hash is the point of doing these in one job. A checksum produced by a
+# different run than the archive attests to nothing, so the archive is built
+# once here, scanned as built, and the same bytes are hashed and uploaded.
+#
+# The archive also carries MANIFEST.sha256 with a payload digest computed over
+# the code members alone. That number does not move when documentation changes,
+# so a scan report can name the exact code it came from while shipping beside
+# it. The archive's own hash covers the file a recipient downloads.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "version string for the archive name"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the test suite
+        run: python3 -m unittest discover -s tests -q
+
+      - name: Determine the version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build the archive
+        run: |
+          python3 package.py --out dist --version "$VERSION"
+          cat dist/*.zip.sha256
+
+      # Reproducibility is a claim, so it gets checked rather than asserted.
+      # Two builds of one commit must be identical, or the published hash means
+      # nothing to whoever recomputes it.
+      - name: Verify the build is reproducible
+        run: |
+          python3 package.py --out dist2 --version "$VERSION"
+          a=$(cut -d' ' -f1 dist/*.zip.sha256)
+          b=$(cut -d' ' -f1 dist2/*.zip.sha256)
+          echo "$a"; echo "$b"
+          [ "$a" = "$b" ] || { echo "::error::the build is not reproducible"; exit 1; }
+
+      - name: Unpack for scanning
+        run: |
+          mkdir -p scan
+          unzip -q dist/*.zip -d scan
+          echo "SCAN_ROOT=$(find scan -maxdepth 1 -mindepth 1 -type d)" >> "$GITHUB_ENV"
+          echo "--- payload digest this scan attests to ---"
+          grep payload-sha256 "$(find scan -name MANIFEST.sha256)"
+
+      - name: Refuse to scan an empty corpus
+        run: |
+          count=$(find "$SCAN_ROOT" -name '*.py' | wc -l)
+          echo "python files to scan: $count"
+          [ "$count" -ge 20 ] || { echo "::error::only $count python files"; exit 1; }
+
+      - name: Scan the package
+        run: |
+          pip install --quiet bandit semgrep
+          bandit -r "$SCAN_ROOT" -f json -o bandit_raw.json --severity-level low || true
+          semgrep scan --config=p/python --config=p/secrets \
+            --json --output=semgrep_raw.json --metrics=off "$SCAN_ROOT" || true
+
+      - name: Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: scan
+          format: json
+          output: trivy_raw.json
+          scanners: secret,misconfig,vuln
+          exit-code: "0"
+
+      - name: Redact scan artifacts
+        run: |
+          python3 - <<'PY'
+          import glob, re
+          MARKER = re.compile(r"-*(?:BEGIN|END)\s+[A-Z ]*PRIVATE KEY-*[*]*")
+          BLOB = re.compile(r"(?:[A-Za-z0-9+/]{60,}={0,2}\s*){2,}")
+          for path in glob.glob("*_raw.json"):
+              text = open(path).read()
+              text = MARKER.sub("<<<Redacted: private key detected here>>>", text)
+              text = BLOB.sub("<<<Redacted>>>", text)
+              open(path, "w").write(text)
+          PY
+          grep -lE "BEGIN [A-Z ]*PRIVATE KEY" *_raw.json && exit 1 || echo "artifacts clean"
+
+      # A release built from a package carrying key material must not exist.
+      # package.py already refuses at build time; this is the second look, on
+      # the bytes that are actually about to be published.
+      - name: Refuse to publish a package carrying key material
+        run: |
+          if grep -rlE "BEGIN [A-Z ]*PRIVATE KEY" "$SCAN_ROOT"; then
+            echo "::error::the package contains key material"
+            exit 1
+          fi
+          echo "package carries no key material"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.zip.sha256
+            bandit_raw.json
+            semgrep_raw.json
+            trivy_raw.json
+          body: |
+            Built and scanned in one run, so the checksum below covers the
+            archive that was actually scanned.
+
+            Contents: the audit engine, the delete path with its approval
+            gate, the harness that exercises both against a live repository,
+            the restore check, and the documentation including the security
+            assessment. No test suite, no captured evidence, no Terraform, no
+            cluster manifests, no load generator.
+
+            `MANIFEST.sha256` inside the archive lists every member, plus a
+            payload digest over the code alone so a later report can name the
+            exact code it describes.
