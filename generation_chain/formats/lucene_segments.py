@@ -1,6 +1,6 @@
 """`segments_N`: Lucene's own commit point, read as a second opinion.
 
-Issue #21 found that the Elasticsearch file list is not enough on its own.
+Issue #1 found that the Elasticsearch file list is not enough on its own.
 Elasticsearch keeps two copies of a shard's file list in sync (`index-<gen>`
 and the per-snapshot `snap-<uuid>.dat`), and both are read out of the same
 object store this tool reads. A tamper that removes the same live segment

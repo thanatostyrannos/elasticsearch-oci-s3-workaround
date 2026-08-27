@@ -2,7 +2,7 @@
 that cannot prove it is whole.
 
 `reporting/manifest.py` writes a header and one row per key, then (issue
-#61) a `# derivation complete` line once every row is written and only when
+#7) a `# derivation complete` line once every row is written and only when
 the run was not refused. These tests build manifests by hand, in the exact
 header/row/marker shape the audit tool writes, and check that this package's
 reader hands back precisely what a complete, marked manifest names and
@@ -71,7 +71,7 @@ class LoadManifest(unittest.TestCase):
         self.assertEqual(data.keys, ())
 
     def test_a_manifest_missing_the_completion_marker_is_refused(self):
-        # THE central guard now that issue #61 gives the derivation a real
+        # THE central guard now that issue #7 gives the derivation a real
         # way to say "finished": a file with a real header and well-formed
         # rows but no marker as its last line is exactly what a refused run,
         # a stdout redirect, or a kill just before the marker line all leave
@@ -83,7 +83,7 @@ class LoadManifest(unittest.TestCase):
 
     def test_a_header_only_file_with_no_marker_is_refused(self):
         # The specific real-world shape a refused run's own manifest file
-        # takes: a header, zero rows, and (before issue #61, and again if the
+        # takes: a header, zero rows, and (before issue #7, and again if the
         # CLI's own marker step were ever skipped) nothing else. A reader
         # that treated "header, no rows" as "clean repository" would read a
         # refusal as a manifest naming nothing to delete, which is not the

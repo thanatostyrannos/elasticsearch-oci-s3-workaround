@@ -1,6 +1,6 @@
 """The Lucene commit point checked as an independent second opinion.
 
-Issue #21: Elasticsearch's own corroboration is common-mode with the file
+Issue #1: Elasticsearch's own corroboration is common-mode with the file
 list it is supposed to corroborate, because both are read out of the same
 object store. A tamper (or a genuine upstream format change) that drops the
 same live segment from both `index-<gen>` and `snap-<uuid>.dat`, keeping
@@ -87,7 +87,7 @@ class LuceneCommitCrossCheck(unittest.TestCase):
         self.assertEqual(parsed.by_snapshot_name["s1"], frozenset({"__a", "__b"}))
 
     def test_a_segment_the_commit_needs_and_the_file_list_drops_is_refused(self):
-        # This is issue #21's reproduction, translated into the shape this
+        # This is issue #1's reproduction, translated into the shape this
         # reader sees. Elasticsearch's real attack drops a live segment from
         # both `index-<gen>` and `snap-<uuid>.dat` at once and patches the
         # counts to match, which is invisible to every check that compares

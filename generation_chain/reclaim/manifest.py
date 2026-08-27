@@ -1,7 +1,7 @@
 """Read a manifest, and refuse one that cannot prove it is whole.
 
 `reporting/manifest.py` writes a header row, one row per condemned key, and
-(since issue #61) a trailing `# derivation complete` line. The CLI appends
+(since issue #7) a trailing `# derivation complete` line. The CLI appends
 that COMPLETION_MARKER to a manifest FILE only once every row is written and
 only when the run was not refused, so this module requires it. Its absence
 means one of three things, none of them safe to act on: the run refused, the

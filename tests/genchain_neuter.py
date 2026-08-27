@@ -245,7 +245,7 @@ CASES = [
      "                 if veto is not None and veto.covers(orphans[key])}",
      "    protected = set()"),
 
-    # -- the Lucene commit cross-check (issue #21) -------------------------
+    # -- the Lucene commit cross-check (issue #1) -------------------------
     ("a-file-list-must-cover-what-the-commit-requires",
      "formats/shard_snapshots.py",
      "    if missing:", "    if False:"),

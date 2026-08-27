@@ -141,7 +141,7 @@ That second channel is the one that bites the fix. The audit deliberately never
 condemns a root generation, because its own derivation reads them, and its cost
 is one shard-document read per shard directory **per generation**. So the
 generation count multiplies the whole traversal, and the tool gets slower the
-longer the fault goes unfixed. Measured on the rig (2026-08-26, issue #71,
+longer the fault goes unfixed. Measured on the rig (2026-08-26, issue #9,
 snapshot cycle at fifteen seconds):
 
     index-N objects on disk    1,205
@@ -424,7 +424,7 @@ minutes at cycle 4 to 19.3 minutes at cycle 12. A longer cycle is simply more
 time for the generator to run, so the two effects multiply. The growth is
 consistent with the root generations piling up: the audit reads one shard
 document per shard directory per generation, and nothing removes a generation,
-so each pass costs more than the last. That is issue #71, and cycle 12 is what
+so each pass costs more than the last. That is issue #9, and cycle 12 is what
 it looks like from the outside.
 
 So the honest reading is not that reclaiming loses a race. It is that a

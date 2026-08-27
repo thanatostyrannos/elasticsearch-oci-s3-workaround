@@ -47,7 +47,7 @@ every fifteen seconds with the load generator writing and ILM rolling
 throughout. And the cycles were lengthening, from 2.5 minutes at cycle 4 to 19.3
 at cycle 12, which is simply more time for the generator to run. The lengthening
 is consistent with root generations accumulating and making each audit pass
-costlier, which is issue #71.
+costlier, which is issue #9.
 
 Neither is the delete path being slow. Across all twelve cycles the tool removed
 146,800 objects while the rig kept writing underneath it.

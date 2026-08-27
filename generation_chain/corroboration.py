@@ -29,7 +29,7 @@ realistic cluster answer. Corroboration covers "this snapshot is still in use"
 and covers nothing about whether the derivation put the right key under the
 right snapshot. The guards in `derivation/shards.py` are what stand there.
 
-It does not close issue #21. Snapshot EXISTENCE is
+It does not close issue #1. Snapshot EXISTENCE is
 derived by Elasticsearch from the same bucket this tool reads, so a consistent
 tamper defeats both. The MOUNT information and the IN-FLIGHT information are
 genuinely independent of the bucket; the snapshot list is not. This claims the

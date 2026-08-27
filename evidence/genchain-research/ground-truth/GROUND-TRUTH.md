@@ -1,4 +1,4 @@
-# QA-A ground truth, issue #43   (bucket i43a-gt, MinIO RELEASE.2025-01-18T00-31-37Z, ES 9.5.2)
+# QA-A ground truth, issue #4   (bucket i43a-gt, MinIO RELEASE.2025-01-18T00-31-37Z, ES 9.5.2)
 
 Method: every delete was replayed on a byte-identical **filesystem mirror** of the same
 repository state (same repo uuid, same snapshot uuids, same key names). The fs repository

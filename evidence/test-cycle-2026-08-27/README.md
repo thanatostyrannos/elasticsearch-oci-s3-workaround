@@ -83,7 +83,7 @@ here is a property of that cadence.
 
 What does transfer is the shape: a repository that has been leaking longer
 costs more to audit, because generations accumulate and nothing removes them.
-That is [issue #71](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/71),
+That is [issue #9](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/9),
 and it is the reason a hundred-cycle run should start from a repository just
 created rather than one carried over.
 

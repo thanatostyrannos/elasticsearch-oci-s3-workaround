@@ -106,7 +106,7 @@ class NeverDeletesOutsideTheManifest(ReclaimCase):
 class ManifestMustBeMarkedComplete(ReclaimCase):
 
     def test_a_manifest_missing_the_completion_marker_is_refused_end_to_end(self):
-        # The real-world shape of the gap issue #61 closed, exercised through
+        # The real-world shape of the gap issue #7 closed, exercised through
         # the whole CLI rather than through manifest.py alone: an operator
         # who points --manifest at a file that was written to stdout and
         # redirected by hand, or at a refused run's own output, gets a

@@ -280,7 +280,7 @@ class NoDeletePath(unittest.TestCase):
 
     `generation_chain/reclaim` is the one deliberate exception: a separate
     package that reads an approved manifest and deletes exactly what it names
-    (issue #62). Its whole reason to be its own directory, rather than a
+    (issue #8). Its whole reason to be its own directory, rather than a
     function bolted onto the audit tool, is so a scan like this one can draw
     a line around it and mean it. This test excludes that one directory by
     name rather than dropping any forbidden word, so `derivation/`,

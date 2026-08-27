@@ -109,7 +109,7 @@ class ShardHistory:
 
 @dataclass
 class CommitOracleTally:
-    """How many (snapshot, commit) pairs issue #21's Lucene cross-check saw.
+    """How many (snapshot, commit) pairs issue #1's Lucene cross-check saw.
 
     Counted once per shard document this run actually decodes, at `_read`,
     the one place every parse funnels through: a document served from cache

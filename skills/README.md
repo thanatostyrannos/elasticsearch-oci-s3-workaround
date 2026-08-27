@@ -119,7 +119,7 @@ Versions do exist on an Object Storage bucket with versioning on and are
 restorable through Oracle's own API and the Console, which needs a credential
 for that API rather than a Customer Secret Key. The reasoning and the operation
 lists are in
-[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#issue-32-there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 This is the invariant that outlived the tools. It is why the delete is a
 separate command from the audit, why its dry run is the default, and why its
 approval is bound to the bytes of one manifest rather than to an operator's

@@ -68,7 +68,7 @@ reports `version.number`, `minimum_wire_compatibility_version` and
   * This tool talks to no Elasticsearch, and that is load bearing. It reads
     the store's own record, which is what lets it run against a local mirror,
     against a bucket whose cluster is gone, and from a host with no cluster
-    credentials. It also keeps it clear of the common-mode path in issue #21,
+    credentials. It also keeps it clear of the common-mode path in issue #1,
     where a corroboration asked Elasticsearch and Elasticsearch read the same
     bucket. A version number is not worth reintroducing that.
   * Even free, it would be the weaker signal. A cluster can report 9.5.2 while

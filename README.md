@@ -133,7 +133,7 @@ discover a version id to ask for. Bucket versioning does protect objects on an
 Object Storage bucket, and Oracle's own API and the Console can see those
 versions. The S3 surface cannot, and a version id nobody can discover is not a
 recovery path. See
-[Blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#issue-32-there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+[Blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
 The sweepers aim at orphans, meaning blobs no live snapshot references, and a
 backup that classifies LIVE is never touched. Be precise about what that
@@ -573,7 +573,7 @@ Coverage
     ... 142 more, each naming the shard directory and why it was dropped
   shard directories of indices no live snapshot references: 4193
     Their blobs are reported as unexplained rather than condemned, because this run established no live set there.
-  Lucene commit cross-check (issue #21): ran on 654 of 654 snapshot file lists
+  Lucene commit cross-check (issue #1): ran on 654 of 654 snapshot file lists
 
   Blobs orphaned by the operations above do NOT appear in the manifest. A key absent from it is not evidence that the key is live.
 
@@ -644,7 +644,7 @@ they survive like everything else, and this tool will not name them because it
 reads them. They accumulate for as long as the fault goes unfixed, and because
 the audit reads one shard document per shard directory per generation, each pass
 costs a little more than the last. That is
-[issue #71](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/71),
+[issue #9](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/9),
 and it is the one number here that gets worse on its own.
 
 The counts sum to every key the listing returned. In the example: 30,029 plus

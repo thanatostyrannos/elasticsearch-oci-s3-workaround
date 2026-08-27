@@ -78,7 +78,7 @@ class ShardDocument:
     # Summed `length` per snapshot, to check against the size the snapshot's
     # own document declares.
     length_by_snapshot_name: Mapping[str, int] = field(default_factory=dict)
-    # How many (snapshot, commit) pairs in this document issue #21's Lucene
+    # How many (snapshot, commit) pairs in this document issue #1's Lucene
     # commit cross-check actually compared, and how many it had no inline
     # bytes for and had to skip. See `Coverage.commit_oracle_checked` for why
     # this is counted at all rather than folded into a single pass/fail.
@@ -168,7 +168,7 @@ class Coverage:
     # failing 1 in 1000, about 31 of 30,938 keys left the manifest while
     # coverage still claimed 100%.
     existence_unanswered: Tuple[str, ...] = ()
-    # (Snapshot, commit) pairs issue #21's Lucene commit cross-check compared
+    # (Snapshot, commit) pairs issue #1's Lucene commit cross-check compared
     # against the file list, versus pairs it had no inline commit bytes for
     # and had to defer to the older presence-only gate. Counted separately
     # for the same reason `existence_unanswered` is counted separately from a

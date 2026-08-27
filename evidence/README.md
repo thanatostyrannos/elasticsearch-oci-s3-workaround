@@ -76,3 +76,12 @@ filed with confidence reversed on a second measurement, because one data point
 cannot separate a fixed baseline from a per-object cost.
 
 All three looked like findings. None survived being measured again.
+
+## Issue numbers inside captured output
+
+The `.txt` files here are the raw output of runs, kept exactly as the tool
+produced them. Some of them print an issue number, and those numbers refer to
+the private repository this project was developed in, not to the tracker on
+this repository. Editing a captured run to renumber it would falsify the
+record, so they are left alone. Prose that links to an issue has been moved to
+the current numbering.

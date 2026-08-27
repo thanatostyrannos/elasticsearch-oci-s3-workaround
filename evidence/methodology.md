@@ -99,7 +99,7 @@ both as hard prerequisites.
 > on nor confirm that it is on. Read the sentence above as what the runbooks
 > claimed while these runs happened, not as advice. The recovery path is a copy
 > held outside the bucket. The operation lists are in
-> [blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#issue-32-there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+> [blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
 ### 1.3 The architecture under validation: the split-repo hybrid
 

@@ -82,7 +82,7 @@ across to the destination.
 
 The operation lists, the misreadable sentence in Oracle's documentation that
 this corrects, and the reason retention rules do not help either are in
-[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#issue-32-there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
 ---
 

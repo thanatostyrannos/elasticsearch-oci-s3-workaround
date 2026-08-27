@@ -30,7 +30,7 @@ of Elasticsearch into a different object.
 WHAT IT DOES NOT BUY, and the boundary is worth stating where it is
 implemented. This is another object in the same bucket. It does not defend
 against a tamper that adjusts the catalog and the snapshot document
-consistently, so issue #21 is exactly as open as it was. What it defends
+consistently, so issue #1 is exactly as open as it was. What it defends
 against is every failure this package has actually had: a short list, a
 missing entry, a silently dropped value, a partial read.
 """

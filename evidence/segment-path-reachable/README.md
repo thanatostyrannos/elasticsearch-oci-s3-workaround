@@ -137,7 +137,7 @@ condemning them. That is the conservative direction working.
 The root generation climbed 118 to 170 in forty minutes. The audit reads one
 shard document per directory per generation and never condemns a generation,
 because its own derivation reads them, so each pass costs more than the last.
-That is [issue #71](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/71).
+That is [issue #9](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/9).
 Oracle derives took over ten minutes at 118 generations; MinIO derives took
 under five seconds at fewer than 70. Do not compare those wall clocks. Nothing
 here rests on them.

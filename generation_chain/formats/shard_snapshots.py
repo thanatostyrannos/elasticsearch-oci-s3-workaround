@@ -24,7 +24,7 @@ Three gates carry that, and all three were verified against the captured
     the inline entries would land. All twelve entries in the capture name one,
     with names from `segments_3` to `segments_t`, so the counter is base 36.
   * A snapshot entry whose commit point, once decoded, requires a segment
-    that entry's own file list does not reference. This is issue #21's fix:
+    that entry's own file list does not reference. This is issue #1's fix:
     the first two gates only ever asked whether `segments_N` was PRESENT BY
     NAME, never what it said. A tamper (or a genuine upstream format change)
     that removes the same live segment from both `index-<gen>` and
@@ -291,7 +291,7 @@ def _segment_is_represented(segment: str, declared_physical: Set[str]) -> bool:
 
 def _cross_check_commit(commit_physical: str, commit_bytes: Optional[bytes],
                         declared_physical: Set[str], location: str) -> bool:
-    """Issue #21's independent oracle, for one commit in one snapshot entry.
+    """Issue #1's independent oracle, for one commit in one snapshot entry.
 
     Compares what `segments_N` requires against what this snapshot's own
     file list declares. Runs only when this document carried the commit's
@@ -303,7 +303,7 @@ def _cross_check_commit(commit_physical: str, commit_bytes: Optional[bytes],
 
     Returns whether the comparison actually ran, so the caller can count it.
     A run where this returns False for every commit it saw is a run where
-    issue #21's fix never engaged, and an operator reading the coverage
+    issue #1's fix never engaged, and an operator reading the coverage
     report has to be able to tell that apart from a run where it engaged and
     found nothing wrong; see `Coverage.commit_oracle_checked` and
     `commit_oracle_skipped`.

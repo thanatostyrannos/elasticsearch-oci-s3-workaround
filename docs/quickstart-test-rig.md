@@ -152,7 +152,7 @@ nothing ever removes a generation, so a repository that has been leaking for a
 while costs more to read than a fresh one. A run that starts at ten seconds a
 cycle can reach ten minutes a cycle by cycle fifty.
 
-That is issue #71 and it is a property of the fault, not of the tool. It is
+That is issue #9 and it is a property of the fault, not of the tool. It is
 also why a hundred-cycle run should start from a repository you just created
 rather than one carried over from yesterday. See
 [the known-state test cycle skill](../skills/known-state-test-cycle/SKILL.md)

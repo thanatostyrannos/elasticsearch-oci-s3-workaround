@@ -340,7 +340,7 @@ across the real 9.5.2 fixtures, from one to eight segments in one commit,
 all of them decode this way, footer checksum included, and all of them are
 carried inline in the file entry that names them.
 
-This is what closes [issue #21](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/21)
+This is what closes [issue #1](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/1)
 for the case it names: a tamper, or an upstream format change, that removes
 the same live segment from both `index-<gen>` and `snap-<uuid>.dat` at once.
 Every other check on this page reads one stored copy against another,
@@ -445,7 +445,7 @@ version of the same limit rather than a different one: the evidence still
 lives in one store, and enough care in tampering with that store still
 produces a state no amount of care in reading it can tell from a correct one.
 
-This is [issue #21](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/21),
+This is [issue #1](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/1),
 and it stays open for the remainder above. Closing that remainder was priced
 and declined before this cross-check existed, on the grounds that defending
 against reimplementation drift by adding another reimplementation is

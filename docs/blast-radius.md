@@ -688,7 +688,7 @@ checks ask the segment what it contains instead.
 
 State the limit: these see a hole in a segment. They do not see a file list
 missing a whole segment, because a list that never mentions `_2` looks exactly
-like a list from before `_2` existed. That is issue #21, below.
+like a list from before `_2` existed. That is issue #1, below.
 
 ### A root generation newer than `index.latest` aborts the run
 
@@ -757,7 +757,7 @@ the sweeper reads, so anything that changes what both of them see is invisible t
 both. A clean cross-check means "this is the right repository, at the right
 generation, Elasticsearch is not already complaining, and both sides count the
 same number of shard file entries." It does not mean "every key on the orphan
-list is provably dead." Issue #21, below, is that limit stated as a defect.
+list is provably dead." Issue #1, below, is that limit stated as a defect.
 
 There is a second limit, and it is one operators reach for the wrong reason.
 `_verify_integrity` walks the live catalog and nothing else. On the clean 21
@@ -852,7 +852,7 @@ reason to believe the rest.
 
 ### Issue 21: consistent drift is invisible to every guard that compares copies
 
-[Issue #21](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/21)
+[Issue #1](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/1)
 is open and accepted.
 
 A shard's file list lives in two blobs Elasticsearch keeps in sync: the current
@@ -913,7 +913,7 @@ a segment, and does not detect format drift that removes a whole segment
 consistently from both stored copies. If you are upgrading Elasticsearch across a
 major version, verify a restore rather than trusting a clean sweep.
 
-### Issue 32: there is no recovery path through the Amazon S3 Compatibility API
+### There is no recovery path through the Amazon S3 Compatibility API
 
 This question is settled, and the answer is worse than the runbooks used to
 imply.
@@ -983,7 +983,7 @@ Short, and none of it is optional on a repository you care about.
 
 1. Know whether your bucket holds the only copy of anything. If it does, and you
    reach it through the Amazon S3 Compatibility API, you have no recovery path.
-   Read [issue 32](#issue-32-there-is-no-recovery-path-through-the-amazon-s3-compatibility-api)
+   Read [the recovery path finding](#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api)
    again.
 2. Export the mounted set from the cluster and pass it. Its absence is not
    detected, and the failure it prevents has a detection window of zero.
