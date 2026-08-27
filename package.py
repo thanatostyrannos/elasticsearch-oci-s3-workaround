@@ -3,12 +3,17 @@
 
 WHAT SHIPS, AND WHY THE LIST IS AN ALLOWLIST
 
-Someone reclaiming a leaking snapshot repository needs four things: the audit
+Someone reclaiming a leaking snapshot repository needs five things: the audit
 that decides what is unreferenced, the delete path with its approval gate, the
-harness that exercises both against their own repository, and the
-documentation. They do not need this project's test suite, its captured
-evidence, the Terraform that provisions a probe tenancy, the Kubernetes
-manifests for a lab cluster, or the load generator that manufactures churn.
+harness that exercises both against their own repository, the load generator
+that builds a repository worth exercising them against, and the documentation.
+They do not need this project's test suite, its captured evidence, the
+Terraform that provisions a probe tenancy, or the Kubernetes manifests for a
+lab cluster.
+
+The load generator earns its place because the documentation tells the reader
+to run it. It was left out once, which shipped a document instructing someone
+to run a file the archive did not contain.
 
 The list below names what goes in rather than what stays out. An exclusion list
 fails open: a directory added next year ships by accident. An allowlist fails
