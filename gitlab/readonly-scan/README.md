@@ -2,9 +2,9 @@
 
 Runs the audit (`python3 -m generation_chain`) on a schedule and publishes an
 orphan manifest and a summary as pipeline artifacts. This is the safe entry
-point: the audit's HTTP transport permits `GET` and `HEAD`, and the one `POST`
-that lists a bucket, and refuses anything else. It does not import the package
-that deletes. There is no way to make this pipeline remove an object.
+point: the audit's HTTP transport permits `GET` and `HEAD` and nothing else,
+and refuses any other method. Listing a bucket is a `GET`. It does not import
+the package that deletes. There is no way to make this pipeline remove an object.
 
 If you have not read it yet, [the read-only quickstart](../../docs/quickstart-read-only.md)
 explains what the audit reports and how to read `orphans.tsv`.

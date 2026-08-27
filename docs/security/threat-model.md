@@ -41,7 +41,346 @@ silently eat the rest of a label, so every such placeholder below is spelled
 `UUID`, `INDEX_UUID`, `REPO`, and so on instead). If one still fails to
 render, treat that as a bug in this document and open an issue against it.
 
-## 1. Trust boundaries
+## 1. The three ways this is used
+
+This tool runs three different ways, and each one has a different threat
+surface. That fact is scattered through the rest of this document: the
+zones live in the trust-boundary diagram in the next section, the
+credential paths live in section 3, and the deployed shape lives in
+section 10. A reader who wants to know "I am doing X, what am I exposed
+to" cannot get that answer from any single place today. This section
+states the three plainly, once, before the rest of the document works
+through the pieces.
+
+The three are: a person running the audit, and separately the delete
+tool, by hand; the audit running unattended in a GitLab worker; and the
+churn rig running for hours inside Kubernetes. They differ in which of
+the four executables run, which credential each one holds, whether a
+delete path exists at all, and whether a human looks at anything before
+something destructive happens. What follows starts with the boundary
+between the audit and the delete tool on disk, since all three modes are
+built from those same two entry points, then works through each mode in
+turn, then compares them. The "Residual risk" section at the end
+attributes each risk it names to the mode it actually lands on.
+
+### The audit / delete module boundary
+
+```mermaid
+flowchart TD
+    AuditEntry["Audit entry point: generation_chain/cli.py"]
+    ReclaimEntry["Delete entry point: generation_chain/reclaim/cli.py"]
+
+    AuditOnly["Audit-only, 7 modules"]
+    ReclaimOnly["Delete-only, 8 modules: the whole reclaim subpackage"]
+    SharedDerivation["Shared: derivation package, 7 modules"]
+    SharedFormats["Shared: formats package, 7 modules"]
+    SharedSources["Shared: sources package, 9 modules, includes http_reads.py"]
+    SharedOther["Shared: 7 other modules, includes corroboration and credentials"]
+
+    AuditEntry --> AuditOnly
+    AuditEntry --> SharedDerivation
+    AuditEntry --> SharedFormats
+    AuditEntry --> SharedSources
+    AuditEntry --> SharedOther
+
+    ReclaimEntry --> ReclaimOnly
+    ReclaimEntry --> SharedDerivation
+    ReclaimEntry --> SharedFormats
+    ReclaimEntry --> SharedSources
+    ReclaimEntry --> SharedOther
+```
+
+**What this shows.** Two entry points, `generation_chain/cli.py` for the
+audit and `generation_chain/reclaim/cli.py` for the delete tool, statically
+traced for their full import closure. 7 modules load only under the audit
+(`cli`, `reporting`, `reporting.coverage`, `selftest`, `sizes`,
+`sources.local`, `sources.overlap`). 8 modules load only under the delete
+tool, and they are the entire `reclaim` subpackage (`reclaim`,
+`reclaim.approval`, `reclaim.batch`, `reclaim.checksum`, `reclaim.cli`,
+`reclaim.manifest`, `reclaim.recheck`, `reclaim.transport`). 30 modules
+load under both, grouped above by subpackage: the derivation package
+(`derivation.audit`, `derivation.chain`, `derivation.classification`,
+`derivation.garbage`, `derivation.identity`, `derivation.keys`,
+`derivation.shards`), the formats package (`formats.codec`,
+`formats.latest`, `formats.lucene_segments`, `formats.repository_data`,
+`formats.shard_snapshots`, `formats.smile`, `formats.snapshot_document`),
+the sources package including signing (`sources`, `sources.budget`,
+`sources.http_reads`, `sources.oci`, `sources.s3`, `sources.signing`,
+`sources.signing.oci_signature`, `sources.signing.rsa`,
+`sources.signing.sigv4`), and seven more standing on their own
+(`corroboration`, `credentials`, `errors`, `generation_chain`, `model`,
+`reporting.manifest`, `supported`).
+
+The boundary is asymmetric, and the asymmetry is the point. The audit
+does not reach `reclaim` at all: no arrow above runs from `AuditEntry` to
+`ReclaimOnly`, and that absence is not just a reading of the import graph,
+it is a named, pinned test. `tests/genchain_neuter.py` carries a guard
+case called `the-audit-path-never-imports-reclaim`; removing the line that
+enforces the separation turns that named case red. But the delete tool
+imports the derivation package, the formats package, the whole sources
+package, and everything else the audit imports too. Thirty of the
+forty-five modules this project ships are reachable from both processes.
+A defect in `generation_chain/derivation/classification.py` or
+`generation_chain/sources/s3.py` is a defect in both the audit and the
+delete tool at once. A defect in `generation_chain/reclaim/batch.py` is
+reachable from neither the audit process nor any pipeline that only runs
+the audit, because that module is never loaded there.
+
+`generation_chain/sources/http_reads.py`, the module that enforces
+GET-and-HEAD-only (section 7 covers what it refuses and why an `assert`
+was not enough), is in the shared list: both processes load it, and both
+are bound by it for their own reads. `generation_chain/reclaim/transport.py`,
+the module that builds and signs the one `POST /bucket?delete` request
+this project can send, is in the delete-only list. That is the concrete,
+code-level reason the audit cannot delete anything: not a flag it
+declines to expose, but a module it never loads. The three modes below
+are all built from these same two entry points; what changes between them
+is who runs which one, what credential they hold when they do, and
+whether anything human looks at the result first.
+
+### Mode 1: standalone, at a prompt
+
+```mermaid
+flowchart TD
+    subgraph OperatorZone1["Operator, trusted"]
+        Op1["Human operator"]
+    end
+    subgraph HostZone1["Operator's host or a jump box"]
+        CredFile1["creds.json, mode 0600, Path A"]
+        AuditProc1["Audit: python3 -m generation_chain"]
+        ReclaimProc1["Delete: python3 -m generation_chain.reclaim"]
+    end
+    subgraph StoreZone1["Object store"]
+        Store1[("Object store")]
+    end
+    subgraph ESZone1["Elasticsearch, optional"]
+        ES1[("Elasticsearch")]
+    end
+
+    Op1 -->|"writes, then chmod 600"| CredFile1
+    Op1 -->|"runs"| AuditProc1
+    Op1 -->|"reads the manifest, computes the digest, runs only after"| ReclaimProc1
+    CredFile1 -->|"read at startup, mode checked"| AuditProc1
+    CredFile1 -->|"same check"| ReclaimProc1
+    AuditProc1 -->|"GET, HEAD only; listing is a GET with list-type=2"| Store1
+    ReclaimProc1 -->|"GET, HEAD for its own reads; one POST bucket delete per batch, past the approval gate"| Store1
+    AuditProc1 -.->|"optional: GET the veto"| ES1
+    ReclaimProc1 -.->|"optional: re-check the veto at execute time"| ES1
+```
+
+**What runs, and what it is allowed to do.** Either or both of the audit
+and the delete tool, invoked by hand, typically on the operator's own
+machine or a jump box they have shell access to. This is the only mode
+where a human runs the delete tool directly, and where the delete path is
+reached the way the tool intends it to be reached: dry run first, then a
+separate, deliberate `--execute` invocation.
+
+**Which credential it holds and how it arrives.** Path A: a `creds.json`
+file the operator writes and `chmod 600`s themselves, on local disk. See
+section 3 for the full path, including the window between write and
+`chmod` where the file is briefly readable by whoever else is on the
+host.
+
+**Who reviews before a destructive action.** A human, and this is the
+mode with the strongest version of that step in the whole document: the
+operator reads the manifest and the dry run's report, independently
+computes the sha256 and row count, and types both into the command line
+that runs `--execute`. Nothing else in this document has a human this
+close to the bytes being approved.
+
+**What an attacker gains by compromising this mode.** Everything the
+operator has, at the moment they have it. An attacker with code
+execution on this host does not need to defeat the approval mechanism;
+they can read the same manifest the operator would, compute the same
+sha256 the operator would, and run the same `--execute` command, because
+the check verifies the bytes, not the person typing them. Whatever
+credential is on that host, whatever cached profile or SSH access lets
+the operator reach the bucket or the cluster, the attacker now has too.
+
+**What is different about this mode.** It is the only one with a real
+human-judgment step, and it is also the mode with the weakest
+infrastructure isolation: no shared-runner boundary, no namespace RBAC,
+no pipeline `rules:` block standing between a person and `--execute`.
+The strength of the review and the weakness of the isolation are the
+same fact seen from two sides: this mode trusts the operator's judgment
+because it has nothing else to trust.
+
+### Mode 2: the audit in a GitLab worker
+
+```mermaid
+flowchart TD
+    subgraph OperatorZone2["Operator, trusted"]
+        Op2["Human operator, configures the pipeline; not present when it runs"]
+    end
+    subgraph CIZone2["GitLab runner, shared, trusted only for one job"]
+        CIVar2["CREDS_JSON, File-type CI/CD variable, Path B"]
+        CIJob2["audit:orphans job: python3 -m generation_chain"]
+    end
+    subgraph StoreZone2["Object store"]
+        Store2[("Object store")]
+    end
+    subgraph ESZone2["Elasticsearch, optional"]
+        ES2[("Elasticsearch")]
+    end
+
+    Op2 -->|"sets the variable, Masked and Protected"| CIVar2
+    CIVar2 -->|"install -m 600, staged to a job-local path"| CIJob2
+    CIJob2 -->|"GET, HEAD only; no --execute flag exists anywhere in this pipeline"| Store2
+    CIJob2 -.->|"optional: GET the veto, if GENCHAIN_ELASTICSEARCH is set"| ES2
+```
+
+**What runs, and what it is allowed to do.** Only the audit, `python3 -m
+generation_chain`, run by the `audit:orphans` job defined in
+`gitlab/readonly-scan/.gitlab-ci.yml` and pulled in by the root
+`.gitlab-ci.yml`'s `include:`. There is no delete path in this mode at
+all: `reclaim/` is never imported (see the module-boundary diagram
+above), there is no `--execute` flag anywhere in this pipeline file, and
+nothing in this job's script could build one even if a variable were set
+wrong. Absent, not disabled.
+
+**Which credential it holds and how it arrives.** Path B: `CREDS_JSON`, a
+File-type CI/CD variable GitLab writes to a job-local path when the job
+starts, then `install -m 600` fixes the mode before this tool ever opens
+it. See section 3 for the caveat that matters here specifically: the file
+exists in plaintext on runner-local disk for the job's duration, and
+anyone else with shell access to that shared runner while the job runs
+can read it.
+
+**Who reviews before a destructive action.** Nobody, and that is
+acceptable, because there is no destructive action in this mode to
+review. The pipeline runs unattended by design, on a schedule,
+precisely because nothing this job can do needs a human present to catch
+it.
+
+**What an attacker gains by compromising this mode.** Whatever they can
+reach while inside a job's window on a shared runner: the store
+credential and, if configured, the Elasticsearch read credential, both
+in plaintext for the job's duration. What they cannot get from inside
+this process is a delete: `ALLOWED_METHODS` in
+`generation_chain/sources/http_reads.py` permits only `GET` and `HEAD`,
+checked before every request leaves the process (section 7). What they
+can still do is walk off with the credential material itself and use it
+from a different client entirely; whether that succeeds depends on the
+IAM policy attached to the key, not on this pipeline, which is the same
+gap section 7 names for every mode.
+
+**What is different about this mode.** Nothing here is defaulted.
+`GENCHAIN_ENDPOINT`, `GENCHAIN_REGION`, `GENCHAIN_BUCKET`, and
+`GENCHAIN_PREFIX` all ship empty, and the job's own preflight check
+refuses and names exactly what is missing rather than resolving to a
+placeholder that happens to point somewhere. This is the only mode where
+fail-closed configuration is doing real work in place of a human: a
+misconfigured pipeline stops instead of quietly auditing the wrong
+bucket, because nobody would be watching for it to explain itself
+otherwise.
+
+### Mode 3: the churn rig in Kubernetes
+
+```mermaid
+flowchart TD
+    subgraph OperatorZone3["Operator, trusted"]
+        Op3["Human operator, runs helm upgrade --install; not present during the run"]
+    end
+    subgraph K8sZone3["Kubernetes namespace, one Helm release"]
+        K8sSecret3["Secret: release credentials, root-owned, mode 0600, Path C"]
+        StageInit3["stage-credentials initContainer, runAsUser 0"]
+        EmptyDir3["emptyDir /secrets, non-root owned, mode 0600"]
+        ChurnJob3["churn-rig Job: snapshot_churn_rig.py run"]
+        QualifyJob3["qualify Job: reclaim_test_protocol.py"]
+    end
+    subgraph StoreZone3["Object store"]
+        Store3[("Object store")]
+    end
+    subgraph ESZone3["Elasticsearch cluster"]
+        ES3[("Elasticsearch")]
+    end
+
+    Op3 -->|"sets values.credentials, or points at an existing Secret"| K8sSecret3
+    Op3 -->|"triggers deploy:rig, manual only, refused on a schedule"| ChurnJob3
+    K8sSecret3 -->|"mounted read-only"| StageInit3
+    StageInit3 -->|"copies, chowns, chmods a copy"| EmptyDir3
+    EmptyDir3 --> ChurnJob3
+    EmptyDir3 --> QualifyJob3
+    ChurnJob3 -->|"writes documents, takes and deletes snapshots and indices; the harness's own credential"| ES3
+    QualifyJob3 -->|"audits and dry-runs always; POST bucket delete only when qualify.dryRunOnly is false"| Store3
+    QualifyJob3 -.->|"optional: re-check the veto"| ES3
+```
+
+**What runs, and what it is allowed to do.** All four executables can be
+in play at once: the churn-rig Job (`snapshot_churn_rig.py run`) mutates
+the cluster for hours, writing documents, rolling ILM/SLM policies over a
+data stream, and manufacturing a leaking repository on purpose; the
+qualify Job runs `reclaim_test_protocol.py`, which drives the audit and,
+when told to, the delete tool, cycle after cycle. The delete path exists
+in this mode when `qualify.dryRunOnly` is explicitly set to `false` in a
+values file; the default is `true`, dry-run-only.
+
+**Which credential it holds and how it arrives.** Path C: a Kubernetes
+Secret, rendered by
+`gitlab/kubernetes-test-rig/chart/templates/credentials-secret.yaml`,
+mounted read-only at 0600 and root-owned, staged by a root-run
+`stage-credentials` initContainer into a non-root-owned `emptyDir` copy
+at the same mode, because the Secret volume itself is unreadable to the
+non-root main container. See section 3 for the full path, including the
+point that whether the Secret is encrypted at rest depends on the
+cluster's own etcd configuration, which this chart does not control.
+This mode also holds a second, separate credential the other two modes
+do not: the harness's own Elasticsearch login
+(`credentials.harnessEsPassword`), used by the churn rig and by
+`reclaim_test_protocol.py`'s own cluster setup calls, kept apart from the
+`elasticsearch` section the audit and delete tools use for the veto.
+
+**Who reviews before a destructive action.** Nobody, and that is the
+risk, not an acceptable absence the way it is in mode 2.
+`reclaim_test_protocol.py` scrapes `--approve-digest` and `--approve-rows`
+straight out of the dry run's own printed text with a regular expression
+(`DIGEST = re.compile(r"approve-digest ([0-9a-f]{64})")`) and feeds them
+back into the next `--execute` call automatically. The digest check
+itself still runs and still refuses a manifest that changed between the
+dry run and the execute; that is a real anti-drift property, and it is
+exactly what the qualification loop is built to prove. What it never
+exercises is the other half of approval: a human deciding the manifest
+is correct before typing anything. A passing qualification run is
+evidence the binding between approval and exact bytes holds. It is not
+evidence anyone has ever read one of these manifests for correctness,
+because in this mode nobody has.
+
+**What an attacker gains by compromising this mode.** More than either
+other mode, because this is the mode holding the most at once. Exec
+access into this namespace, or the ability to read the Secret through
+the Kubernetes API, reaches the store credential and the harness's
+Elasticsearch credential together, in a namespace where the churn rig
+already has real destructive reach through Elasticsearch's own API
+(deleting snapshots and indices is what it does on purpose), and, if
+`qualify.dryRunOnly` is false, a delete loop against the object store
+that is already running with no human watching it. Compromising the
+`stage-credentials` initContainer specifically reaches every credential
+this release holds at once, from the one container in the whole chart
+that runs as root.
+
+**What is different about this mode.** It is the only one where a
+delete can happen as a matter of normal, intended operation without a
+human approving that specific manifest's exact bytes, and the only one
+holding two separately-scoped live credentials (the store credential and
+the harness's own Elasticsearch login) at the same time. It is also the
+only mode where "deletes are off" is a values-file default rather than a
+structural fact: `qualify.dryRunOnly: true` is a flag an operator can
+flip, not a module the process never loads. Mode 2's absence of a delete
+path is structural; this mode's absence, when it is absent, is
+configuration.
+
+### Comparison across the three modes
+
+| | Mode 1: standalone, at a prompt | Mode 2: audit in a GitLab worker | Mode 3: churn rig in Kubernetes |
+|---|---|---|---|
+| Credential held | Path A: a file on local disk, store plus optional Elasticsearch | Path B: a File-type CI/CD variable staged to runner-local disk | Path C: a Kubernetes Secret staged into an emptyDir, plus a separate harness Elasticsearch credential |
+| Delete reachable | Yes, by running the delete tool deliberately | No; `reclaim/` is never imported, no `--execute` flag exists in this pipeline | Yes, when `qualify.dryRunOnly` is explicitly set to `false` (a config default, not a structural absence) |
+| Human review | A human reads the manifest, computes the digest, types the approval | None needed; nothing here can delete | None; the digest is scraped from the tool's own dry-run output and reused automatically |
+| Blast radius if compromised | Whatever the operator's host and its cached credentials reach; an attacker can compute a matching approval digest itself | The store credential and optional Elasticsearch read credential, for one job's duration, on a shared runner | The store credential, the harness's Elasticsearch credential, and exec access to a root-run container, all in one namespace |
+| Worst case | Attacker with host control acts as the operator: reads the manifest, computes the digest, executes | Attacker steals the credential value and uses it outside this tool, limited by the IAM policy attached to the key | Attacker inherits a namespace already holding two live credentials and, if dry-run is off, an unattended delete loop |
+
+
+## 2. Trust boundaries
 
 ```mermaid
 flowchart TD
@@ -86,12 +425,12 @@ flowchart TD
     K8sSecret -->|"mounted read-only"| K8sEmptyDir
     K8sEmptyDir -->|"a root initContainer chowns and chmods a copy for the non-root main container"| K8sPod
 
-    HostAudit -->|"GET, HEAD, the one bucket-listing POST; nothing else can leave this process"| Store
+    HostAudit -->|"GET and HEAD only; listing is a GET; nothing else can leave this process"| Store
     HostReclaim -->|"GET, HEAD for its own reads; one POST /bucket?delete per batch, only past the approval gate"| Store
-    CIJob -->|"GET, HEAD, the one bucket-listing POST"| Store
+    CIJob -->|"GET and HEAD only; listing is a GET"| Store
     K8sPod -->|"audit and churn-rig: GET, HEAD, or ES writes only; qualify: adds one POST /bucket?delete per batch, gated the same as HostReclaim"| Store
 
-    HostReclaim -->|"GET, unauthenticated by client certificate; see section 4"| ES
+    HostReclaim -->|"GET, unauthenticated by client certificate; see section 5"| ES
     K8sPod -->|"GET or, for churn-rig, Elasticsearch's own write and delete APIs against a repository the rig itself owns"| ES
 ```
 
@@ -112,9 +451,9 @@ also treats "Elasticsearch" as one zone, which understates it: the veto
 connection in `corroboration.py` authenticates the operator to the cluster
 with a bearer credential, but nothing authenticates the cluster to the
 operator beyond ordinary TLS server verification, and for the in-cluster
-deployment shape the connection is not even TLS. Section 4 covers that gap.
+deployment shape the connection is not even TLS. Section 5 covers that gap.
 
-## 2. Credential lifecycle
+## 3. Credential lifecycle
 
 ```mermaid
 flowchart TD
@@ -202,7 +541,7 @@ an `inspect`.
   `chown` and `chmod`, and it runs before the main container starts, never
   alongside it.
 
-## 3. Attack surface: data flow diagram with STRIDE
+## 4. Attack surface: data flow diagram with STRIDE
 
 STRIDE below stands for Spoofing, Tampering, Repudiation, Information
 disclosure, Denial of service and Elevation of privilege, the standard
@@ -218,7 +557,7 @@ flowchart LR
     ManifestFile[("Manifest file")]
     Operator(("Operator"))
 
-    Audit["Audit process<br/>GET, HEAD, one listing POST only"]
+    Audit["Audit process<br/>GET and HEAD only"]
     Reclaim["Reclaim process<br/>the one process that may send DeleteObjects"]
 
     ObjStore -->|"S, T, D: listing XML. A spoofed or MITM'd store, or a tampered response, is at least as plausible as a benign 5xx. Entity expansion is refused before parsing (a DOCTYPE is rejected outright); a truncated or forever-paginating listing is refused rather than treated as complete"| Audit
@@ -260,7 +599,7 @@ scope for that fix and remains open.
 
 **What it does not cover.** It does not model the operator's own terminal
 or the CI runner's job scheduler as adversarial; both are inside the trust
-boundary in section 1. It does not re-derive the entity-expansion
+boundary in section 2. It does not re-derive the entity-expansion
 measurement (already done, with numbers, in
 [evaluation-report.md](evaluation-report.md)). It does not cover JSON
 parsing depth: `corroboration.py` and the repository-document readers use
@@ -269,7 +608,7 @@ exhaust the interpreter's recursion limit. That was not measured for this
 document the way the XML entity expansion was, so it is recorded here as
 unreviewed rather than asserted either way.
 
-## 4. What the Elasticsearch veto protects, and what it does not
+## 5. What the Elasticsearch veto protects, and what it does not
 
 An operator reading only the class name (`Veto`) or the corroboration
 step's plain-English description tends to overestimate its reach. This
@@ -324,7 +663,7 @@ against that class of error live in `generation_chain/derivation/shards.py`,
 not here, and are out of scope for this document; see
 [../engineering/algorithms.md](../engineering/algorithms.md).
 
-## 5. Blast radius: from a wrong row to unrecoverable loss
+## 6. Blast radius: from a wrong row to unrecoverable loss
 
 ```mermaid
 flowchart TD
@@ -332,10 +671,10 @@ flowchart TD
     classDef advisory fill:#fff8e6,stroke:#bf8700,color:#3d2f00
     classDef loss fill:#ffeef0,stroke:#cf222e,color:#4c0d16
 
-    Wrong["A wrong row reaches the manifest, misattribution or a co-tenant document, see section 4"]:::loss
+    Wrong["A wrong row reaches the manifest, misattribution or a co-tenant document, see section 5"]:::loss
     ShapeGate["Shape gates refuse structurally malformed or unrecognisable documents"]:::enforce
     Written["Manifest written, with a completion marker only on a clean finish"]
-    Veto2{"Was --elasticsearch passed, and does the veto cover this row? See section 4 for its actual reach"}:::enforce
+    Veto2{"Was --elasticsearch passed, and does the veto cover this row? See section 5 for its actual reach"}:::enforce
     Removed["removed from the manifest"]:::enforce
     HumanRead2["A human reads the manifest and the dry run's report before approving"]:::advisory
     Approve{"--approve-digest and --approve-rows match this exact manifest's bytes, right now"}:::enforce
@@ -384,15 +723,15 @@ it, only that the digest they supply matches the file. The approval gate
 what it enforces is narrower than "this manifest is correct": it enforces
 "you are approving the exact bytes in front of you, not a stale or edited
 copy." A confidently wrong manifest, read carelessly, produces a matching
-digest just as easily as a correct one. Section 7 covers where that
+digest just as easily as a correct one. Section 8 covers where that
 distinction matters for the automated test-rig path.
 
 **What it does not cover.** It does not cover the object store's own IAM
-policy. See section 6: this tool's read-only guarantee for the audit
+policy. See section 7: this tool's read-only guarantee for the audit
 process is a property of the audit process's code, not of the credential's
 permissions at the store.
 
-## 6. Privilege and permitted-operation map
+## 7. Privilege and permitted-operation map
 
 ```mermaid
 flowchart TD
@@ -444,7 +783,7 @@ recommends a separate, delete-scoped-down IAM identity for the audit path
 versus the reclaim path; that is a gap worth closing at the deployment
 layer, because this codebase cannot close it from inside the process.
 
-## 7. The approval chain
+## 8. The approval chain
 
 ```mermaid
 sequenceDiagram
@@ -526,7 +865,7 @@ read a passing qualification run as evidence that the human-review half of
 this control has ever been exercised, because it has not; it exercises the
 other half.
 
-## 8. Manifest lifecycle
+## 9. Manifest lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -566,7 +905,7 @@ appears verbatim on the command line used to run it.
 question this document treats as out of scope, matching the same block of
 questions in [what-we-need-from-you.md](what-we-need-from-you.md).
 
-## 9. Deployed-mode surface: GitLab pipelines and the Helm chart
+## 10. Deployed-mode surface: GitLab pipelines and the Helm chart
 
 ```mermaid
 flowchart TD
@@ -687,6 +1026,37 @@ one does not conclude that. In order of how much they matter:
    [what-we-need-from-you.md](what-we-need-from-you.md) are organisational
    facts no static read of this repository can establish. This document
    does not attempt to guess them into a better-looking status.
+
+**Attributed by mode.** The risks above are properties of the codebase and
+apply wherever it runs; here is which ones land hardest on which of the
+three modes in section 1.
+
+- **Mode 1, standalone at a prompt.** Risks 1 and 3 matter most here. The
+  operator's host holds a live credential (risk 3: read-only is a property
+  of the code, not the credential), and it is the one place an attacker who
+  gets code execution can also compute a matching approval digest and run
+  `--execute` themselves, so the no-recovery-path risk (1) is one host
+  compromise away rather than several infrastructure layers away. Risk 4
+  lands hardest on this mode's own review step: a human who overestimates
+  the veto's reach approves rows the veto never protected in the first
+  place.
+- **Mode 2, the audit in a GitLab worker.** Risk 3 is the risk that reaches
+  this mode: there is no delete path here, so the only way this mode
+  contributes to eventual loss is a stolen credential used outside this
+  tool entirely, against whatever the IAM policy attached to the key
+  allows. A manifest this mode produces can still carry the veto's
+  narrower-than-it-sounds scope (risk 4) if someone later runs the delete
+  tool against it in mode 1; that risk belongs to the manifest, not to
+  whichever mode produced it.
+- **Mode 3, the churn rig in Kubernetes.** Risks 2, 5 and 6 belong here
+  specifically. The Elasticsearch transport gap (risk 2) is exercised by
+  this mode's own in-cluster default endpoint, `http://`, not a
+  hypothetical one; risk 5's GitOps bypass of the schedule refusal is a
+  statement about this pipeline; and risk 6, the automated qualification
+  loop exercising the approval mechanism but never human judgment,
+  describes this mode exactly and no other one. This is also the mode
+  where risk 1 is least abstract: it is the only mode where a delete can
+  run unattended as intended behaviour, not as the result of a compromise.
 
 None of the above changes the conclusion that the destructive path is
 gated by a real, source-verified control (the digest-and-row approval in
