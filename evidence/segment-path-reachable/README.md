@@ -48,7 +48,7 @@ rollover, which is why it tracked the failure without causing it.
 
 ## Why one bad document costs so much
 
-Two channels, both visible in [`drop-reasons.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/drop-reasons.txt).
+Two channels, both visible in [`drop-reasons.txt`](minio-control/drop-reasons.txt).
 
 The seed is a shard document listing no files. Elasticsearch writes one when it
 snapshots an empty shard, and the parser refuses it, because a document naming
@@ -94,10 +94,10 @@ project exists for.
 Arm B and Arm C differ in one thing, rollover. Arm C keeps the long delete
 phase, so its directories accumulate and stay; it holds more of them than any
 Arm B run and reads better than all of them. Per-run rows in
-[`runs.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/runs.tsv), policies in
-[`ilm-armA.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/ilm-armA.json),
-[`ilm-armB.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/ilm-armB.json) and
-[`ilm-armC.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/ilm-armC.json).
+[`runs.tsv`](minio-control/runs.tsv), policies in
+[`ilm-armA.json`](minio-control/ilm-armA.json),
+[`ilm-armB.json`](minio-control/ilm-armB.json) and
+[`ilm-armC.json`](minio-control/ilm-armC.json).
 
 **The mechanism is endpoint independent.** Every drop across every run was one
 of the two channels above, and both are arithmetic over repository-format data.
@@ -112,10 +112,10 @@ configuration.
 
 | Run | Root generation | Read | Segment blobs | Orphaned |
 |---|---|---|---|---|
-| [standalone](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/derive-standalone.txt) | 118 | 2 of 2 | 124 | 283, 5.39 MB |
-| [cycle 1](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/derive-cycle1.txt) | 142 | 2 of 2 | 252 | 471, 68.5 MB |
-| [cycle 2](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/derive-cycle2.txt) | 155 | 2 of 2 | 380 | 639, 135.16 MB |
-| [cycle 3](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/derive-cycle3.txt) | 170 | 2 of 2 | 508 | 807, 197.94 MB |
+| [standalone](derive-standalone.txt) | 118 | 2 of 2 | 124 | 283, 5.39 MB |
+| [cycle 1](derive-cycle1.txt) | 142 | 2 of 2 | 252 | 471, 68.5 MB |
+| [cycle 2](derive-cycle2.txt) | 155 | 2 of 2 | 380 | 639, 135.16 MB |
+| [cycle 3](derive-cycle3.txt) | 170 | 2 of 2 | 508 | 807, 197.94 MB |
 
 They remain a true record that the segment path condemns on a real Oracle
 bucket, which had never been shown before. They are NOT evidence about
@@ -154,7 +154,7 @@ Snapshot retention removes expired snapshots while new ones are taken, so it
 falls as well as rises. Sampled every eighteen seconds on Oracle it went 10, 5,
 6. On MinIO, 48 samples over thirteen minutes show the same shape, 10 then 5
 fifteen seconds later, then back up through 6, 7, 8:
-[`snapshot-count-samples.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/snapshot-count-samples.txt).
+[`snapshot-count-samples.txt`](minio-control/snapshot-count-samples.txt).
 
 The bug never involved the object store. The count is a property of the
 Elasticsearch catalog under retention.
@@ -162,7 +162,7 @@ Elasticsearch catalog under retention.
 Comparing snapshot identities instead of counting them subtracts correctly under
 retention. With the fix, both MinIO cycles settled in about ninety seconds and
 reported `ready`, against three Oracle cycles that timed out at 600 seconds:
-[`protocol-cycles.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/segment-path-reachable/minio-control/protocol-cycles.tsv).
+[`protocol-cycles.tsv`](minio-control/protocol-cycles.tsv).
 
 ## Open
 

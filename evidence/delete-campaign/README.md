@@ -9,7 +9,7 @@ This is evidence of the **current** tool. The retired sweepers produced none of
 it.
 
 The summary table and the interpretation are in
-[FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#campaign-results-2026-08-26). This directory is the
+[FACTS.md](../../FACTS.md#campaign-results-2026-08-26). This directory is the
 raw output those numbers are read off.
 
 ## What each file is

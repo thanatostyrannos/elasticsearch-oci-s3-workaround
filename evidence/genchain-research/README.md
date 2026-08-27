@@ -2,7 +2,7 @@
 
 Captured deliberately, because this project has already published thirteen
 figures whose rig (the local test lab reproducing the fault, see
-[FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)) was removed without keeping the artifacts. `evidence/README.md`
+[FACTS.md](../../FACTS.md#the-test-lab-henceforth-the-rig)) was removed without keeping the artifacts. `evidence/README.md`
 promises that a number in the documentation has its source in this directory.
 This is that source for the work done on the replacement tool.
 

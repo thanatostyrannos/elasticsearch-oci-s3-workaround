@@ -302,9 +302,8 @@ python3 -m generation_chain \
   --manifest orphans.tsv
 ```
 
-`generation_chain` is the audit. `generation_chain.reclaim` is the separate
-delete tool, it takes a manifest this run produces, and it is not what you want
-here.
+`generation_chain` is the audit, and it is the only command in this document
+until you reach step 7.
 
 This reads and reports. It cannot delete: the read path allows `GET`, `HEAD`
 and the `POST` that lists a bucket, and refuses anything else at the transport
@@ -348,9 +347,36 @@ Then:
 ./scripts/run-test-cycle.sh my.conf
 ```
 
+> [!CAUTION]
+> **Everything past this point can delete objects from your bucket, and they do
+> not come back.**
+>
+> Object storage has no undo. The Amazon S3 Compatibility API cannot even list
+> object versions, so versioning gives you no recovery path here whether or not
+> it is switched on: you cannot discover the version to restore. Restoring a
+> wrongly deleted blob means restoring the whole repository from somewhere
+> else, and if this is your snapshot repository then there may be no somewhere
+> else.
+>
+> Run against the throwaway bucket from step 1. Not a repository you rely on.
+> Not yet.
+>
+> After a delete run, restore an index and confirm it works. A sweep that
+> quietly removed something live shows up there and nowhere else.
+
 **Leave `DRY_RUN_ONLY="yes"` for the first run.** It audits and dry runs and
 deletes nothing. Read the output, satisfy yourself that the objects it names
 are ones you expect to be dead, and only then set it to `no`.
+
+**This is not a second way of saying `--execute`.** The delete tool takes
+`--execute`, and refuses it without an approval matching the exact manifest.
+The loop always runs that tool twice per cycle: once without `--execute`, which
+is the dry run and is what prints the approval, and then again with `--execute`
+plus the approval it just printed. `DRY_RUN_ONLY` decides whether the second
+invocation happens at all. Setting it to `no` does not delete anything by
+itself; it permits the step that does, and that step still has to satisfy the
+approval gate. The dry run is not skippable even when you do want deletes,
+because the approval does not exist until it runs.
 
 Every setting in that file:
 
@@ -496,6 +522,11 @@ the failure worth guarding against here, not a wasted pipeline minute.
 `RIG_PREFIX` defaults to `leaktest` and names everything the rig creates, so
 teardown removes exactly what this run made and nothing else. Change it if that
 name collides with something already in the bucket or the cluster.
+
+> [!CAUTION]
+> **`DRY_RUN_ONLY` set to `no` deletes objects, from a pipeline, unattended.**
+> Read the caution in step 7 before you set it. The same rules apply here and
+> the pipeline will not ask you a second time.
 
 **Deletes are off by default.** `DRY_RUN_ONLY` is `yes` in the pipeline
 variables. Run it that way first, read what it names, and only then run the

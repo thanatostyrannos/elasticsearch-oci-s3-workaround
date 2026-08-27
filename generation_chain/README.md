@@ -18,7 +18,7 @@ repository accumulates objects that nothing references and nothing will ever
 collect.
 
 Measured on the rig, a local test lab reproducing the fault with Elasticsearch
-9.5.2 against a pinned MinIO (see [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)): 109 snapshot deletions reported successful, not one object
+9.5.2 against a pinned MinIO (see [FACTS.md](../FACTS.md#the-test-lab-henceforth-the-rig)): 109 snapshot deletions reported successful, not one object
 reclaimed, and Elasticsearch's own `_snapshot/<repo>/_cleanup` endpoint
 returning `{"deleted_bytes":0,"deleted_blobs":0}` against a bucket where the
 great majority of objects were referenced by nothing. Cleanup cannot help,
@@ -61,7 +61,7 @@ The retired sweepers had that the other way round, which is why they were
 retired.
 
 The gates that establish completeness and identity are described in
-[`docs/repository-layout-and-reachability.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/repository-layout-and-reachability.md),
+[`docs/repository-layout-and-reachability.md`](../docs/repository-layout-and-reachability.md),
 which is the design document. If the code and that document disagree, the
 document is what was agreed and the code is a bug.
 

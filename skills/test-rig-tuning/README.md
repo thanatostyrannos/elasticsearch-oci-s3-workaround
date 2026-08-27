@@ -122,7 +122,7 @@ genuine gap in the tool rather than a property of the rig.
 The environment above was assembled by hand, on Kubernetes, and every knob in
 this account had to be found the hard way. This repository now ships a rig of
 the same shape as a single script,
-[`snapshot_churn_rig.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/snapshot_churn_rig.py):
+[`snapshot_churn_rig.py`](../../snapshot_churn_rig.py):
 standard library only, no Kubernetes and no container. It drives a cluster you
 already have, creates its own data stream, ILM policy and SLM policy under one
 namespace prefix, generates the load itself, and tears down exactly what it
@@ -147,6 +147,6 @@ Each argument this campaign settled by hand is a flag on it:
 | ILM's poll interval, which stalls every short-age phase at its 10 minute default | `--ilm-poll-interval` |
 
 Reproduction recipe and what to measure while it runs:
-[the churn rig](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/churn-rig-methodology.md).
+[the churn rig](../../docs/churn-rig-methodology.md).
 How to choose a rate, and the poll-interval trap that wastes an hour:
-[generating load](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/generating-load.md).
+[generating load](../../docs/generating-load.md).

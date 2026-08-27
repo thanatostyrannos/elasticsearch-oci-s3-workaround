@@ -26,7 +26,7 @@ import synthrepo
 from instrument import InstrumentedSource
 from generation_chain.sources.local import LocalMirrorSource
 from generation_chain.derivation.audit import run_audit
-from generation_chain.derivation.attribution import KeyIndex
+from generation_chain.derivation.keys import KeyIndex
 
 rows = []
 for shape in args.shapes.split(","):

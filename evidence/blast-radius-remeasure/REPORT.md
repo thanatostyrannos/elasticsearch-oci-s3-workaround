@@ -18,7 +18,7 @@ bytes. The object count matches exactly; the byte count differs because the
 documents in this campaign's indices are larger.
 
 Reference counts read out of the shard documents themselves
-([`b-base-s-blobrefs.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-s-blobrefs.tsv)):
+([`b-base-s-blobrefs.tsv`](artifacts/b-base-s-blobrefs.tsv)):
 
 | Data blob | Bytes | Snapshots naming it |
 |---|---|---|
@@ -29,7 +29,7 @@ Reference counts read out of the shard documents themselves
 | `__R1fKKxcwSd6OcfgtNcl99w` (`blast-share1` `_1.cfe`) | 742 | 1 |
 | `__qBc58MdXQ2KxZm_FZECRfQ` (`blast-share1` `_1.cfs`) | 24,544 | 1 |
 
-Composition ([`b-base-s-composition.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-s-composition.tsv)):
+Composition ([`b-base-s-composition.tsv`](artifacts/b-base-s-composition.tsv)):
 6 data blobs are 20.0 percent of the objects and **98.23 percent of the bytes**.
 The other 24 objects are 80.0 percent of the count and 1.77 percent of the
 bytes. The document says four fifths of the objects carry one fiftieth of the
@@ -42,22 +42,22 @@ Each row is one delete on its own byte-identical clone of the base repository.
 
 | Exp | Object deleted | Bytes | % of bytes | `total_anomalies` | `result` | Anomaly class | Damaged index-snapshot pairs | Restores | Artifact |
 |---|---|---|---|---|---|---|---|---|---|
-| b0 | nothing (control) | 0 | 0 | 0 | pass | - | 0 | 3 clean | [`b0-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b0-summary.json) |
-| b1 | one **shared** data blob, 3 referrers | 486,768 | 47.803 | 3 | fail | missing blob | 3 | 3 partial, that index red with no documents in all three | [`b1-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b1-summary.json) |
-| b2 | one data blob, **1 referrer** | 24,544 | 2.410 | 1 | fail | missing blob | 1 | 2 clean, 1 partial | [`b2-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b2-summary.json) |
-| b3 | **every** data blob | 1,000,306 | 98.234 | **14** | fail | missing blob | **6 of 6** | 3 partial, every index red, no documents anywhere | [`b3-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-summary.json) |
-| b4 | root `snap-<uuid>.dat` | 334 | 0.033 | 1 | fail | failed to load snapshot info | 0 | 2 clean, 1 refused 404; `GET _snapshot/<repo>/_all` 404s for the whole repository | [`b4-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b4-summary.json) |
-| b5 | root `meta-<uuid>.dat`, snapshot taken without global state | 212 | 0.021 | **0** | **pass** | - | 0 | 3 clean | [`b5-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b5-summary.json) |
-| b6r | shard `index-<gen>`, current | 924 | 0.091 | **0** | **pass** | - | 0 | 3 clean | [`b6r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b6r-summary.json) |
-| b7 | index metadata `indices/<uuid>/meta-<id>.dat` | **558** | **0.055** | 1 | fail | failed to load index metadata | 1 | **3 refused 404.** Every restore naming that index fails | [`b7-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b7-summary.json) |
-| b8r | `index.latest` | 8 | 0.001 | **0** | **pass** | - | 0 | 3 clean | [`b8r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b8r-summary.json) |
-| b9r | current root `index-N` | 1,652 | 0.162 | **0** | **pass** | - | 0 | 2 clean, **1 snapshot gone from the catalog entirely** | [`b9r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b9r-summary.json) |
-| b10 | shard `snap-<uuid>.dat` | 916 | 0.090 | 1 | fail | failed to load shard snapshot | 1 | 2 clean, 1 partial, that index red | [`b10-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b10-summary.json) |
-| b11 | shard `snap-<uuid>.dat` on a one-snapshot repository | 910 | 0.185 | 1 | fail | failed to load shard snapshot | 1 | the only snapshot restores red with no documents | [`b11-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b11-summary.json) |
-| b12 | root `meta-<uuid>.dat`, snapshot taken **with** global state | 39,957 | 6.634 | 1 | fail | failed to load global metadata | 0 | 1 clean (index data unaffected) | [`b12-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b12-summary.json) |
+| b0 | nothing (control) | 0 | 0 | 0 | pass | - | 0 | 3 clean | [`b0-summary.json`](artifacts/b0-summary.json) |
+| b1 | one **shared** data blob, 3 referrers | 486,768 | 47.803 | 3 | fail | missing blob | 3 | 3 partial, that index red with no documents in all three | [`b1-summary.json`](artifacts/b1-summary.json) |
+| b2 | one data blob, **1 referrer** | 24,544 | 2.410 | 1 | fail | missing blob | 1 | 2 clean, 1 partial | [`b2-summary.json`](artifacts/b2-summary.json) |
+| b3 | **every** data blob | 1,000,306 | 98.234 | **14** | fail | missing blob | **6 of 6** | 3 partial, every index red, no documents anywhere | [`b3-summary.json`](artifacts/b3-summary.json) |
+| b4 | root `snap-<uuid>.dat` | 334 | 0.033 | 1 | fail | failed to load snapshot info | 0 | 2 clean, 1 refused 404; `GET _snapshot/<repo>/_all` 404s for the whole repository | [`b4-summary.json`](artifacts/b4-summary.json) |
+| b5 | root `meta-<uuid>.dat`, snapshot taken without global state | 212 | 0.021 | **0** | **pass** | - | 0 | 3 clean | [`b5-summary.json`](artifacts/b5-summary.json) |
+| b6r | shard `index-<gen>`, current | 924 | 0.091 | **0** | **pass** | - | 0 | 3 clean | [`b6r-summary.json`](artifacts/b6r-summary.json) |
+| b7 | index metadata `indices/<uuid>/meta-<id>.dat` | **558** | **0.055** | 1 | fail | failed to load index metadata | 1 | **3 refused 404.** Every restore naming that index fails | [`b7-summary.json`](artifacts/b7-summary.json) |
+| b8r | `index.latest` | 8 | 0.001 | **0** | **pass** | - | 0 | 3 clean | [`b8r-summary.json`](artifacts/b8r-summary.json) |
+| b9r | current root `index-N` | 1,652 | 0.162 | **0** | **pass** | - | 0 | 2 clean, **1 snapshot gone from the catalog entirely** | [`b9r-summary.json`](artifacts/b9r-summary.json) |
+| b10 | shard `snap-<uuid>.dat` | 916 | 0.090 | 1 | fail | failed to load shard snapshot | 1 | 2 clean, 1 partial, that index red | [`b10-summary.json`](artifacts/b10-summary.json) |
+| b11 | shard `snap-<uuid>.dat` on a one-snapshot repository | 910 | 0.185 | 1 | fail | failed to load shard snapshot | 1 | the only snapshot restores red with no documents | [`b11-summary.json`](artifacts/b11-summary.json) |
+| b12 | root `meta-<uuid>.dat`, snapshot taken **with** global state | 39,957 | 6.634 | 1 | fail | failed to load global metadata | 0 | 1 clean (index data unaffected) | [`b12-summary.json`](artifacts/b12-summary.json) |
 
 The machine-readable version is
-[`blast-radius-table.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/blast-radius-table.tsv). Each experiment
+[`blast-radius-table.tsv`](artifacts/blast-radius-table.tsv). Each experiment
 also left `-before.tsv`, `-after.tsv`, `-deleted.tsv`, `-verify-pre.json`,
 `-verify.json`, `-catalog.json`, `-anomalies.json` and `-restores.json`.
 
@@ -82,7 +82,7 @@ metadata blob.** At 0.055 percent of the repository's bytes and 3.33 percent of
 its objects it makes every restore that names that index fail outright, on every
 snapshot, with a 404 rather than a red index. A restore naming only the other
 index in the same snapshot still succeeds and returns 2,000 documents
-([`b7b-selective-restore.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b7b-selective-restore.json)), so the
+([`b7b-selective-restore.json`](artifacts/b7b-selective-restore.json)), so the
 loss is total for that index and nil for its neighbour. That is a sharper case
 than the document's 906-byte pointer, because it is smaller, it takes all three
 snapshots rather than one, and it refuses the restore instead of producing a red
@@ -92,9 +92,9 @@ index an operator might read as a shard problem.
 
 ### 14 anomalies across three snapshots and all six index-snapshot pairs
 
-**CONFIRMS, exactly.** [`b3-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-summary.json),
-[`b3-anomalies.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-anomalies.json),
-[`b3-anomaly-table.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-anomaly-table.txt).
+**CONFIRMS, exactly.** [`b3-summary.json`](artifacts/b3-summary.json),
+[`b3-anomalies.json`](artifacts/b3-anomalies.json),
+[`b3-anomaly-table.txt`](artifacts/b3-anomaly-table.txt).
 
 Deleting all six `__` data blobs under `indices/` gave `total_anomalies: 14`,
 `result: "fail"`, split `blast-snap-1` 4, `blast-snap-2` 4, `blast-snap-3` 6,
@@ -103,13 +103,13 @@ naming all six of the six index-snapshot pairs. Every anomaly reads
 on an independently built repository of the same shape.
 
 The three snapshots kept reporting `state: SUCCESS` throughout
-([`b3-catalog.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-catalog.json)), and all three restored to red
+([`b3-catalog.json`](artifacts/b3-catalog.json)), and all three restored to red
 indices with no documents.
 
 ### The 906-byte pointer, one snapshot, red index, zero documents, 0.196 percent
 
 **CONFIRMS in substance; the two percentages are repository-specific.**
-[`b11-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b11-summary.json).
+[`b11-summary.json`](artifacts/b11-summary.json).
 
 `base-p` came out at nine objects and 491,029 bytes against the document's nine
 objects and 462,554 bytes. Its shard-level `snap-<uuid>.dat` is **910 bytes**,
@@ -128,7 +128,7 @@ saying `state: SUCCESS`, `failed: 0`, `failures: []`.
 
 ### The verbatim anomaly JSON block
 
-**CONTRADICTS, narrowly but really.** [`b3-anomalies.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-anomalies.json).
+**CONTRADICTS, narrowly but really.** [`b3-anomalies.json`](artifacts/b3-anomalies.json).
 
 The block in the document is introduced as "verbatim from the run above ... so
 the identifiers are real rather than illustrative". A real 9.5.2 anomaly carries
@@ -152,8 +152,8 @@ After every data blob in the repository was gone, `results.status` read
 `snapshots verified 3/3`, `indices verified 2/2`, `index_snapshots verified
 6/6`, `blobs verified 27`, **byte for byte identical** to the same repository's
 clean run taken minutes earlier
-([`b3-verify-pre.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-verify-pre.json) against
-[`b3-verify.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b3-verify.json)). The document says exactly this,
+([`b3-verify-pre.json`](artifacts/b3-verify-pre.json) against
+[`b3-verify.json`](artifacts/b3-verify.json)). The document says exactly this,
 including the figure 27, and it is right.
 
 What does not hold is "`total_anomalies` and `result` are the only two fields in
@@ -180,7 +180,7 @@ the live catalog references, is confirmed by a stronger test below.
 
 ### The virtual-blob size table
 
-**CONFIRMS.** [`b-base-s-virtual-blobs.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-s-virtual-blobs.tsv).
+**CONFIRMS.** [`b-base-s-virtual-blobs.tsv`](artifacts/b-base-s-virtual-blobs.tsv).
 
 Reading every file entry out of the shard documents and asking the bucket
 whether an object exists for it, with lengths taken from the live index's own
@@ -209,7 +209,7 @@ merged away, which is why those cells are blank.
 
 ### Does damage propagate forward? Yes. Measured, not derived.
 
-[`b13-forward.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b13-forward.json).
+[`b13-forward.json`](artifacts/b13-forward.json).
 
 The document derives this from source and says so. It is now measured.
 
@@ -241,7 +241,7 @@ Confirmed.
 the second one is worse than the document's version.
 
 The document's version: a snapshot deleted from the catalog stops being
-verified. Measured in [`b16-mount-catalog.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b16-mount-catalog.json).
+verified. Measured in [`b16-mount-catalog.json`](artifacts/b16-mount-catalog.json).
 Deleting the only snapshot returned `acknowledged: true`, MinIO's rejected batch
 delete left every blob in place so the bucket went from 9 objects to 10, and
 `_verify_integrity` then returned:
@@ -256,7 +256,7 @@ it passes with nothing verified.
 
 The version the document does not have: **deleting the current root `index-N`
 takes a whole snapshot out of the repository and `_verify_integrity` reports
-`pass`.** [`b9r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b9r-summary.json). 1,652 bytes, 0.162
+`pass`.** [`b9r-summary.json`](artifacts/b9r-summary.json). 1,652 bytes, 0.162
 percent of the repository. The catalog fell back to generation 1, `snapshots
 verified 2/2`, `index_snapshots verified 4/4`, `total_anomalies: 0`, `result:
 "pass"`, and `blast-snap-3` returns `snapshot_restore_exception: snapshot does
@@ -270,11 +270,11 @@ Four experiments, one per state an operator can be in.
 
 | Experiment | Mount | What was removed | After the delete | After a shared-cache clear | After close and reopen | After forced reallocation | After the node loses its local copy |
 |---|---|---|---|---|---|---|---|
-| [b14](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b14-mount.json) | `full_copy` | data blobs | green, 600 docs, search 600 | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | not tested |
-| [b15](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b15-mount.json) | `shared_cache` | data blobs | green, 600 docs, search 600 | **green, `_cat` 600, `_count` 600, search fails** | green, 600, search fails | green, 600, search fails | n/a |
-| [b17](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b17-mount-catalog.json) | `shared_cache` | snapshot from the catalog, then the blobs | green, 600, search 600 | **green, 600, search fails** | green, 600, search fails | green, 600, search fails | n/a |
-| [b18](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b18-mount-catalog.json) | `full_copy` | snapshot from the catalog, then the blobs | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | see b19 |
-| [b19](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b19-mount-nodeloss.json) | `full_copy` | data blobs, then the node's copy of the shard | green, 600, search 600 | n/a | n/a | n/a | **red, ALLOCATION_FAILED, 5 failed attempts, `RecoveryFailedException`** |
+| [b14](artifacts/b14-mount.json) | `full_copy` | data blobs | green, 600 docs, search 600 | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | not tested |
+| [b15](artifacts/b15-mount.json) | `shared_cache` | data blobs | green, 600 docs, search 600 | **green, `_cat` 600, `_count` 600, search fails** | green, 600, search fails | green, 600, search fails | n/a |
+| [b17](artifacts/b17-mount-catalog.json) | `shared_cache` | snapshot from the catalog, then the blobs | green, 600, search 600 | **green, 600, search fails** | green, 600, search fails | green, 600, search fails | n/a |
+| [b18](artifacts/b18-mount-catalog.json) | `full_copy` | snapshot from the catalog, then the blobs | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | green, 600, search 600 | see b19 |
+| [b19](artifacts/b19-mount-nodeloss.json) | `full_copy` | data blobs, then the node's copy of the shard | green, 600, search 600 | n/a | n/a | n/a | **red, ALLOCATION_FAILED, 5 failed attempts, `RecoveryFailedException`** |
 
 Reading those rows against the document:
 
@@ -319,8 +319,8 @@ way: the partial mount lies about its document count indefinitely.
 Three of these, stated as plainly as the ones where it is larger.
 
 **Deleting a shard's current `index-<gen>` costs nothing measurable.**
-[`b6r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b6r-summary.json),
-[`b20r-next-snapshot.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b20r-next-snapshot.json). The document says
+[`b6r-summary.json`](artifacts/b6r-summary.json),
+[`b20r-next-snapshot.json`](artifacts/b20r-next-snapshot.json). The document says
 the restore still works "but the shard has lost the file list every future
 snapshot deduplicates against". The first half is right: all three restores came
 back green with full document counts. The second half did not happen. With the
@@ -330,10 +330,10 @@ SUCCESS, wrote 7 objects and **zero data blobs**, `_verify_integrity` returned
 2,000 and 2,050 documents. Elasticsearch recovered the shard's file list from
 the per-snapshot `snap-<uuid>.dat` blobs. Compare the control, `index.latest`
 deleted, which also wrote 7 objects and zero data blobs
-([`b21-next-snapshot.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b21-next-snapshot.json)): the two are
+([`b21-next-snapshot.json`](artifacts/b21-next-snapshot.json)): the two are
 indistinguishable.
 
-**Deleting `index.latest` costs nothing.** [`b8r-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b8r-summary.json).
+**Deleting `index.latest` costs nothing.** [`b8r-summary.json`](artifacts/b8r-summary.json).
 8 bytes, `total_anomalies: 0`, `result: "pass"`, all three restores green with
 full document counts, and the next snapshot behaves normally. This confirms the
 document's own reading of `latestIndexBlobId`: listing is primary and
@@ -341,10 +341,10 @@ document's own reading of `latestIndexBlobId`: listing is primary and
 manifest containing `index.latest` reads alarming and is not.
 
 **Deleting a root `meta-<uuid>.dat` costs nothing when the snapshot was taken
-without global state.** [`b5-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b5-summary.json). 212
+without global state.** [`b5-summary.json`](artifacts/b5-summary.json). 212
 bytes, `total_anomalies: 0`, `result: "pass"`, three clean restores. It matters
 when the snapshot did carry global state
-([`b12-summary.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b12-summary.json)): 39,957 bytes, one anomaly,
+([`b12-summary.json`](artifacts/b12-summary.json)): 39,957 bytes, one anomaly,
 `failed to load global metadata`, while index data restores unaffected. The
 document's campaign-1 orphan table lists a root `meta-<uuid>` at 38,805 bytes as
 10.3 percent of the orphan bytes without saying which of those two situations it
@@ -380,10 +380,10 @@ repositories of type `s3` against MinIO `RELEASE.2025-01-18T00-31-37Z` in the
 same namespace.
 
 Base repository listings are recorded in
-[`b-base-s-listing.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-s-listing.tsv),
-[`b-base-p-listing.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-p-listing.tsv),
-[`b-base-g-listing.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-g-listing.tsv) and
-[`b-base-ms-listing.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/artifacts/b-base-ms-listing.tsv), so the exact bytes
+[`b-base-s-listing.tsv`](artifacts/b-base-s-listing.tsv),
+[`b-base-p-listing.tsv`](artifacts/b-base-p-listing.tsv),
+[`b-base-g-listing.tsv`](artifacts/b-base-g-listing.tsv) and
+[`b-base-ms-listing.tsv`](artifacts/b-base-ms-listing.tsv), so the exact bytes
 every experiment started from are on file even though the bucket is gone.
 
 `harness/cleanup.sh` ran at the end. The `blastrm` bucket was deleted, all

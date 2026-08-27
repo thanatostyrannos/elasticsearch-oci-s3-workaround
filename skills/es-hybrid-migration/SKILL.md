@@ -36,7 +36,7 @@ comfortable with the delete step, stopping after Step 7 is a coherent position.
 ## Before you start
 
 - A read-only API key for the audit steps, per the *Authenticating to
-  Elasticsearch with a read-only API key* section of [README.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md).
+  Elasticsearch with a read-only API key* section of [README.md](../../README.md).
   Export it, do not put it on the command line:
   `export ES_API_KEY="$(cat /path/to/es-snapshot-readonly.key)"`.
 - A separate credential with write access, for the registration, SLM, delete and
@@ -46,7 +46,7 @@ comfortable with the delete step, stopping after Step 7 is a coherent position.
   `--credentials` and never a value, because a secret in argv is visible in `ps`
   to every user on the host, and a file other users can read is refused rather
   than used. `chmod 600` it. The shape is in
-  [README.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md#the-credentials-file).
+  [README.md](../../README.md#the-credentials-file).
 - Shorthand used below:
   `ES='curl -s --cacert /path/to/ca.crt -u "$ES_ADMIN" https://es.example.com:9200'`
 - Placeholders: `my-repo` is the existing S3-compatible repository, `backups-fs` is
@@ -82,7 +82,7 @@ across to the destination.
 
 The operation lists, the misreadable sentence in Oracle's documentation that
 this corrects, and the reason retention rules do not help either are in
-[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+[blast radius](../../docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
 ---
 
@@ -111,7 +111,7 @@ block deleting a snapshot that backs a mounted searchable-snapshot index, so thi
 state is reachable, and the index is currently serving reads from blobs no live
 snapshot references. Restore or remount the index from a snapshot that still
 exists, or unmount and delete it if the data is expendable. Then re-run. See
-[es-snapshot-audit](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-snapshot-audit/SKILL.md) §5 for the full DANGER-banner
+[es-snapshot-audit](../es-snapshot-audit/SKILL.md) §5 for the full DANGER-banner
 procedure.
 
 ---
@@ -292,7 +292,7 @@ should differ from what 4a printed only where you intend it to.
 the single most consequential value in this toolkit: it decides which blobs the
 repository can see, and it is the same value Step 9 passes to both the audit and
 the reclaim command as `--prefix`. Copy it from 4a and use it verbatim there. See
-[base_path](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md#base_path-the-value-that-decides-what-your-repository-can-see).
+[base_path](../../README.md#base_path-the-value-that-decides-what-your-repository-can-see).
 
 ### 4c. Acceptance
 
@@ -503,7 +503,7 @@ it.
 ## Step 9: audit the residue, read the manifest, then reclaim it
 
 Two commands, and the split is the design.
-[`python3 -m generation_chain`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md) reads and
+[`python3 -m generation_chain`](../../generation_chain/README.md) reads and
 cannot delete: its HTTP layer allows GET and HEAD behind an assert.
 `python3 -m generation_chain.reclaim` deletes and derives nothing: it removes
 exactly the keys a manifest names, in the order given. Between the two sits a
@@ -642,7 +642,7 @@ the load generator writing and SLM snapshotting every fifteen seconds throughout
 output reported zero failed and zero unconfirmed deletes, `unconfirmed` being
 keys the store's own answer accounted for neither way. The restore checks at
 cycles 3, 6 and 9 each restored a real index with zero integrity anomalies. The raw output is in
-[evidence/delete-campaign](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/delete-campaign/README.md).
+[evidence/delete-campaign](../../evidence/delete-campaign/README.md).
 
 **What that does not cover.** The cleanup leg has since been run against a real
 Oracle Object Storage bucket, 58 cycles with 888 objects deleted and no failed
@@ -673,7 +673,7 @@ $ES -XPOST '/_snapshot/backups-fs/<standing-backup>/_restore?wait_for_completion
 $ES '/_cat/count/<index>?h=count'; $ES '/_cat/count/restored-<index>?h=count'
 ```
 
-[`verify_restorable.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/verify_restorable.py) does the second one
+[`verify_restorable.py`](../../verify_restorable.py) does the second one
 for you, against either repository. It restores under a fresh name, counts the
 documents that come back, and deletes nothing:
 
@@ -771,7 +771,7 @@ it as a backup would count its total as growth *and* imply retention may delete
 it.
 
 Audit for it continuously with
-[es-snapshot-audit](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-snapshot-audit/SKILL.md):
+[es-snapshot-audit](../es-snapshot-audit/SKILL.md):
 `--emit-classified` and look for `slm+mounted` in the `class` column, and for any
 `MISSING-FROM-CATALOG` row.
 
@@ -861,19 +861,19 @@ double-counts, remain sized by a floor rather than a figure.
 
 ## Related
 
-- [es-snapshot-audit](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-snapshot-audit/SKILL.md) is the sizing and inventory
+- [es-snapshot-audit](../es-snapshot-audit/SKILL.md) is the sizing and inventory
   tool behind Step 0, Step 1 and Step 7.
-- [`generation_chain`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md) is the audit and
+- [`generation_chain`](../../generation_chain/README.md) is the audit and
   the reclaim command behind Step 9, with the safety condition, the exit codes
   and what it cannot see.
 - The two runbooks that used to run Step 8 and Step 9, es-log-cleanup and
   es-orphan-sweep, are removed along with the sweepers they drove. See the
-  retirement note in [the main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md).
+  retirement note in [the main README](../../README.md).
 
 Proof, and which parts of it are history. Procedure and acceptance criteria:
-[methodology.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) §1.3 (the architecture), §4 (Step 0
+[methodology.md](../../evidence/methodology.md) §1.3 (the architecture), §4 (Step 0
 through Step 10), §6.2 (what the campaign did not prove). Measured outcomes:
-[campaign-data.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) Part II: §7 sizing inputs, §8 registration and repoint, §9 the retention unlink proof, §10
+[campaign-data.md](../../evidence/campaign-data.md) Part II: §7 sizing inputs, §8 registration and repoint, §9 the retention unlink proof, §10
 `verify=false` and frozen serving, §11 the residual leak, §14 the restore.
 
 Both documents record a campaign whose cleanup steps were driven by the retired
@@ -882,4 +882,4 @@ and the verification after it, as an account of what a wrong delete costs and
 what `_verify_integrity` does and does not notice, which are properties of
 Elasticsearch and the object store rather than of any tool. The commands in them
 no longer exist. The evidence for Step 9 as it is written today is
-[evidence/delete-campaign](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/delete-campaign/README.md).
+[evidence/delete-campaign](../../evidence/delete-campaign/README.md).

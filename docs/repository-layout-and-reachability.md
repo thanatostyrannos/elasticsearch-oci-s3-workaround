@@ -14,7 +14,7 @@ surviving snapshot. It is about the data and the reasoning, not about any
 particular program that implements it.
 
 For what a wrong delete actually costs once it happens, read
-[Blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md). That page covers segment sharing, the byte
+[Blast radius](blast-radius.md). That page covers segment sharing, the byte
 level detail of deduplication, and the damage model. This page does not repeat
 it.
 
@@ -199,7 +199,7 @@ segments, so a snapshot of an unchanged shard uploads nothing and references the
 blobs the earlier snapshot uploaded. The reference count of a data blob is
 normally greater than one, and you cannot read it off the key. This is why a
 single wrong delete damages several snapshots at once rather than one, and it is
-the subject of [Blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md).
+the subject of [Blast radius](blast-radius.md).
 
 **The union is stored, not assembled.** Measured, a shard document holds every
 snapshot's file list for that shard, not just the newest one. You do not build
@@ -474,5 +474,5 @@ one shard document, and the extent fields in `snap-<uuid>.dat`.
 
 Related reading in this repository.
 
-- [Blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md): why segments are shared, what a wrong delete
+- [Blast radius](blast-radius.md): why segments are shared, what a wrong delete
   costs, the inline `v__` files, and the full accounting of issue 21.

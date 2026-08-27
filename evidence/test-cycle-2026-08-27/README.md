@@ -67,7 +67,7 @@ Durations attributed to the cycle they belong to rather than the one that
 follows:
 
     metadata-mode cycles      26s average   (12s at the fastest)
-    segment-mode cycles      124s average
+    segment-mode cycles      129s average
 
 The metadata cycles are the honest measure of the change, because they are
 audit and reclaim with no waiting: minutes became seconds. The segment cycles

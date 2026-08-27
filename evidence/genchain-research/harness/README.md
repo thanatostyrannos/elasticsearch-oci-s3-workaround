@@ -36,7 +36,7 @@ GENCHAIN_TOOL_ROOT=/path/to/worktree ./harness/run_all.sh
 ```
 
 The MinIO parts need a port forward and credentials for the rig, the local test
-lab reproducing the fault (see [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)):
+lab reproducing the fault (see [FACTS.md](../../../FACTS.md#the-test-lab-henceforth-the-rig)):
 
 ```bash
 kubectl -n es-rig port-forward svc/minio 19000:9000 &

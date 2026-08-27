@@ -53,7 +53,7 @@ itself:
 
 Three of four work. The batch delete is not the fault; the checksum the client
 chooses is. Captures in
-[evidence/oci-s3-compatibility](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/README.md).
+[evidence/oci-s3-compatibility](evidence/oci-s3-compatibility/README.md).
 
 **`ListObjectsV2` is genuinely supported and pages**, measured the same day with
 three objects and `--max-keys 2`. `KeyCount` and `NextContinuationToken` both
@@ -92,7 +92,9 @@ rather than a production cluster. It is referred to throughout as **the rig**.
 
     Elasticsearch    9.5.2 under ECK, in Rancher Desktop
     namespace        es-rig
-    object store     MinIO, pinned to RELEASE.2025-01-18T00-31-37Z
+    object store     MinIO, pinned to RELEASE.2025-01-18T00-31-37Z, and
+                     Oracle Object Storage over the Amazon S3 Compatibility
+                     API for the 2026-08-27 campaign below
 
 The MinIO pin is load-bearing. That release is the last one that rejects the
 batch delete, so it reproduces the fault; the release two days later accepts it
@@ -162,7 +164,7 @@ establishes it for a real cluster.
 **The batch delete itself works, with the right header.** Proven against the
 live bucket on two throwaway objects: without `Content-MD5`, HTTP 400
 `MissingContentMD5`; with it, HTTP 200, and both keys return 404 afterwards.
-[`generation_chain/reclaim/checksum.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/reclaim/checksum.py) sends `Content-MD5` and no
+[`generation_chain/reclaim/checksum.py`](generation_chain/reclaim/checksum.py) sends `Content-MD5` and no
 `x-amz-checksum-*` header at all. This is why reclaiming 76,656 keys costs 77
 requests rather than 76,656.
 
@@ -215,7 +217,7 @@ There is no published on-disk format specification. The source is the authority.
 
 ## Facts measured from the real captured repository
 
-[`tests/fixtures/real-es952-repo.tar.gz`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/tests/fixtures/real-es952-repo.tar.gz), Elasticsearch 9.5.2.
+[`tests/fixtures/real-es952-repo.tar.gz`](tests/fixtures/real-es952-repo.tar.gz), Elasticsearch 9.5.2.
 
 `min_version` reads `7.12.0` on every generation, not the writing version.
 
@@ -280,9 +282,9 @@ Three lines, side by side:
 
 | | Elasticsearch | This tool |
 |---|---|---|
-| The set | `__` blobs in the shard directory that the current file list does not name | [`derivation/shards.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/derivation/shards.py), `frozenset(present_blobs - live_blobs)`, the same difference, shard-local |
-| Then | deletes all of them | [`derivation/garbage.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/derivation/garbage.py), `named & history.collectable`, keeps only those a delete it observed actually named |
-| Superseded generation documents | deletes them too | never names them, see [`derivation/classification.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/derivation/classification.py) |
+| The set | `__` blobs in the shard directory that the current file list does not name | [`derivation/shards.py`](generation_chain/derivation/shards.py), `frozenset(present_blobs - live_blobs)`, the same difference, shard-local |
+| Then | deletes all of them | [`derivation/garbage.py`](generation_chain/derivation/garbage.py), `named & history.collectable`, keeps only those a delete it observed actually named |
+| Superseded generation documents | deletes them too | never names them, see [`derivation/classification.py`](generation_chain/derivation/classification.py) |
 
 So the candidate set is computed identically, then intersected with positive
 evidence. **An intersection cannot add a member.** Naming a blob Elasticsearch
@@ -311,64 +313,6 @@ gap worth closing.
 Chain completeness comes free from the monotonic numbering plus `index.latest`.
 Traversal completeness within a generation does not, and that is what
 `snap-<uuid>.dat`'s declared extent can establish.
-
-## Measured scale behaviour, superseded
-
-**These numbers do not describe the tool on main.** They were taken against a
-snapshot frozen at `b689f66`, and that commit contains no `generation_chain`
-modules at all, nor `reclaim/batch.py`, `sources/readahead.py` or
-`sources/overlap.py`. Every figure below therefore predates batch deletion,
-read-ahead and request overlap, which are exactly the three changes that move
-round-trip counts.
-
-The round-trip and wall-clock figures are the most wrong. Reclaiming by batch
-turned 76,656 keys from 76,656 requests into 77. Treat the shape of the findings
-as still useful, the constants as stale, and re-measure before quoting any of it.
-
-The harness that produced them ran in a session-local scratch directory that
-was never published and no longer exists, so these figures are not reproducible
-as written. Re-measuring means rebuilding the harness against current main.
-
-Cost is linear and fully SERIAL. Concurrency never exceeded 1. 4.50 round trips
-per generation, flat 10 to 10,000. 1.00 shard-document GET per shard directory
-per generation. 894 generations at 40 ms round trip: 163.5 s, which is 4.3x the
-retired containment code. 53,063 objects over 1,000 shard dirs: 48,093 requests,
-193.3 s on local MinIO, 32 minutes at 40 ms. 58 percent of traffic is HEAD.
-
-Listing is correct at depth: 133 real MinIO pages and 132 OCI stub pages, key
-sets identical, no loss or duplication.
-
-Memory 1.9 KB resident per object, linear to 585,194 objects at 1.55 GB peak.
-A 2 GB host dies near 750,000 objects.
-
-OCI signing costs 16.03 ms of pure-python RSA per request, 2,000x the SigV4
-path, and lands on the serial critical path.
-
-**Failure behaviour.** Only three reads are fatal: the listing, `index.latest`,
-and the anchor generation. Everything else is local. The manifest NEVER GREW
-across 232 single-failure and 200+ multi-failure runs.
-
-    rate        runs completed   manifest recovered      coverage claimed
-    1 in 10000  100% (30/30)     99.98% mean/99.79% worst  99.83%
-    1 in 1000   100% (30/30)     99.52% mean/96.63% worst  94.89%
-    1 in 100    63.3% (19/30)    95.78% mean/90.88% worst  68.96%
-
-So the feared outcome, a guard refusing so often the operator bypasses it, does
-NOT occur at realistic rates. Coverage understates, which is the safe direction.
-Refusal probability scales with `listing_pages + 2`.
-
-**The one dishonest channel.** `KeyIndex._still_there` catches every exception
-from `source.exists` and records False, so "the store said no" and "the store
-could not answer" are the same value. Isolating HEAD failures: at 1 in 1000,
-99.90% recovered but coverage claims 100.0% and about 31 of 30,938 keys vanish
-unreported; at 1 in 100, about 309 vanish and coverage still claims 100.0%. It
-leaks rather than deletes, so not the dangerous direction, but it is the only
-measured place where the report is wrong rather than conservative.
-
-A 503 at 5 percent per attempt costs zero coverage, absorbed by 8 retries, at
-21.2 s of backoff per 712 requests. A 403 is not retried at all: 1 in 100 costs
-3.5 percent of the manifest immediately. `--elasticsearch` adds three more fatal
-calls with NO retry.
 
 ## Campaign results, 2026-08-26
 
@@ -456,6 +400,59 @@ reported successful and reclaimed nothing, and
 `POST _snapshot/<repo>/_cleanup` returned `"deleted_bytes": 0` and
 `"deleted_blobs": 0` against a repository where almost nothing was still
 referenced.
+
+## Campaign results, 2026-08-27, against a real Oracle bucket
+
+The campaign above ran against MinIO. This one ran against Oracle Object
+Storage over the Amazon S3 Compatibility API, which is the store the fault
+belongs to. The repository was manufactured by `snapshot_churn_rig.py`: 60
+documents a second, ILM rolling, SLM snapshotting every 60 seconds with a five
+minute retention, so snapshots expired continuously and every expiry stranded
+blobs the store refused to delete.
+
+The fault reproduced before any measurement started. Registering the repository
+failed its own verification, because verification tries a batch delete and the
+store rejects it. That refusal is the first evidence the store leaks, and the
+rig continues past it with `verify=false` deliberately.
+
+**Run one: 80 cycles, 2,896 objects deleted.** No failed delete, no unconfirmed
+delete, no non-zero exit. Every cycle read both of the shard directories it
+depended on, and every segment-mode cycle settled rather than timing out.
+
+That run also measured the thing that produced run two. Cycle time tracked
+generation count almost linearly, from 2.0 minutes at cycle 2 to 7.1 minutes by
+cycle 78. The audit reads one shard document per shard directory per
+generation, nothing ever removes a generation, and those reads were serial: a
+read-ahead layer with a bounded thread pool already existed and had exactly one
+caller, the root generations. The shard documents, which are the bulk of the
+work, were fetched one at a time with eight workers idle.
+
+**Run two: the same rig with the shard reads warmed.** Against a repository
+rebuilt from zero, so the two are comparable.
+
+    cycles                    58   (29 segment, 29 metadata)
+    deleted                  888
+    failed                     0
+    unconfirmed                0
+    non-zero exits             0
+    shard directories read   2 of 2, on all 58
+    segment cycles settled  29 of 29
+
+    metadata-mode cycles      26s average, 12s at the fastest
+    segment-mode cycles      129s average, 86s at the fastest
+
+**What the campaign reclaimed, and how fast it leaked.** Across 74 minutes the
+tool removed 270.2 MB the store had refused to delete, which is 181.9 MB an
+hour at that cadence. About 3 MB per snapshot expiry, one expiry a minute.
+
+Those are properties of the rig, not predictions. The cadence is pathological
+on purpose. Counts and orderings transfer; rates do not.
+
+**What this campaign does not establish.** One tenancy, one bucket, one
+repository shape. It says the paths work against a real Oracle endpoint, not
+that they work against every one. Claims about other stores that reject the
+same call rest on their published operation lists rather than on a run.
+
 
 ## Sources
 

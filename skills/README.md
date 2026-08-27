@@ -8,9 +8,9 @@ afterwards.
 
 | Skill | Use it when |
 |---|---|
-| [`es-snapshot-audit`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-snapshot-audit/SKILL.md) | Sizing or inventorying a snapshot repository, separating backup growth from frozen-tier footprint, planning storage before a migration |
-| [`es-hybrid-migration`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-hybrid-migration/SKILL.md) | Moving backups to block/NFS storage while the frozen tier stays mounted on the S3-compatible repository |
-| [`test-rig-tuning`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/test-rig-tuning/SKILL.md) | Standing up or tuning a rig that continuously exercises a tool whose failure destroys data, and spotting when the rig is measuring nothing |
+| [`es-snapshot-audit`](es-snapshot-audit/SKILL.md) | Sizing or inventorying a snapshot repository, separating backup growth from frozen-tier footprint, planning storage before a migration |
+| [`es-hybrid-migration`](es-hybrid-migration/SKILL.md) | Moving backups to block/NFS storage while the frozen tier stays mounted on the S3-compatible repository |
+| [`test-rig-tuning`](test-rig-tuning/SKILL.md) | Standing up or tuning a rig that continuously exercises a tool whose failure destroys data, and spotting when the rig is measuring nothing |
 
 ## Three runbooks were removed, and the delete step came back under a different tool
 
@@ -29,7 +29,7 @@ in the repository is worse than no runbook.
 
 The replacement has landed, and it is two commands rather than one.
 
-[`generation_chain`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md) is the audit, run
+[`generation_chain`](../generation_chain/README.md) is the audit, run
 as `python3 -m generation_chain`. It reproduces Elasticsearch's own shard-local
 set difference and condemns a blob on its PRESENCE in a deleted snapshot's file
 list, never on its absence from a live set the tool computed. It has no delete
@@ -37,7 +37,7 @@ path at all: its HTTP layer allows GET and HEAD behind an assert. A read that
 fails there makes the manifest shorter rather than wrong, which is the whole
 difference from the three tools above.
 
-[`generation_chain.reclaim`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md#layout) is
+[`generation_chain.reclaim`](../generation_chain/README.md#layout) is
 the delete, run as `python3 -m generation_chain.reclaim`, kept as a separate
 command for a separate step. It removes exactly the keys an approved manifest
 names and derives nothing of its own. The dry run is the default, and
@@ -119,7 +119,7 @@ Versions do exist on an Object Storage bucket with versioning on and are
 restorable through Oracle's own API and the Console, which needs a credential
 for that API rather than a Customer Secret Key. The reasoning and the operation
 lists are in
-[blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+[blast radius](../docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 This is the invariant that outlived the tools. It is why the delete is a
 separate command from the audit, why its dry run is the default, and why its
 approval is bound to the bytes of one manifest rather than to an operator's
@@ -139,10 +139,10 @@ MISSING-FROM-CATALOG`.
 Neither of those is a restore. A repository can list clean, report `SUCCESS` on
 every snapshot and pass `_verify_integrity` while being unrestorable, and this
 project has measured that. After deletion traffic, run
-[`verify_restorable.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/verify_restorable.py), which restores an
+[`verify_restorable.py`](../verify_restorable.py), which restores an
 index under a fresh name and counts the documents that come back. It deletes
 nothing from the repository.
 
 Evidence that these procedures work, with real measured outcomes:
-[`methodology.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) (the replayable playbook) and
-[`campaign-data.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) (the raw data from both live-rig campaigns).
+[`methodology.md`](../evidence/methodology.md) (the replayable playbook) and
+[`campaign-data.md`](../evidence/campaign-data.md) (the raw data from both live-rig campaigns).

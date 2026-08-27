@@ -24,6 +24,7 @@ import threading
 import tokenize
 import subprocess
 import unittest
+import urllib.error
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,6 +45,26 @@ HISTORY = [
     {"s2": {"idx": ["__b", "__shared"]}},
 ]
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+
+class ErrorDetailNeverEscapes(unittest.TestCase):
+
+    def test_a_body_less_http_error_yields_no_detail_rather_than_raising(self):
+        # _detail exists to put a scrap of the store's response into an error
+        # message. It is decoration, and it must never become the failure.
+        #
+        # On Python 3.9, which this project claims to support, reading an
+        # HTTPError built with fp=None raises KeyError('file') rather than the
+        # OSError or AttributeError this used to catch: addinfourl subclassed
+        # tempfile._TemporaryFileWrapper back then, whose __getattr__ reaches
+        # for a 'file' key nobody set. Later versions return b'' and the bug
+        # is invisible. Four tests in the suite hit exactly this and errored
+        # on 3.9 while passing on 3.12.
+        detail = http_reads._detail(
+            urllib.error.HTTPError("http://example.invalid/", 429, "err", {}, None))
+        self.assertEqual(detail, "")
+
 
 
 class _OciRig:

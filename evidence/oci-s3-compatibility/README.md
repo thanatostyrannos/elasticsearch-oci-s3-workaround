@@ -2,7 +2,7 @@
 
 Measured against Oracle Cloud Infrastructure Object Storage, S3 Compatibility
 API, region `us-ashburn-1`, on 2026-08-26. Bucket created by
-[the Terraform in this repository](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/terraform/oci-probe/README.md),
+[the Terraform in this repository](../../terraform/oci-probe/README.md),
 versioning Disabled, and driven by `generation_chain.reclaim` rather than by
 hand-built requests, so what is measured is the code that ships.
 
@@ -26,16 +26,16 @@ Oracle names the three it accepts. **CRC32 is not among them, and CRC32 is what
 the SDK sends.** That single line is the whole fault, and it is now measured on
 Oracle rather than inferred from a MinIO release that reproduces it.
 
-Full capture: [`delete-crc32.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/delete-crc32.txt)
+Full capture: [`delete-crc32.txt`](delete-crc32.txt)
 
 ## Every algorithm, same tool, same bucket
 
 | `--checksum-algorithm` | result | capture |
 |---|---|---|
-| `crc32` | **0 deleted, 2 failed, 400 InvalidRequest** | [`delete-crc32.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/delete-crc32.txt) |
-| `crc32c` | 2 deleted, 0 failed | [`delete-crc32c.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/delete-crc32c.txt) |
-| `sha256` | 2 deleted, 0 failed | [`delete-sha256.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/delete-sha256.txt) |
-| `md5` | 2 deleted, 0 failed | [`delete-md5.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/delete-md5.txt) |
+| `crc32` | **0 deleted, 2 failed, 400 InvalidRequest** | [`delete-crc32.txt`](delete-crc32.txt) |
+| `crc32c` | 2 deleted, 0 failed | [`delete-crc32c.txt`](delete-crc32c.txt) |
+| `sha256` | 2 deleted, 0 failed | [`delete-sha256.txt`](delete-sha256.txt) |
+| `md5` | 2 deleted, 0 failed | [`delete-md5.txt`](delete-md5.txt) |
 
 **The batch delete is not the fault.** Three of four algorithms work. The client
 picks the fourth.
@@ -76,7 +76,7 @@ snapshots/tests-<uuid>/master.dat         22 bytes
 Registering again with `?verify=false` returns `{"acknowledged":true}`, and the
 leak begins.
 
-Capture: [`register-with-verify.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/register-with-verify.json)
+Capture: [`register-with-verify.json`](register-with-verify.json)
 
 ## Elasticsearch cannot write to OCI at all without one setting
 
@@ -125,7 +125,7 @@ measuring. Three objects, `--max-keys 2`:
 `IsTruncated`, means V2 rather than V1 answering to a V2 name. Paginated
 listing works.
 
-Full capture: [`listv2-maxkeys2.json`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/listv2-maxkeys2.json)
+Full capture: [`listv2-maxkeys2.json`](listv2-maxkeys2.json)
 
 ## Both Oracle APIs reach the same repository
 
@@ -145,7 +145,7 @@ request signing against a `keyId` of tenancy, user and fingerprint, rather than
 SigV4 against a Customer Secret Key. It read the same repository, built the same
 chain, applied the Elasticsearch veto and produced a report of the same shape.
 
-Capture: [`native-transport.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/native-transport.txt)
+Capture: [`native-transport.txt`](native-transport.txt)
 
 **The two have not been compared under controlled conditions.** Runs minutes
 apart against a repository being written to disagree about how many objects are
@@ -174,7 +174,7 @@ That is the same shape of problem as the fault this repository documents: AWS
 tooling adding a payload feature to every request, and an S3-compatible store
 refusing it. Two separate defaults, one root cause.
 
-Full capture: [`aws-cli-default.txt`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/aws-cli-default.txt)
+Full capture: [`aws-cli-default.txt`](aws-cli-default.txt)
 
 ### A new Customer Secret Key is not usable immediately, and says the wrong thing
 

@@ -147,9 +147,23 @@ def _retry_after(exc: urllib.error.HTTPError) -> Optional[float]:
 
 
 def _detail(exc: urllib.error.HTTPError) -> str:
+    """A scrap of the store's response body, for the error message.
+
+    This is decoration and must never become the failure. The caller is
+    already raising; a helper that adds context has no business deciding
+    the exception type.
+
+    So it catches everything, which the narrower `(OSError, AttributeError)`
+    did not. On Python 3.9 an HTTPError carrying no body raises
+    `KeyError('file')` here, because `addinfourl` subclassed
+    `tempfile._TemporaryFileWrapper` back then and its `__getattr__` reaches
+    for a key nobody set. Later versions return an empty bytes and the
+    problem is invisible, which is how it survived: the suite passed on 3.12
+    and errored on the 3.9 this project says it supports.
+    """
     try:
         return exc.read()[:200].decode("utf-8", "replace")
-    except (OSError, AttributeError):
+    except Exception:
         return ""
 
 

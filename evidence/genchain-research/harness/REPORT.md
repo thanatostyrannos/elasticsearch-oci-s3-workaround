@@ -119,7 +119,7 @@ HEADs  ~ 0.6 x total round trips  (one per candidate key, memoised)
 ## The same audit over a real endpoint
 
 Synthetic repositories, put into the MinIO of the rig (the local test lab
-reproducing the fault, see [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)) at
+reproducing the fault, see [FACTS.md](../../../FACTS.md#the-test-lab-henceforth-the-rig)) at
 `RELEASE.2025-01-18T00-31-37Z`, read back through the tool's own S3
 compatibility transport over a `kubectl port-forward`.
 `harness/bench_endtoend_s3.py`.

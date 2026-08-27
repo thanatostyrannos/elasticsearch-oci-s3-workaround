@@ -220,7 +220,7 @@ The `--elasticsearch` veto rescues none of them: `Veto.covers` keys off
 uuid. The veto protects by identity, so it cannot catch a failure of attribution.
 
 **Anchor defect, confirmed on the rig before work stopped.** (The rig is the
-local test lab reproducing the fault; see [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig).)
+local test lab reproducing the fault; see [FACTS.md](../../FACTS.md#the-test-lab-henceforth-the-rig).)
 A repository left by
 an ordinary crash between writing `index-N+1` and updating `index.latest` causes
 the tool to name TWO LIVE KEYS. No store misbehaviour, no tampering. This

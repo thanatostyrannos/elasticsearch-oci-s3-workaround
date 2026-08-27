@@ -5,7 +5,7 @@
 > **The sweep runs described here were driven by tools that are now retired.**
 > `s3_repo_sweeper.py`, `oci_repo_sweeper.py` and `es_log_driven_sweeper.py`
 > have been removed; see
-> [the main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md#the-three-tools-that-were-removed).
+> [the main README](../README.md#the-three-tools-that-were-removed).
 >
 > The measurements are kept because they are not measurements of those tools.
 > What a wrong delete costs, what a mounted searchable snapshot is linked to,
@@ -17,7 +17,7 @@
 > retired tooling. Read the consequences as current.
 This is the receipts file. Every number below is copied from a file on disk or
 from a command run against the live rig, the local test lab that reproduces the
-fault (defined in [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)); nothing here is summarized, rounded for
+fault (defined in [FACTS.md](../FACTS.md#the-test-lab-henceforth-the-rig)); nothing here is summarized, rounded for
 effect, or reconstructed from memory. Where a source is missing or a value is not
 what it appears to be, that is stated inline rather than smoothed over.
 
@@ -52,7 +52,7 @@ the moment this document was written, not copied from the capture.
 
 # Part I. Campaign 1: single-repo leak reproduction
 
-**Source artifacts** captured during the campaign-1 E2E run (session scratch files, not committed; the repo files they validate were `oci_repo_sweeper.py` and `es_log_driven_sweeper.py`, both since retired and removed, plus [`tests/fixtures/`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/tree/main/tests/fixtures), which is still here):
+**Source artifacts** captured during the campaign-1 E2E run (session scratch files, not committed; the repo files they validate were `oci_repo_sweeper.py` and `es_log_driven_sweeper.py`, both since retired and removed, plus [`tests/fixtures/`](../tests/fixtures), which is still here):
 
 | Artifact | Size | mtime (local, UTC-7) | What it is |
 |---|---:|---|---|

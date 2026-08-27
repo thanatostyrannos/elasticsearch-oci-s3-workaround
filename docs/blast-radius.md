@@ -79,7 +79,7 @@ names it, and it becomes garbage only when the last of those snapshots goes away
 Reasoning from source has given this project the wrong answer at least four times
 where running it gave the right one, so everything below was measured on the rig,
 the local test lab that reproduces the fault (Elasticsearch 9.5.2 under ECK in
-Rancher Desktop against a pinned MinIO, defined in [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)):
+Rancher Desktop against a pinned MinIO, defined in [FACTS.md](../FACTS.md#the-test-lab-henceforth-the-rig)):
 Elasticsearch 9.5.2 under ECK, snapshots on MinIO through the S3 API.
 
 One index, one shard, 2,000 documents, force-merged to a single compound segment.
@@ -308,9 +308,9 @@ Campaign 1 on the rig audited a repository of 67 objects and 1,120,400 bytes and
 classified 28 objects, 378,142 bytes, as orphaned: 41.8 percent of the objects
 and 33.8 percent of the bytes. Breaking those orphans down by
 what kind of object they are
-([`../evidence/campaign-data.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md), section 1c, with
+([`../evidence/campaign-data.md`](../evidence/campaign-data.md), section 1c, with
 the raw manifest in
-[`../evidence/campaign-artifacts/campaign1-orphans.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-artifacts/campaign1-orphans.tsv)):
+[`../evidence/campaign-artifacts/campaign1-orphans.tsv`](../evidence/campaign-artifacts/campaign1-orphans.tsv)):
 
 | Verdict reason | Objects | Bytes | Share of orphan bytes |
 |---|---|---|---|
@@ -337,7 +337,7 @@ succeeded writing zero data blobs, `_verify_integrity` passed, and every restore
 came back green, indistinguishable from a control that deleted nothing. An
 earlier version of this section claimed the shard lost the file list every future
 snapshot deduplicates against. That did not happen, and the correction is in
-[evidence/blast-radius-remeasure](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/REPORT.md).
+[evidence/blast-radius-remeasure](../evidence/blast-radius-remeasure/REPORT.md).
 The point the passage was making still holds through other objects: a 558-byte
 index metadata blob, 0.055 percent of its repository's bytes, makes every restore
 naming that index fail on every snapshot.
@@ -481,7 +481,7 @@ are rewritten by a merge.
 
 This one is derived from the source rather than measured on the rig. The
 reasoning is recorded in
-[`../evidence/methodology.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) under step 10, and it
+[`../evidence/methodology.md`](../evidence/methodology.md) under step 10, and it
 is why the runbooks call for a repository verification after every sweep rather
 than once at the end of a migration.
 
@@ -496,7 +496,7 @@ this section contradict its own sources, so they stay apart.
 
 **Snapshot removed from the catalog while an index is mounted on it.** The
 transcript in
-[`../evidence/runbook-transcript-migrate-backups.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/runbook-transcript-migrate-backups.md)
+[`../evidence/runbook-transcript-migrate-backups.md`](../evidence/runbook-transcript-migrate-backups.md)
 has the whole sequence. The delete returns `acknowledged: true` and HTTP 200. The
 mounted index answers 3,500 documents with zero failed shards. `_cat/indices`
 reports it green. The repository at that point holds two objects, `index-7` and
@@ -506,7 +506,7 @@ answers 3,500 documents. It goes red on a forced shard reallocation, with
 reallocation is a node restart days later.
 
 **Data blobs deleted while the snapshot stays in the catalog.**
-[`../evidence/methodology.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) records the harder
+[`../evidence/methodology.md`](../evidence/methodology.md) records the harder
 version: with eight data blobs removed, both mount types return HTTP 200 and
 their document counts, and "closing and reopening the index detects nothing on
 either mount type. Both return to green with no error in the cluster log." The
@@ -1076,12 +1076,12 @@ and codec helpers in `s3_repo_sweeper.py`, used read-only.
 
 Measurements already in this repository.
 
-- [`../evidence/campaign-data.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) and
-  [`../evidence/campaign-artifacts/campaign1-orphans.tsv`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-artifacts/campaign1-orphans.tsv):
+- [`../evidence/campaign-data.md`](../evidence/campaign-data.md) and
+  [`../evidence/campaign-artifacts/campaign1-orphans.tsv`](../evidence/campaign-artifacts/campaign1-orphans.tsv):
   the object and byte breakdown by verdict reason.
-- [`../evidence/methodology.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md): the mounted
+- [`../evidence/methodology.md`](../evidence/methodology.md): the mounted
   searchable-snapshot cases, and the post-delete snapshot reasoning.
-- [`../evidence/runbook-transcript-migrate-backups.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/runbook-transcript-migrate-backups.md)
+- [`../evidence/runbook-transcript-migrate-backups.md`](../evidence/runbook-transcript-migrate-backups.md)
   and
   `runbook-transcript-audit-reclaim.md` (removed with the retired sweepers; in git history before `9a149a8`):
   the green mounted index and what turned it red.

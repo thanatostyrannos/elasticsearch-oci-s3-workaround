@@ -1,6 +1,6 @@
 # Evidence
 
-Everything behind the claims in the [main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md). Nothing here is
+Everything behind the claims in the [main README](../README.md). Nothing here is
 summary. If a number appears in the documentation, its source is in this
 directory.
 
@@ -11,7 +11,7 @@ directory.
 > `es_log_driven_sweeper.py`, are retired and removed. Their operating records
 > went with them: both sweeper runbook transcripts, the test-results ledger and
 > the live-blob-deletion reproduction. Why they were retired is in
-> [the main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md#the-three-tools-that-were-removed), and git
+> [the main README](../README.md#the-three-tools-that-were-removed), and git
 > history keeps the removed files for anyone auditing the change.
 >
 > **Measurements of consequence were kept**, and the distinction is the whole
@@ -23,16 +23,16 @@ directory.
 
 | File | What it is |
 |---|---|
-| [delete-campaign/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/delete-campaign/README.md) | Twelve reclaim cycles run by `generation_chain` against a live, moving repository. Audit, dry run, execute and restore check per cycle. Evidence of the tool that ships. |
-| [regression-10/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/regression-10/README.md) | Ten audit-then-delete cycles against a live repository after a week of changes. 31,534 objects deleted, zero failed, zero unconfirmed, restore intact. |
-| [oci-s3-compatibility/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/oci-s3-compatibility/README.md) | What Oracle's endpoint accepts and rejects, measured on a real bucket. The fault reproduced, and the three algorithms that work. |
-| [blast-radius-remeasure/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/blast-radius-remeasure/README.md) | What a wrong delete costs, measured rather than argued. Tool-agnostic: it deletes blobs directly and observes what Elasticsearch then reports. |
-| [methodology.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) | How the validation was done, written so someone else can run it. The sweep commands are history; the mounted-index and restore measurements are current. |
-| [campaign-data.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) | Raw data from the two live-rig campaigns: every orphan key with its shard path, size, dates and classification, plus sizing, mounted linkage and restore proof. |
-| [campaign-artifacts/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/tree/main/evidence/campaign-artifacts) | The files those campaigns produced: manifests, sizing output, mounted-snapshot exports, restore counts, the retention unlink proof. |
-| [genchain-research/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/genchain-research/README.md) | The derivation research behind `generation_chain`: ground truth, reproducers, and the harness that produced them. |
-| [runbook-transcript-migrate-backups.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/runbook-transcript-migrate-backups.md) | A real terminal session running the migration runbook against a live cluster. Failures left in. |
-| [capture-harness.sh](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/capture-harness.sh) | The wrapper that captured that transcript, so it can be reproduced. |
+| [delete-campaign/](delete-campaign/README.md) | Twelve reclaim cycles run by `generation_chain` against a live, moving repository. Audit, dry run, execute and restore check per cycle. Evidence of the tool that ships. |
+| [regression-10/](regression-10/README.md) | Ten audit-then-delete cycles against a live repository after a week of changes. 31,534 objects deleted, zero failed, zero unconfirmed, restore intact. |
+| [oci-s3-compatibility/](oci-s3-compatibility/README.md) | What Oracle's endpoint accepts and rejects, measured on a real bucket. The fault reproduced, and the three algorithms that work. |
+| [blast-radius-remeasure/](blast-radius-remeasure/README.md) | What a wrong delete costs, measured rather than argued. Tool-agnostic: it deletes blobs directly and observes what Elasticsearch then reports. |
+| [methodology.md](methodology.md) | How the validation was done, written so someone else can run it. The sweep commands are history; the mounted-index and restore measurements are current. |
+| [campaign-data.md](campaign-data.md) | Raw data from the two live-rig campaigns: every orphan key with its shard path, size, dates and classification, plus sizing, mounted linkage and restore proof. |
+| [campaign-artifacts/](campaign-artifacts) | The files those campaigns produced: manifests, sizing output, mounted-snapshot exports, restore counts, the retention unlink proof. |
+| [genchain-research/](genchain-research/README.md) | The derivation research behind `generation_chain`: ground truth, reproducers, and the harness that produced them. |
+| [runbook-transcript-migrate-backups.md](runbook-transcript-migrate-backups.md) | A real terminal session running the migration runbook against a live cluster. Failures left in. |
+| [capture-harness.sh](capture-harness.sh) | The wrapper that captured that transcript, so it can be reproduced. |
 
 ## What the evidence establishes
 
@@ -59,7 +59,7 @@ detected nothing.
 
 **A restore is the only check that matters.** Every cheaper check has a way of
 passing on a repository that cannot be restored, which is why
-[delete-campaign/](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/delete-campaign/README.md) ends its cycles by restoring a real
+[delete-campaign/](delete-campaign/README.md) ends its cycles by restoring a real
 index and counting documents.
 
 ## Corrections

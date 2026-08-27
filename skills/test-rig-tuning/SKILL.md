@@ -192,13 +192,13 @@ but they are not automatically comparable to what comes after either.
 ---
 
 The lines marked "Seen once" are compressed from a single campaign. The full
-version, with the measurements behind each, is in [README.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/test-rig-tuning/README.md) beside
+version, with the measurements behind each, is in [README.md](README.md) beside
 this file. They are here because a rule like "two
 parameters that fire at the same moment are a trap" is easy to agree with and
 hard to recognise in your own configuration.
 
 A rig of that shape now ships in this repository as a single script,
-[`snapshot_churn_rig.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/snapshot_churn_rig.py), and the last
+[`snapshot_churn_rig.py`](../../snapshot_churn_rig.py), and the last
 section of README.md maps each knob argued about here to the flag that sets it.
 Reading the flags is the fastest way to see what a rig of this shape has to let
 you turn.

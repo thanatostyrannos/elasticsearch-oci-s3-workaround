@@ -5,7 +5,7 @@ description: Use when inventorying or sizing an Elasticsearch snapshot repositor
 
 # Elasticsearch snapshot repository audit
 
-Inventory and size a snapshot repository with [`snapshot_sizes.py`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/snapshot_sizes.py),
+Inventory and size a snapshot repository with [`snapshot_sizes.py`](../../snapshot_sizes.py),
 keeping the two populations that live in one repository strictly apart:
 
 - SLM backup snapshots are the repository's real *growth*. Retention deletes them
@@ -25,7 +25,7 @@ The tool is read-only. It issues `GET` requests and writes nothing to the cluste
 ## 1. Prerequisites
 
 Generate a read-only API key per the *Authenticating to Elasticsearch with a
-read-only API key* section of [README.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md): cluster privilege
+read-only API key* section of [README.md](../../README.md): cluster privilege
 `monitor_snapshot`, plus `view_index_metadata` on `*`. That second privilege is
 not optional. It is what lets `--split-frozen`, `--emit-mounted` and
 `--emit-classified` read `index.store.snapshot` off mounted indices. Without it
@@ -410,9 +410,9 @@ repository.
 
 ## 10. Related
 
-- [es-hybrid-migration](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-hybrid-migration/SKILL.md) is the split-repo
+- [es-hybrid-migration](../es-hybrid-migration/SKILL.md) is the split-repo
   migration this audit is the first step of.
-- [`generation_chain`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md) is what reads the
+- [`generation_chain`](../../generation_chain/README.md) is what reads the
   bucket rather than the cluster: it names the objects a delete should have
   removed and did not, and `python3 -m generation_chain.reclaim` is the separate
   command that removes them. This audit is what you run first, because a
@@ -420,10 +420,10 @@ repository.
 - The two sweep runbooks that used to be listed here, es-orphan-sweep and
   es-log-cleanup, are removed with the tools they drove, which are also gone.
   Nothing in this repository reads Elasticsearch's failed-delete WARN lines any
-  more. See the retirement note in [the main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md).
+  more. See the retirement note in [the main README](../../README.md).
 
-Proof. Procedure: [methodology.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/methodology.md) §3.9 and §4
-(steps 0, 1 and 7). Measured outcomes: [campaign-data.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) §7 (the
+Proof. Procedure: [methodology.md](../../evidence/methodology.md) §3.9 and §4
+(steps 0, 1 and 7). Measured outcomes: [campaign-data.md](../../evidence/campaign-data.md) §7 (the
 classified inventory, the split-frozen recommendation, and what the split means for
 sizing) and Part II's opening, where a `MISSING-FROM-CATALOG` DANGER state
 stopped a campaign before it touched anything. That campaign was driven by a tool

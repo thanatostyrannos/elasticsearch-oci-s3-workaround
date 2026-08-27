@@ -1,8 +1,8 @@
 # Campaign artifacts
 
 Raw output from campaigns run against the live rig, the local test lab that
-reproduces the fault (defined in [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)). Kept as it came back. These are the
-files the numbers in [campaign-data.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) and
+reproduces the fault (defined in [FACTS.md](../../FACTS.md#the-test-lab-henceforth-the-rig)). Kept as it came back. These are the
+files the numbers in [campaign-data.md](../campaign-data.md) and
 `test-results.md` (removed with the retired sweepers; in git history before `9a149a8`) are read off. Nothing here is summarised
 and nothing has been reformatted.
 
@@ -14,7 +14,7 @@ and nothing has been reformatted.
 > to a real delete of a live segment blob, and they were removed.
 >
 > Read the commands here as history. Do not run them. The replacement,
-> [`generation_chain`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/generation_chain/README.md), cannot delete at all:
+> [`generation_chain`](../../generation_chain/README.md), cannot delete at all:
 > its HTTP layer allows GET and HEAD and nothing else.
 
 The `dN` prefix is the day of the campaign the file came from.

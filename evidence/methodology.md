@@ -5,7 +5,7 @@
 > **The sweep runs described here were driven by tools that are now retired.**
 > `s3_repo_sweeper.py`, `oci_repo_sweeper.py` and `es_log_driven_sweeper.py`
 > have been removed; see
-> [the main README](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/README.md#the-three-tools-that-were-removed).
+> [the main README](../README.md#the-three-tools-that-were-removed).
 >
 > The measurements are kept because they are not measurements of those tools.
 > What a wrong delete costs, what a mounted searchable snapshot is linked to,
@@ -25,7 +25,7 @@ leave the frozen tier mounted where it already is on the S3-compatible repositor
 with Elastic support's `verify=false` registration applied, and keep that
 repository swept with log-driven cleanup plus an age-settling window. Layer 2
 below runs two campaigns against a live rig, the local test lab that reproduces
-the fault (defined in [FACTS.md](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/FACTS.md#the-test-lab-henceforth-the-rig)): the first reproduces the underlying
+the fault (defined in [FACTS.md](../FACTS.md#the-test-lab-henceforth-the-rig)): the first reproduces the underlying
 fault and proves the sweepers, the second stands the hybrid up end to end and
 proves each of its load-bearing claims.
 
@@ -99,7 +99,7 @@ both as hard prerequisites.
 > on nor confirm that it is on. Read the sentence above as what the runbooks
 > claimed while these runs happened, not as advice. The recovery path is a copy
 > held outside the bucket. The operation lists are in
-> [blast radius](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
+> [blast radius](../docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
 ### 1.3 The architecture under validation: the split-repo hybrid
 
@@ -521,11 +521,11 @@ every intermediate file to the session scratch directory; nothing here should la
 in the repository.
 
 The step numbers are the trail into the recorded run. Campaign 2's captured
-artifacts in [`campaign-data.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) are named `d0` through `d10`,
+artifacts in [`campaign-data.md`](campaign-data.md) are named `d0` through `d10`,
 one prefix per step below: Step 6 is measured by `d6-es-pod.log` and the `d6-*`
 acknowledgments, Step 9's residual audit is `d9-residual-orphans.tsv`, and so on.
 The same numbering runs through
-[`../skills/es-hybrid-migration/SKILL.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-hybrid-migration/SKILL.md),
+[`../skills/es-hybrid-migration/SKILL.md`](../skills/es-hybrid-migration/SKILL.md),
 which is the operator-facing version of this section.
 
 ### Step 0: heal broken mounts first
@@ -656,7 +656,7 @@ repoints the repository at the bucket root**, because `PUT` replaces the setting
 rather than merging them. Read the existing settings first and carry every key
 across, and accept on the snapshot listing being unchanged rather than on
 `acknowledged` alone. See Step 4 of
-[`../skills/es-hybrid-migration/SKILL.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/skills/es-hybrid-migration/SKILL.md).
+[`../skills/es-hybrid-migration/SKILL.md`](../skills/es-hybrid-migration/SKILL.md).
 
 **Acceptance:** `{"acknowledged":true}`, and `_cat/snapshots/oci-repro` lists the
 same snapshots as before the PUT. `?verify=false` is Elastic support's
@@ -883,7 +883,7 @@ attempted. On a daily SLM schedule that is weeks of green, unrestorable backups.
 | Step 0 | `--emit-classified` reports `0 mounted snapshot(s) MISSING-FROM-CATALOG` |
 | Step 1 | every snapshot classified; new-volume sizing uses baseline + retention growth + upgrade headroom, frozen footprint excluded |
 | Step 2 | `fs` repository registers `acknowledged:true` with verification on |
-| Step 3 | on-disk file count drops sharply after a backup delete (observed after-count 2; the before-count of 26 was re-derived from an equivalent snapshot at write time, not captured pre-delete, see [`campaign-data.md`](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/blob/main/evidence/campaign-data.md) §15) |
+| Step 3 | on-disk file count drops sharply after a backup delete (observed after-count 2; the before-count of 26 was re-derived from an equivalent snapshot at write time, not captured pre-delete, see [`campaign-data.md`](campaign-data.md) §15) |
 | Step 4 | S3-compatible repository re-registers `acknowledged:true` with `?verify=false`; mounts undisturbed |
 | Step 5 | `_verify_integrity` on the S3-compatible repository: `total_anomalies: 0`, `result: pass`. A cache-clear-then-search check does not substitute; it passes on a destroyed mount |
 | Step 6 | deletes still `acknowledged:true` and failed-delete WARNs appear (reference: 14) |
