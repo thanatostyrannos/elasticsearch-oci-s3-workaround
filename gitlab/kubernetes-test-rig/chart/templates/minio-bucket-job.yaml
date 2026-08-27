@@ -21,7 +21,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: minio/mc
+          image: minio/mc:RELEASE.2025-01-17T23-25-27Z
           command:
             - /bin/sh
             - -c

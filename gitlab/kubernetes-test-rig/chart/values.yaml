@@ -51,15 +51,19 @@ source:
   # own repository.
   repoUrl: "https://gitlab.example.com/you/elasticsearch-oci-s3-workaround.git"
   ref: "main"           # branch, tag or commit; pin a commit for a repeatable rig
-  cloneImage: "alpine/git:2.47.2"
+  cloneImage: "registry.access.redhat.com/ubi9/python-312@sha256:aebe03384391689993c42998836597e6161ac5340cbc84518c1b0528a1c59ea8"
   # A private repository needs credentials for the clone. Reference a Secret
   # holding an SSH deploy key (mounted as an SSH identity) or a
   # username+token embedded in repoUrl (https://user:token@host/...), never
   # entered here in plain text.
   existingSshSecret: ""    # Secret with key "id_rsa" or "id_ed25519"; leave empty for a public repo
 
+# Red Hat Universal Base Image 9. It carries Python 3.12 and git 2.52 in one
+# image, so the same base serves both the clone step and every tool, and it is
+# pinned by digest rather than by tag: a tag moves, and a rig that silently
+# changes its interpreter between runs is not a rig.
 image:
-  python: "python:3.12-slim"
+  python: "registry.access.redhat.com/ubi9/python-312@sha256:aebe03384391689993c42998836597e6161ac5340cbc84518c1b0528a1c59ea8"
   pullPolicy: IfNotPresent
   pullSecrets: []
 
