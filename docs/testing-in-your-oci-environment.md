@@ -279,7 +279,7 @@ nothing.
 ## Step 6: look before you touch anything
 
 ```
-python3 -m generation_chain.reclaim \
+python3 -m generation_chain \
   --transport s3 \
   --endpoint https://<namespace>.compat.objectstorage.<region>.oraclecloud.com \
   --region <region> \
@@ -288,13 +288,18 @@ python3 -m generation_chain.reclaim \
   --credentials ./creds.json \
   --elasticsearch https://localhost:9200 \
   --es-repository leaktest-repo \
-  --report orphans.txt
+  --manifest orphans.tsv
 ```
+
+`generation_chain` is the audit. `generation_chain.reclaim` is the separate
+delete tool, it takes a manifest this run produces, and it is not what you want
+here.
 
 This reads and reports. It cannot delete: the read path allows `GET`, `HEAD`
 and the `POST` that lists a bucket, and refuses anything else at the transport
 rather than trusting a caller to behave. The count and reclaimable size print
-to your screen, and `--report` writes the object list to a file.
+to your screen as it works, and `--manifest` writes every orphaned object to a
+tab separated file.
 
 Confirm the number is not zero and that it grows between runs. That is the leak
 accumulating.

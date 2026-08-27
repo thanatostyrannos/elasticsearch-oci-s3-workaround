@@ -63,17 +63,18 @@ audit:orphans:
   script:
     - *credentials
     - |
-      python3 -m generation_chain.reclaim \
+      python3 -m generation_chain \
         --transport s3 \
         --endpoint "$OCI_ENDPOINT" --region "$OCI_REGION" \
         --bucket "$OCI_BUCKET" --prefix "$OCI_PREFIX" \
         --credentials ./creds.json \
         --elasticsearch "$ES_URL" --es-repository "$ES_REPOSITORY" \
-        --report orphans.txt | tee audit-summary.txt
+        --manifest orphans.tsv 2> audit-summary.txt
+      tail -20 audit-summary.txt
   artifacts:
     name: "orphans-$CI_PIPELINE_ID"
     paths:
-      - orphans.txt
+      - orphans.tsv
       - audit-summary.txt
     expire_in: 90 days
   rules:
