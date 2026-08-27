@@ -64,6 +64,10 @@ source:
 securityContext:
   runAsUser: 1001
   runAsGroup: 0
+  # Kubernetes chowns mounted volumes to this group, which is what lets a
+  # non-root container write to a PersistentVolumeClaim at all. Without it
+  # the rig authenticates, starts, and then dies writing its state file.
+  fsGroup: 1001
 
 # Red Hat Universal Base Image 9. It carries Python 3.12 and git 2.52 in one
 # image, so the same base serves both the clone step and every tool, and it is

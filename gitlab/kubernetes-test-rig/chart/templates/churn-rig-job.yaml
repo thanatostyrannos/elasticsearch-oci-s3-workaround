@@ -21,6 +21,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      securityContext:
+        runAsUser: {{ .Values.securityContext.runAsUser | int64 }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup | int64 }}
+        fsGroup: {{ .Values.securityContext.fsGroup | int64 }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
         {{- include "rig.credentialStagingInit" . | nindent 8 }}
