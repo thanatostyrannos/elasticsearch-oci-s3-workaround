@@ -80,6 +80,9 @@ PACKAGED_FILES = (
     # It was excluded once as lab tooling, which left a shipped document
     # instructing someone to run a file the release did not contain.
     "snapshot_churn_rig.py",      # builds a leaking repository to test against
+    # Ships because docs/testing-in-your-oci-environment.md tells the reader
+    # to use it. Same reason as the load generator above.
+    ".gitlab-ci.yml",             # runs the audit on a schedule, the rig on demand
     "README.md",                  # how to run all of it
     "FACTS.md",                   # what was measured, and against what
     "LICENSE",                    # who may use this, and the warranty that is not given

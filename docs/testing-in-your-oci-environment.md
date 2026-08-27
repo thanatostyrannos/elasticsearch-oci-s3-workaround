@@ -419,6 +419,68 @@ oci os object bulk-delete --namespace <namespace> --bucket-name es-leak-test --p
 
 Then delete the bucket.
 
+## Running this from GitLab CI
+
+`.gitlab-ci.yml` in this repository does both halves of the above, and keeps
+them apart on purpose.
+
+**Which runner.** The Kubernetes executor is the best fit if you have one. Each
+job runs as a pod in the cluster, so it reaches Elasticsearch by service DNS
+with no ingress to expose, and a Secret mounts at mode `0600`, which is what
+these tools ask for anyway. A shell or Docker runner works too, as long as it
+can reach both the cluster and the object storage endpoint. A runner outside
+the cluster cannot reach a ClusterIP service, and that is the usual reason this
+does not work first time.
+
+**Job length.** The qualification job asks for a six hour timeout, because
+fifty cycles takes about two and a half hours at the settings above. Check your
+instance's maximum job timeout under **Settings, CI/CD, General pipelines**,
+and your runner's own timeout, which can be lower and silently wins.
+
+**Variables to create**, under **Settings, CI/CD, Variables**:
+
+| Variable | Type | What it holds |
+|---|---|---|
+| `CREDS_JSON` | File | The JSON credentials file from step 2 |
+| `ES_PASSWORD` | File | The cluster password, on its own |
+| `OCI_ENDPOINT` | Variable | Your S3 compatibility endpoint |
+| `OCI_REGION` | Variable | Region |
+| `OCI_BUCKET` | Variable | The test bucket |
+| `OCI_PREFIX` | Variable | Base path, with a trailing slash |
+| `ES_URL` | Variable | Cluster URL |
+| `ES_REPOSITORY` | Variable | Repository name |
+| `ES_DATA_STREAM` | Variable | Data stream name |
+
+Mark both File variables **Masked** and **Protected**. File type matters: it
+gives the job a path rather than a value, which is how these tools want a
+secret. The pipeline copies each one to mode `600` before use, because GitLab
+does not guarantee the mode and the loop script refuses anything looser.
+
+**Schedule the audit, never the rig.** Under **Build, Pipeline schedules**, add
+a weekly schedule. `audit:orphans` runs on a schedule and nothing else does:
+`qualify:oci` explicitly refuses to run from one. That boundary is the reason a
+scheduled audit is safe, and it holds because the scheduled job cannot delete
+anything rather than because it has been asked not to.
+
+The audit publishes `orphans.txt` as an artifact with a ninety day expiry, so
+you can watch the count between runs. A number that climbs is the leak. A
+number that drops after a reclaim is the reclaim working.
+
+**Teardown is not automatic and cannot be.** The rig's state lives inside
+Elasticsearch and in your bucket, not in GitLab, so no job cleanup reaches it.
+`qualify:oci` tears down in `after_script`, which runs on success, on failure
+and on timeout, and `RUNNER_AFTER_SCRIPT_TIMEOUT` is raised because teardown
+talks to a cluster and a store. A runner that dies outright skips even that,
+which is why `teardown:oci` exists as a manual job using the state file saved
+from the run. If a qualification job ends strangely, run it.
+
+A generator that outlives its job keeps ingesting and keeps leaking. That is
+the failure worth guarding against here, not a wasted pipeline minute.
+
+**Deletes are off by default.** `DRY_RUN_ONLY` is `yes` in the pipeline
+variables. Run it that way first, read what it names, and only then run the
+pipeline again with `DRY_RUN_ONLY` set to `no` for that single run.
+
 ## What a good result looks like
 
 The tool is behaving if, across a run of fifty cycles or more:
