@@ -5,6 +5,8 @@ kind: Job
 metadata:
   name: {{ include "rig.fullname" . }}-churn-rig
   namespace: {{ include "rig.namespace" . }}
+  annotations:
+    "argocd.argoproj.io/sync-wave": "2"
   labels:
     {{- include "rig.labels" . | nindent 4 }}
     app: {{ include "rig.fullname" . }}-churn-rig

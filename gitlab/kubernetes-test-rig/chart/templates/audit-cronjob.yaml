@@ -11,6 +11,8 @@ kind: CronJob
 metadata:
   name: {{ include "rig.fullname" . }}-audit
   namespace: {{ include "rig.namespace" . }}
+  annotations:
+    "argocd.argoproj.io/sync-wave": "2"
   labels:
     {{- include "rig.labels" . | nindent 4 }}
     rig-component: audit

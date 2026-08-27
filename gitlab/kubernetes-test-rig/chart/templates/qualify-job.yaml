@@ -13,6 +13,8 @@ kind: Job
 metadata:
   name: {{ include "rig.fullname" . }}-qualify
   namespace: {{ include "rig.namespace" . }}
+  annotations:
+    "argocd.argoproj.io/sync-wave": "2"
   labels:
     {{- include "rig.labels" . | nindent 4 }}
     app: {{ include "rig.fullname" . }}-qualify
