@@ -10,9 +10,10 @@ directory.
 > The three original sweepers, `s3_repo_sweeper.py`, `oci_repo_sweeper.py` and
 > `es_log_driven_sweeper.py`, are retired and removed. Their operating records
 > went with them: both sweeper runbook transcripts, the test-results ledger and
-> the live-blob-deletion reproduction. Why they were retired is in
-> [the main README](../README.md#the-three-tools-that-were-removed), and git
-> history keeps the removed files for anyone auditing the change.
+> the live-blob-deletion reproduction. The shipped documentation no longer
+> describes them, because a reader cannot obtain or inspect software that is
+> not in the release. Git history keeps the removed files for anyone auditing
+> the change.
 >
 > **Measurements of consequence were kept**, and the distinction is the whole
 > point. What a wrong delete costs, what a mounted searchable snapshot is linked

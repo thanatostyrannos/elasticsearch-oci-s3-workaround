@@ -1,10 +1,10 @@
 {{/*
-Templated from manifests/elasticsearch.yaml. Only rendered when
+Templated from this project's lab manifest for Elasticsearch. Only rendered when
 elasticsearch.external is false: this chart's default is an EXTERNAL
 cluster, because not every Kubernetes cluster this chart is installed into
 also runs Elasticsearch. Flip elasticsearch.external to false to get this
 in-cluster, ECK-managed Elasticsearch instead. Requires the ECK operator
-already installed; see manifests/README.md. This chart does not install the
+already installed. This chart does not install the
 operator.
 */}}
 {{- if not .Values.elasticsearch.external }}
@@ -77,6 +77,19 @@ spec:
               env:
                 - name: ES_JAVA_OPTS
                   value: "-Xms{{ .Values.elasticsearch.eck.heapSize }} -Xmx{{ .Values.elasticsearch.eck.heapSize }}"
+              # readOnlyRootFilesystem is deliberately left out here.
+              # Elasticsearch's own startup writes into config/, plugins/,
+              # and jvm.options.d/ inside the image, not only into the data
+              # volume; ECK's own docs and issue tracker document this as a
+              # real limitation of the Elasticsearch image, not a
+              # convenience this chart is skipping. Data itself still goes
+              # only to the elasticsearch-data PVC. ECK's operator already
+              # runs this container as a fixed non-root uid.
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                capabilities:
+                  drop: ["ALL"]
               resources:
                 requests:
                   memory: {{ .Values.elasticsearch.eck.memoryRequest | quote }}

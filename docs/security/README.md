@@ -16,26 +16,27 @@ evidence, because this repository changes and a line number moves.
 ## Redaction, and why it is not optional
 
 Scanners quote the string they matched. The tracked tree deliberately contains
-credential-shaped strings that are synthetic, including a throwaway RSA key in
-`tests/fixtures/genchain-oci-signing-vector.json` that exists only to pin the
-OCI request-signing vector, and AWS's own published example key pair in the
-SigV4 tests. Raw output copied here verbatim would carry those values into a
-second file that carries no explanation of why they are harmless.
+credential-shaped strings that are synthetic, including a throwaway RSA key
+committed as a test fixture that exists only to pin the OCI request-signing
+vector, and AWS's own published example key pair in the signing tests. Raw
+output copied here verbatim would carry those values into a second file that
+carries no explanation of why they are harmless.
 
 So artifacts here keep the finding and drop the value. Rule, file, line,
 severity and message stay. The matched secret is replaced with
 `<<<Redacted>>>`. Anyone who needs the value can read the file the finding
 points at.
 
-This is also a practical requirement rather than a preference:
-`tests/test_no_credentials_committed.py` scans every tracked file, and it
-exempts the signing-vector fixture by path. A raw artifact reproducing that
-key under a different path is not exempt and turns the suite red.
+This is also a practical requirement rather than a preference: this project's
+own committed-credential scanner scans every tracked file, and it exempts the
+signing-vector fixture by path. A raw artifact reproducing that key under a
+different path is not exempt and turns the suite red.
 
 ## Scanning the right tree
 
 Scan a `git archive` export, never the working directory. The working
-directory holds real Oracle credentials under `terraform/oci-probe/`
+directory holds real Oracle credentials under the Terraform probe module's
+local state and config
 (`terraform.tfstate`, `creds.json`, `oci_api_key.pem`, `terraform.tfvars`).
 They are gitignored and have never been committed, which is the correct
 posture, but a filesystem scan pointed at the working directory would copy a

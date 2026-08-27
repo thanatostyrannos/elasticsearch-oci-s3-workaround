@@ -5,7 +5,7 @@
 > **The sweep runs described here were driven by tools that are now retired.**
 > `s3_repo_sweeper.py`, `oci_repo_sweeper.py` and `es_log_driven_sweeper.py`
 > have been removed; see
-> [the main README](../README.md#the-three-tools-that-were-removed).
+> the main README.
 >
 > The measurements are kept because they are not measurements of those tools.
 > What a wrong delete costs, what a mounted searchable snapshot is linked to,

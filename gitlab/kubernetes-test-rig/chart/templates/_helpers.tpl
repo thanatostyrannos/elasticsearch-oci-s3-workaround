@@ -46,6 +46,22 @@ in-cluster ECK service when elasticsearch.external is false.
 {{- end -}}
 
 {{/*
+Container securityContext shared by every non-root container in this chart:
+no privilege escalation, every Linux capability dropped, and a read-only
+root filesystem, since each container gets its own writable path from an
+emptyDir or PVC mount rather than from the filesystem itself. The one
+container that cannot use this is rig.credentialStagingInit, which has to
+run as root; it sets its own securityContext and says why.
+*/}}
+{{- define "rig.securityContext" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+runAsNonRoot: true
+capabilities:
+  drop: ["ALL"]
+{{- end -}}
+
+{{/*
 The initContainer that clones this tool's source into /workspace, shared by
 every Job/CronJob pod in this chart. A no-op list when source.enabled is
 false, so a caller can `{{- include "rig.sourceInitContainers" . | nindent 6 }}`
@@ -72,6 +88,8 @@ unconditionally.
       value: {{ .Values.source.repoUrl | quote }}
     - name: REPO_REF
       value: {{ .Values.source.ref | quote }}
+  securityContext:
+    {{- include "rig.securityContext" . | nindent 4 }}
   volumeMounts:
     - name: workspace
       mountPath: /workspace
@@ -79,6 +97,11 @@ unconditionally.
     - name: ssh-key
       mountPath: /ssh
       readOnly: true
+    # git needs somewhere writable to stage the known_hosts file and the
+    # copied key; /root is on the read-only root filesystem, so give it an
+    # emptyDir instead of relaxing readOnlyRootFilesystem for the whole step.
+    - name: ssh-home
+      mountPath: /root/.ssh
     {{- end }}
 {{- end }}
 {{- end -}}
@@ -98,8 +121,22 @@ else, and it does nothing but the copy.
 {{- define "rig.credentialStagingInit" -}}
 - name: stage-credentials
   image: {{ .Values.image.python | quote }}
+  # The deliberate exception: this step exists only because a Secret volume
+  # is owned by root at mode 0600 and the UBI image's runtime user (uid
+  # 1001) cannot read it, so something has to run as root to copy it out.
+  # Everything else about it is locked down the same as every other
+  # container: no privilege escalation, no capabilities, and its only write
+  # target (/secrets) is an emptyDir, so the root filesystem stays read-only
+  # even here.
   securityContext:
     runAsUser: 0
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  env:
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
   command:
     - python3
     - -c
@@ -183,6 +220,8 @@ every pod that runs one of these tools.
   secret:
     secretName: {{ .Values.source.existingSshSecret }}
     defaultMode: 0600
+- name: ssh-home
+  emptyDir: {}
 {{- end }}
 {{- end -}}
 
@@ -315,6 +354,10 @@ listening, not that this container can authenticate.
       value: {{ include "rig.esUrl" . | quote }}
     - name: WAIT_SECONDS
       value: {{ .Values.elasticsearch.waitSeconds | int64 | quote }}
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
+  securityContext:
+    {{- include "rig.securityContext" . | nindent 4 }}
   command:
     - python3
     - -c
@@ -359,6 +402,11 @@ so it removes exactly what the previous run created.
 - name: teardown-stale-state
   image: {{ .Values.image.python | quote }}
   workingDir: {{ include "rig.workdir" . }}
+  env:
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
+  securityContext:
+    {{- include "rig.securityContext" . | nindent 4 }}
   command:
     - sh
     - -c

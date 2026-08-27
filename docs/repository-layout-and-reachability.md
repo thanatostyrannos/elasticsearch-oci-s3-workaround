@@ -28,9 +28,9 @@ different ways, and because at least four times a plausible reading of the
 source has been contradicted by running it.
 
 So every format claim below says which it is. **Read at source** means
-Elasticsearch 9.5.2 source. **Measured** means observed in
-`tests/fixtures/real-es952-repo.tar.gz`, a repository written by a real
-Elasticsearch 9.5.2 cluster.
+Elasticsearch 9.5.2 source. **Measured** means observed in a repository
+captured whole from a real Elasticsearch 9.5.2 cluster, kept as a fixture for
+this project's own test suite.
 
 ---
 
@@ -466,11 +466,11 @@ Elasticsearch source, version 9.5.2.
   meaning of `min_version`, and the absence of any pointer to a prior
   generation.
 
-Measurements against a captured repository written by Elasticsearch 9.5.2,
-`tests/fixtures/real-es952-repo.tar.gz`: the observed value of `min_version`,
-the two member top level of a shard document, the file entry fields, the
-`writer_uuid` overlap comparisons, the presence of every snapshot's file list in
-one shard document, and the extent fields in `snap-<uuid>.dat`.
+Measurements against a captured repository written by Elasticsearch 9.5.2:
+the observed value of `min_version`, the two member top level of a shard
+document, the file entry fields, the `writer_uuid` overlap comparisons, the
+presence of every snapshot's file list in one shard document, and the extent
+fields in `snap-<uuid>.dat`.
 
 Related reading in this repository.
 

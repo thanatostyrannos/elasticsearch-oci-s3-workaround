@@ -10,7 +10,7 @@ So the cheap checks run first because they are cheap, and none of them is
 believed. The answer comes from restoring a snapshot and counting what comes
 back. Exit 0 means intact, 1 means something is wrong and the caller should stop.
 """
-import json, os, ssl, sys, time, urllib.error, urllib.request
+import json, os, ssl, sys, time, urllib.error, urllib.parse, urllib.request
 
 import argparse
 
@@ -28,6 +28,15 @@ _p.add_argument("--insecure", action="store_true",
 _a = _p.parse_args()
 
 ES, REPO = _a.elasticsearch.rstrip("/"), _a.repository
+
+# --elasticsearch comes from configuration, not from the network, but
+# configuration is not the same as trusted. urlopen does not care, and will
+# happily open file:// or ftp://. This script only ever needs http or https,
+# so anything else is refused before ES is ever passed to urlopen.
+_es_scheme = urllib.parse.urlsplit(ES).scheme
+if _es_scheme not in ("http", "https"):
+    _p.error(f"--elasticsearch is {ES!r}; only http and https are accepted, "
+             f"so a {_es_scheme or '(no scheme)'!r} value cannot be opened")
 PW = open(_a.password_file).read().strip()
 CTX = ssl.create_default_context()
 if _a.insecure:
@@ -43,8 +52,11 @@ def call(method, path, body=None, timeout=300):
     req.add_header("Authorization", AUTH)
     if body:
         req.add_header("Content-Type", "application/json")
+    # ES's scheme is checked once at startup, above; every call here is ES
+    # plus a path this script builds, so only http and https ever reach
+    # this call.
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=CTX) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=CTX) as r:  # nosec B310
             raw = r.read()
             # A JSON array is as much JSON as an object. The _cat APIs answer
             # with one under format=json, and treating it as text made every

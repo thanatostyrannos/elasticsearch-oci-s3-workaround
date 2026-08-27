@@ -94,8 +94,8 @@ and `elasticsearch.caCert` if it serves a certificate the `python:3.12-slim`
 image does not already trust.
 
 Set `elasticsearch.external: false` to deploy the in-cluster, ECK-managed
-Elasticsearch from `manifests/elasticsearch.yaml` instead (the ECK operator
-itself is not installed by this chart; see `manifests/README.md`).
+Elasticsearch this chart templates from this project's own lab manifest
+instead (the ECK operator itself is not installed by this chart).
 
 This tool has **no client-certificate (mTLS) support** anywhere in its
 Elasticsearch path. Every credential is a password, an API key, or basic
@@ -149,7 +149,7 @@ The load generator's `--state-file` and `--report-file`, and the loop's
 `--out` directory, all live on one `ReadWriteOnce` PersistentVolumeClaim
 (`<release>-state`) so the churn-rig Job, the qualify Job, and both teardown
 Jobs can all read it. `ReadWriteOnce` is enough on a single-node cluster
-(this project's own `manifests/` target Rancher Desktop, a single node). On
+(this project's own lab manifests target Rancher Desktop, a single node). On
 a multi-node cluster, either use a StorageClass that supports
 `ReadWriteMany`, or keep these pods on the same node with a `nodeSelector`.
 

@@ -45,14 +45,14 @@ exited 0 with **zero findings**, which is exactly what an empty `/src` looks
 like. It was not accepted at face value. Four reproductions across two pods,
 one with four times the resources and a fresh vulnerability database, plus a
 two-file control proving the secret scanner does detect the fixture at small
-scope, established that the scanner was silently skipping `tests/` at full
-scope for a reason that was never root-caused. Re-running the same command
-per top-level directory, eight invocations, recovered the two real findings.
-Both results are kept. Treat the whole-tree zero as a live tool limitation in
-this environment, not as a clean bill of health.
+scope, established that the scanner was silently skipping the test suite at
+full scope for a reason that was never root-caused. Re-running the same
+command per top-level directory, eight invocations, recovered the two real
+findings. Both results are kept. Treat the whole-tree zero as a live tool
+limitation in this environment, not as a clean bill of health.
 
 **Excluded by construction:** the five real Oracle credential files under
-`terraform/oci-probe/`. They are gitignored, have never been committed, and
+the Terraform probe module. They are gitignored, have never been committed, and
 were verified absent from the export before it left the local filesystem. That
 is a positive control, not a redaction after the fact.
 
@@ -62,16 +62,16 @@ Raw counts: Bandit 74 (7 high, 16 medium, 51 low), Semgrep 13, Trivy 2.
 
 | Location | What | Why benign |
 |---|---|---|
-| `tests/fixtures/genchain-oci-signing-vector.json` | real-format RSA private key, Trivy's only two hits | committed to pin the OCI signing vector, authenticates nothing, never uploaded to a tenancy |
-| `generation_chain/selftest.py`, `tests/test_generation_chain_signing.py` | `AKIDEXAMPLE`, `wJalrXUtnFEMI/...` | AWS's own published SigV4 documentation examples |
-| `tests/test_no_credentials_committed.py` | PEM headers, OCID regexes | the file's own detection patterns; it is the credential scanner |
-| `terraform/oci-probe/terraform.tfvars.example` | placeholder OCIDs, sequential-hex fingerprints | synthetic, and short enough to fail the scanner's own length rule |
+| A committed test fixture pinning the OCI signing vector | real-format RSA private key, Trivy's only two hits | committed to pin the OCI signing vector, authenticates nothing, never uploaded to a tenancy |
+| `generation_chain/selftest.py` and the signing tests | `AKIDEXAMPLE`, `wJalrXUtnFEMI/...` | AWS's own published SigV4 documentation examples |
+| This project's own committed-credential scanner | PEM headers, OCID regexes | the file's own detection patterns; it is the credential scanner |
+| The Terraform probe module's example vars file | placeholder OCIDs, sequential-hex fingerprints | synthetic, and short enough to fail the scanner's own length rule |
 
 A sixth entry was briefed to the scanning agent and carried into its report:
 a test writing a key file whose body is the word `nope`. That file was deleted
 from this repository and survives only in history, so it cannot be a finding
-against this tree. It was caught by `tests/test_doc_paths_and_links.py`, which
-refuses a document naming a path the repository does not have.
+against this tree. It was caught by this project's own documentation link
+checker, which refuses a document naming a path the repository does not have.
 
 ## CAT I
 
@@ -145,10 +145,11 @@ Fix: `hashlib.md5(body, usedforsecurity=False)`.
 
 ## Reviewed and not exploitable
 
-`tests/genchain_repo.py:452` trips Bandit's `tarfile_unsafe_members`, which
-fires on any `extractall`. This one validates every member path for absolute
-paths and `..` traversal first and raises before extracting. That is the
-correct mitigation for the class the rule exists to catch.
+One site in this project's own test helpers trips Bandit's
+`tarfile_unsafe_members`, which fires on any `extractall`. This one validates
+every member path for absolute paths and `..` traversal first and raises
+before extracting. That is the correct mitigation for the class the rule
+exists to catch.
 
 ## Controls verified by reading the source
 
@@ -180,10 +181,10 @@ correct mitigation for the class the rule exists to catch.
 ### A carve-out that items 1 and 2 both need
 
 Enforcing `https` unconditionally would break local testing. The MinIO rig
-serves plain HTTP on loopback, and so does the suite's own in-process S3 server
-in `tests/s3rig.py`. A blanket refusal makes the whole offline suite
-unrunnable, which trades a real capability for a threat that does not exist on
-a loopback socket.
+serves plain HTTP on loopback, and so does the test suite's own in-process S3
+server. A blanket refusal makes the whole offline suite unrunnable, which
+trades a real capability for a threat that does not exist on a loopback
+socket.
 
 So the refusal should carve out loopback hosts and refuse plain HTTP to
 anything else. That closes the footgun that actually bites, an endpoint typed
@@ -206,10 +207,10 @@ Bandit 1.9.4, 53 Python files, 8,524 lines.
 | LOW | 51 | 13 |
 
 The HIGH count going to zero is mostly not a code change. Every HIGH in the
-first scan was in `tests/`, and `tests/` does not ship: the RSA key pinning the
-OCI signing vector, the AWS documentation example key pair, and the credential
-scanner's own detection patterns. Scanning the repository reported findings in
-fixtures nobody receives.
+first scan was in the test suite, which is not part of the release: the RSA
+key pinning the OCI signing vector, the AWS documentation example key pair,
+and the credential scanner's own detection patterns. Scanning the repository
+reported findings in fixtures nobody receives.
 
 ## What remains, and why
 
@@ -243,9 +244,8 @@ remaining guard invariants already established by preceding control flow.
 `AWS_SECRET_ACCESS_KEY` and `GENCHAIN_ES_PASSWORD`, plus AWS's published
 example key in the signing self-test. Names, not values.
 
-Raw output:
-[`scans/bandit_release_2026-08-27.json`](scans/bandit_release_2026-08-27.json),
-redacted for key material and local paths.
+Raw output: [`scans/bandit.json`](scans/bandit.json). One file per scanner,
+overwritten on each run rather than accumulating dated copies.
 
 ## What this rescan did not cover
 

@@ -41,24 +41,25 @@ silently eat the rest of a label, so every such placeholder below is spelled
 `UUID`, `INDEX_UUID`, `REPO`, and so on instead). If one still fails to
 render, treat that as a bug in this document and open an issue against it.
 
-## 1. The three ways this is used
+## 1. The four ways this is used
 
-This tool runs three different ways, and each one has a different threat
+This tool runs four different ways, and each one has a different threat
 surface. That fact is scattered through the rest of this document: the
 zones live in the trust-boundary diagram in the next section, the
 credential paths live in section 3, and the deployed shape lives in
 section 10. A reader who wants to know "I am doing X, what am I exposed
 to" cannot get that answer from any single place today. This section
-states the three plainly, once, before the rest of the document works
+states the four plainly, once, before the rest of the document works
 through the pieces.
 
-The three are: a person running the audit, and separately the delete
-tool, by hand; the audit running unattended in a GitLab worker; and the
-churn rig running for hours inside Kubernetes. They differ in which of
+The four are: a person running the audit, and separately the delete
+tool, by hand; the audit running unattended in a GitLab worker; the
+churn rig running for hours inside Kubernetes; and the audit running
+unattended on a timer inside Kubernetes. They differ in which of
 the four executables run, which credential each one holds, whether a
 delete path exists at all, and whether a human looks at anything before
 something destructive happens. What follows starts with the boundary
-between the audit and the delete tool on disk, since all three modes are
+between the audit and the delete tool on disk, since all four modes are
 built from those same two entry points, then works through each mode in
 turn, then compares them. The "Residual risk" section at the end
 attributes each risk it names to the mode it actually lands on.
@@ -114,8 +115,8 @@ the sources package including signing (`sources`, `sources.budget`,
 The boundary is asymmetric, and the asymmetry is the point. The audit
 does not reach `reclaim` at all: no arrow above runs from `AuditEntry` to
 `ReclaimOnly`, and that absence is not just a reading of the import graph,
-it is a named, pinned test. `tests/genchain_neuter.py` carries a guard
-case called `the-audit-path-never-imports-reclaim`; removing the line that
+it is a named, pinned test in this project's own suite, a guard case called
+`the-audit-path-never-imports-reclaim`; removing the line that
 enforces the separation turns that named case red. But the delete tool
 imports the derivation package, the formats package, the whole sources
 package, and everything else the audit imports too. Thirty of the
@@ -133,7 +134,7 @@ are bound by it for their own reads. `generation_chain/reclaim/transport.py`,
 the module that builds and signs the one `POST /bucket?delete` request
 this project can send, is in the delete-only list. That is the concrete,
 code-level reason the audit cannot delete anything: not a flag it
-declines to expose, but a module it never loads. The three modes below
+declines to expose, but a module it never loads. The four modes below
 are all built from these same two entry points; what changes between them
 is who runs which one, what credential they hold when they do, and
 whether anything human looks at the result first.
@@ -369,15 +370,73 @@ flip, not a module the process never loads. Mode 2's absence of a delete
 path is structural; this mode's absence, when it is absent, is
 configuration.
 
-### Comparison across the three modes
+### Mode 4: the audit on a timer in Kubernetes
 
-| | Mode 1: standalone, at a prompt | Mode 2: audit in a GitLab worker | Mode 3: churn rig in Kubernetes |
-|---|---|---|---|
-| Credential held | Path A: a file on local disk, store plus optional Elasticsearch | Path B: a File-type CI/CD variable staged to runner-local disk | Path C: a Kubernetes Secret staged into an emptyDir, plus a separate harness Elasticsearch credential |
-| Delete reachable | Yes, by running the delete tool deliberately | No; `reclaim/` is never imported, no `--execute` flag exists in this pipeline | Yes, when `qualify.dryRunOnly` is explicitly set to `false` (a config default, not a structural absence) |
-| Human review | A human reads the manifest, computes the digest, types the approval | None needed; nothing here can delete | None; the digest is scraped from the tool's own dry-run output and reused automatically |
-| Blast radius if compromised | Whatever the operator's host and its cached credentials reach; an attacker can compute a matching approval digest itself | The store credential and optional Elasticsearch read credential, for one job's duration, on a shared runner | The store credential, the harness's Elasticsearch credential, and exec access to a root-run container, all in one namespace |
-| Worst case | Attacker with host control acts as the operator: reads the manifest, computes the digest, executes | Attacker steals the credential value and uses it outside this tool, limited by the IAM policy attached to the key | Attacker inherits a namespace already holding two live credentials and, if dry-run is off, an unattended delete loop |
+```mermaid
+flowchart TD
+    subgraph Cluster["Kubernetes namespace, one Helm release"]
+        Cron["CronJob rig-audit<br/>schedule from values.auditCronJob.schedule"]
+        Pod["Job pod, uid 1001<br/>python3 -m generation_chain"]
+        Sec["Secret, staged to an emptyDir at 0600<br/>credential path C"]
+        PVC["PVC: the orphan manifest and the run summary"]
+    end
+    Store["Object store"]
+    ES["Elasticsearch, optional"]
+
+    Cron --> Pod
+    Sec --> Pod
+    Pod -->|"GET and HEAD only; listing is a GET"| Store
+    Pod -->|"reads what a mounted snapshot protects"| ES
+    Pod --> PVC
+    Nobody["No human, every run, forever"] -.->|"reviews nothing"| Pod
+```
+
+**What runs.** `python3 -m generation_chain` and nothing else, from
+`templates/audit-cronjob.yaml`, on whatever schedule
+`auditCronJob.schedule` names. The delete tool is not installed into that
+process: `reclaim/` is never imported on the audit path, so no `--execute`
+exists to be reached. This is the same executable as mode 2 and the same
+structural guarantee.
+
+**Credential.** Path C, the same Kubernetes Secret staged by a root init
+container into an emptyDir so a non-root container can read it at 0600. It
+differs from mode 3 only in what the process does with it.
+
+**Who reviews.** Nobody, ever, by design. That is acceptable here for one
+reason and it is worth stating rather than assuming: the scheduled process
+cannot delete. Review exists to stand between a wrong answer and an
+irreversible act, and there is no irreversible act on this path. A wrong
+manifest here is a wrong report.
+
+**What an attacker gains.** Recurring access to a store credential and,
+optionally, an Elasticsearch read credential, held by a pod that comes back on
+a schedule. Killing the pod does not end it. They also gain the manifest on the
+PVC, which is a map of the repository: object keys, and by inference the
+indices and snapshots behind them. That is disclosure, not destruction.
+
+**What is different from the other three.** It is the only mode that runs
+forever without anyone deciding to run it. Modes 1 and 3 are started by a
+person, mode 2 by a pipeline trigger or a schedule a person configured on a
+pipeline that cannot delete. This one is a standing, unattended process holding
+a live credential, and its risk is duration rather than privilege: the same
+credential, exposed continuously instead of for one job.
+
+The temptation this mode creates is the dangerous part. A scheduled audit
+produces a manifest nobody reads, and the obvious next step is to have
+something act on it. That step removes the property that makes scheduling safe
+at all, and it is tracked separately as
+[issue 13](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/13)
+rather than treated as a configuration change.
+
+### Comparison across the four modes
+
+| | Mode 1: standalone, at a prompt | Mode 2: audit in a GitLab worker | Mode 3: churn rig in Kubernetes | Mode 4: audit on a timer in Kubernetes |
+|---|---|---|---|---|
+| Credential held | Path A: a file on local disk, store plus optional Elasticsearch | Path B: a File-type CI/CD variable staged to runner-local disk | Path C: a Kubernetes Secret staged into an emptyDir, plus a separate harness Elasticsearch credential | Path C, the same Secret as mode 3 |
+| Delete reachable | Yes, by running the delete tool deliberately | No; `reclaim/` is never imported, no `--execute` flag exists in this pipeline | Yes, when `qualify.dryRunOnly` is explicitly set to `false` (a config default, not a structural absence) | No; `reclaim/` is never imported, and no delete flag exists on this path |
+| Human review | A human reads the manifest, computes the digest, types the approval | None needed; nothing here can delete | None; the digest is scraped from the tool's own dry-run output and reused automatically | None, ever, and none needed: nothing here can delete |
+| Blast radius if compromised | Whatever the operator's host and its cached credentials reach; an attacker can compute a matching approval digest itself | The store credential and optional Elasticsearch read credential, for one job's duration, on a shared runner | The store credential, the harness's Elasticsearch credential, and exec access to a root-run container, all in one namespace | The same credentials as mode 3, but held by a process that returns on a schedule rather than once |
+| Worst case | Attacker with host control acts as the operator: reads the manifest, computes the digest, executes | Attacker steals the credential value and uses it outside this tool, limited by the IAM policy attached to the key | Attacker inherits a namespace already holding two live credentials and, if dry-run is off, an unattended delete loop | Continuous credential exposure, plus the manifest as a map of the repository. Disclosure, not destruction |
 
 
 ## 2. Trust boundaries
@@ -1029,7 +1088,7 @@ one does not conclude that. In order of how much they matter:
 
 **Attributed by mode.** The risks above are properties of the codebase and
 apply wherever it runs; here is which ones land hardest on which of the
-three modes in section 1.
+four modes in section 1.
 
 - **Mode 1, standalone at a prompt.** Risks 1 and 3 matter most here. The
   operator's host holds a live credential (risk 3: read-only is a property

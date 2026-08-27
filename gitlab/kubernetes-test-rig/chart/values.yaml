@@ -165,9 +165,9 @@ elasticsearch:
   waitSeconds: 600
 
   # An in-cluster, ECK-managed Elasticsearch, templated from this project's
-  # manifests/elasticsearch.yaml. Requires the ECK operator already
-  # installed (see manifests/README.md); this chart does not install the
-  # operator itself. Only rendered when elasticsearch.external is false.
+  # own lab manifest for Elasticsearch. Requires the ECK operator already
+  # installed; this chart does not install the operator itself. Only
+  # rendered when elasticsearch.external is false.
   eck:
     version: "9.5.2"
     nodeCount: 1
@@ -186,7 +186,7 @@ elasticsearch:
     # went unnoticed here until the chart met one that does.
     storageSize: "10Gi"
     storageClassName: ""    # empty uses the cluster default StorageClass
-    disableTls: true        # matches manifests/elasticsearch.yaml: plain HTTP on 9200
+    disableTls: true        # matches this project's lab manifest for Elasticsearch: plain HTTP on 9200
     # The OCI S3-compatibility client Elasticsearch itself uses to register
     # a repository with --s3-client oci. Leave namespace/region empty if you
     # are not registering an OCI-backed repository from the in-cluster ES.
@@ -199,8 +199,8 @@ elasticsearch:
 # A local object store that reproduces the same batch-delete-rejection fault
 # as OCI, for a rig that needs no OCI credentials at all to prove itself.
 # Pinned deliberately to RELEASE.2025-01-18T00-31-37Z, the last release that
-# rejects the request; see manifests/README.md for why the next release does
-# not.
+# rejects the request; RELEASE.2025-01-20T14-49-07Z, two days later, accepts
+# it and stops reproducing the fault.
 minio:
   enabled: false
   image: "minio/minio:RELEASE.2025-01-18T00-31-37Z"
@@ -245,8 +245,8 @@ churnRig:
                                    # fs exists for plumbing tests
     bucket: "es-snapshots"        # --bucket; the s3 repository writes into this
     s3Client: "oci"                # --s3-client; named client in elasticsearch.yml whose
-                                   # credentials the repository uses ("default" for MinIO
-                                   # per manifests/elasticsearch.yaml, "oci" for OCI)
+                                   # credentials the repository uses ("default" for MinIO,
+                                   # "oci" for OCI, per this chart's own Elasticsearch template)
     basePath: ""                  # --base-path; key prefix inside the bucket; empty
                                    # defaults to churnRig.prefix
     location: ""                  # --location; filesystem path, only for repo-type fs

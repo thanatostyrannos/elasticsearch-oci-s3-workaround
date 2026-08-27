@@ -154,9 +154,10 @@ cycle can reach ten minutes a cycle by cycle fifty.
 
 That is issue #9 and it is a property of the fault, not of the tool. It is
 also why a hundred-cycle run should start from a repository you just created
-rather than one carried over from yesterday. See
-[the known-state test cycle skill](../skills/known-state-test-cycle/SKILL.md)
-for why that matters more than it sounds.
+rather than one carried over from yesterday: starting fresh keeps the
+generation count, and so the per-cycle cost, comparable across runs. A rig
+inherited from a previous session already carries whatever generations it
+built up, so its timings are not a clean baseline for the next comparison.
 
 ## Step 4: tear it down
 
@@ -172,5 +173,4 @@ one. A cycle that cleans up after itself leaves the next run nothing to wait
 for.
 
 If the bucket is Terraform-managed, `terraform destroy` empties it as part of
-the destroy rather than one object at a time. See
-[the probe module](../terraform/oci-probe/README.md).
+the destroy rather than one object at a time.

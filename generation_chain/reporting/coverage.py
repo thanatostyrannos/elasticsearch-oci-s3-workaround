@@ -17,7 +17,7 @@ from ..model import AuditResult
 
 def as_document(result: AuditResult, transport: str,
                 location: str) -> Dict[str, Any]:
-    """The machine-readable record, for evidence/ and for a later differential."""
+    """The machine-readable record, to keep as evidence and for a later differential."""
     coverage = result.coverage
     return {
         "transport": transport,

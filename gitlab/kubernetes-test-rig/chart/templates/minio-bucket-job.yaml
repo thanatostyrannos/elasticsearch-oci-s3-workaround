@@ -1,4 +1,4 @@
-{{/* Templated from manifests/minio-bucket-job.yaml. */}}
+{{/* Templated from this project's lab manifest for the MinIO bucket job. */}}
 {{- if .Values.minio.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -24,9 +24,17 @@ spec:
         app: {{ include "rig.fullname" . }}-minio-make-bucket
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
       initContainers:
         - name: wait-for-minio
           image: {{ .Values.image.python | quote }}
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            {{- include "rig.securityContext" . | nindent 12 }}
           command:
             - python3
             - -c
@@ -64,4 +72,23 @@ spec:
                 secretKeyRef:
                   name: {{ include "rig.fullname" . }}-minio-credentials
                   key: root-password
+            # minio/mc runs as root by default and writes its alias config to
+            # $HOME/.mc; point it at the emptyDir below instead of relaxing
+            # readOnlyRootFilesystem.
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

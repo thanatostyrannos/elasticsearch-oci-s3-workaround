@@ -65,6 +65,19 @@ spec:
                 # the frozen cache had filled.
                 - name: ES_JAVA_OPTS
                   value: "-Xms8g -Xmx8g"
+              # readOnlyRootFilesystem is deliberately left out here.
+              # Elasticsearch's own startup writes into config/, plugins/,
+              # and jvm.options.d/ inside the image, not only into the data
+              # volume; ECK's own docs and issue tracker document this as a
+              # real limitation of the Elasticsearch image, not a
+              # convenience this manifest is skipping. Data itself still
+              # goes only to the elasticsearch-data PVC. ECK's operator
+              # already runs this container as a fixed non-root uid.
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                capabilities:
+                  drop: ["ALL"]
               resources:
                 requests:
                   memory: 16Gi

@@ -52,8 +52,11 @@ itself:
     md5      2 deleted, 0 failed
 
 Three of four work. The batch delete is not the fault; the checksum the client
-chooses is. Captures in
-[evidence/oci-s3-compatibility](evidence/oci-s3-compatibility/README.md).
+chooses is. Reproduce this against your own bucket with
+`snapshot_churn_rig.py` and the procedure in
+[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md):
+register a repository, delete a batch with each checksum header in turn, and
+compare the responses.
 
 **`ListObjectsV2` is genuinely supported and pages**, measured the same day with
 three objects and `--max-keys 2`. `KeyCount` and `NextContinuationToken` both
@@ -217,7 +220,8 @@ There is no published on-disk format specification. The source is the authority.
 
 ## Facts measured from the real captured repository
 
-[`tests/fixtures/real-es952-repo.tar.gz`](tests/fixtures/real-es952-repo.tar.gz), Elasticsearch 9.5.2.
+From a real Elasticsearch 9.5.2 repository, captured whole and kept as a
+fixture for this project's own test suite.
 
 `min_version` reads `7.12.0` on every generation, not the writing version.
 

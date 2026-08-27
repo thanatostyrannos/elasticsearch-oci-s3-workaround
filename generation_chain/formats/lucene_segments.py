@@ -17,9 +17,10 @@ through Elasticsearch's corroboration. A file list that under-references what
 this commit point requires is drift this reader can see without asking
 Elasticsearch anything.
 
-Verified against `tests/fixtures/real-es952-shard-index-gen.bin` and the two
-repository archives alongside it: every commit point those fixtures carry, 14
-in total across generations, decodes under this format, byte for byte, up to
+Verified against a real captured commit point and the two repository
+archives alongside it in this project's own test fixtures: every commit
+point those fixtures carry, 14 in total across generations, decodes under
+this format, byte for byte, up to
 a footer checksum that matches. Real Elasticsearch 9.5.2 stores every one of
 them inline, as a `v__` entry carrying its bytes in the file entry's
 `meta_hash` field, so reading one costs no extra round trip to the object

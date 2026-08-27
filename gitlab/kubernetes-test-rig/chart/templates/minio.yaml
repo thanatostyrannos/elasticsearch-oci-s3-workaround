@@ -1,5 +1,5 @@
 {{/*
-Templated from manifests/minio.yaml. Pinned to
+Templated from this project's lab manifest for MinIO. Pinned to
 RELEASE.2025-01-18T00-31-37Z on purpose: it is the last MinIO release that
 rejects an S3 DeleteObjects request carrying only x-amz-checksum-crc32 with
 no Content-MD5, which is the same behavior as OCI Object Storage's S3-compat
@@ -44,6 +44,15 @@ spec:
       labels:
         app: {{ include "rig.fullname" . }}-minio
     spec:
+      # The minio/minio image runs as root by default (no non-root user
+      # baked in), so this pins it to a fixed non-root uid/gid instead.
+      # fsGroup chowns the data PVC's group ownership so uid 1000 can write
+      # to it; without it MinIO authenticates its own startup and then dies
+      # unable to write its erasure-coding metadata.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: minio
           image: {{ .Values.minio.image | quote }}
@@ -63,6 +72,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "rig.fullname" . }}-minio-credentials
                   key: root-password
+          securityContext:
+            {{- include "rig.securityContext" . | nindent 12 }}
           ports:
             - name: api
               containerPort: 9000
@@ -83,10 +94,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            # MinIO's Go runtime uses the OS temp dir for scratch files
+            # outside the erasure-coded backend; with the root filesystem
+            # read-only, that needs its own writable mount.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "rig.fullname" . }}-minio-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

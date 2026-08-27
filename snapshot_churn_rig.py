@@ -84,7 +84,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 -- see refuse_doctype() below
+
+# The audit already carries a refuse_doctype() guard for exactly this parse:
+# a legitimate S3 listing never declares a DOCTYPE, and stdlib ElementTree
+# expands internal entities, so a store able to answer with one can hang this
+# process. Reused here rather than duplicated, on the sibling package this
+# script already ships next to in the release archive.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from generation_chain.sources.s3 import refuse_doctype  # noqa: E402
 
 DEFAULT_PREFIX = "churnrig"
 
@@ -118,6 +126,22 @@ def die(msg, code=2):
     sys.exit(code)
 
 
+# --es and --s3-endpoint come from the command line, but a command line is
+# not the same as a trusted value: it can be pasted wrong, templated from
+# somewhere else, or wrong in a script that calls this one. urlopen does not
+# care, and will happily open file:// or ftp://. Both clients below only ever
+# need http or https, so anything else is refused at construction, before
+# either client makes its first call.
+_ALLOWED_URL_SCHEMES = ("http", "https")
+
+
+def refuse_non_http_scheme(url, what):
+    scheme = urllib.parse.urlsplit(url).scheme
+    if scheme not in _ALLOWED_URL_SCHEMES:
+        die(f"{what} is {url!r}; only http and https are accepted, so a "
+            f"{scheme or '(no scheme)'!r} value cannot be opened")
+
+
 # ---------------------------------------------------------------------------
 # Elasticsearch client, urllib only
 
@@ -132,16 +156,21 @@ class EsError(Exception):
 class Es:
     def __init__(self, base, user, password, ca_cert, insecure):
         self.base = base.rstrip("/")
+        refuse_non_http_scheme(self.base, "--es")
         self.headers = {"Content-Type": "application/json"}
         if user and password:
             tok = base64.b64encode(
                 ("%s:%s" % (user, password)).encode()).decode()
             self.headers["Authorization"] = "Basic " + tok
         if self.base.startswith("https"):
+            self.ctx = ssl.create_default_context(cafile=ca_cert)
             if insecure:
-                self.ctx = ssl._create_unverified_context()
-            else:
-                self.ctx = ssl.create_default_context(cafile=ca_cert)
+                # Reachable only when the operator passed --insecure, for a
+                # lab cluster with a self-signed certificate. Verification
+                # starts on, same as the default context above, and is
+                # turned off here rather than built off from the start.
+                self.ctx.check_hostname = False
+                self.ctx.verify_mode = ssl.CERT_NONE
         else:
             self.ctx = None
 
@@ -157,9 +186,12 @@ class Es:
             data = json.dumps(body).encode()
         r = urllib.request.Request(url, data=data, method=method,
                                    headers=headers)
+        # refuse_non_http_scheme() checked self.base in __init__; url is
+        # self.base plus a path this script builds, so only http and https
+        # ever reach this call.
         try:
-            with urllib.request.urlopen(r, timeout=timeout,
-                                        context=self.ctx) as resp:
+            with urllib.request.urlopen(  # nosec B310
+                    r, timeout=timeout, context=self.ctx) as resp:
                 raw = resp.read().decode("utf-8", "replace")
                 status = resp.status
         except urllib.error.HTTPError as e:
@@ -199,6 +231,7 @@ class Es:
 class S3:
     def __init__(self, endpoint, region, access_key, secret_key, bucket):
         self.endpoint = endpoint.rstrip("/")
+        refuse_non_http_scheme(self.endpoint, "--s3-endpoint")
         self.region = region
         self.access = access_key
         self.secret = secret_key
@@ -244,8 +277,11 @@ class S3:
     def _call(self, method, key="", query=None, ok=(200, 204)):
         url, headers = self._sign(method, key, query or {})
         r = urllib.request.Request(url, method=method, headers=headers)
+        # refuse_non_http_scheme() checked self.endpoint in __init__; url is
+        # self.endpoint plus a signed path this script builds, so only http
+        # and https ever reach this call.
         try:
-            with urllib.request.urlopen(r, timeout=60) as resp:
+            with urllib.request.urlopen(r, timeout=60) as resp:  # nosec B310
                 return resp.status, resp.read()
         except urllib.error.HTTPError as e:
             body = e.read()
@@ -262,7 +298,11 @@ class S3:
             if token:
                 q["continuation-token"] = token
             status, body = self._call("GET", query=q)
-            root = ET.fromstring(body)
+            refuse_doctype(body, "listing")
+            # refuse_doctype() just above refuses any body carrying a
+            # DOCTYPE, which is what makes entity expansion here possible;
+            # this file never reaches fromstring without it.
+            root = ET.fromstring(body)  # nosec B314
             ns = ""
             if root.tag.startswith("{"):
                 ns = root.tag[:root.tag.index("}") + 1]

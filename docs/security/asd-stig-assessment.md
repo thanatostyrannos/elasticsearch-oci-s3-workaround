@@ -92,7 +92,7 @@ and the flag is one line to remove.
 | APSC-DV-000650 | II | Do not write sensitive data to logs | The `Secret` wrapper applies at every credential entry point, so logging, error formatting and the report file cannot emit a raw secret by accident. |
 | APSC-DV-001460 | II | Conduct an application vulnerability assessment | This engagement, against this commit. Recurring cadence remains an organisational commitment. |
 | APSC-DV-002570 | II | Error messages aid correction without revealing exploitable information | `ManifestError`, `ApprovalError` and `CredentialError` messages are precise about the failure without embedding secret material. |
-| APSC-DV-003170 | II | Perform an application code review | This engagement, plus `tests/test_no_credentials_committed.py`, which is a standing automated review running on every change. |
+| APSC-DV-003170 | II | Perform an application code review | This engagement, plus this project's own committed-credential scanner, a standing automated review running on every change. |
 
 ## Not Applicable
 

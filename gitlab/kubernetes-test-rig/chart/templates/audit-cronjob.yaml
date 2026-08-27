@@ -52,6 +52,11 @@ spec:
               image: {{ .Values.image.python | quote }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               workingDir: {{ include "rig.workdir" . }}
+              securityContext:
+                {{- include "rig.securityContext" . | nindent 16 }}
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
               command: ["/bin/sh", "-c"]
               args:
                 - |

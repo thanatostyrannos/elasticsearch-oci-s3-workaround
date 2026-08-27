@@ -33,9 +33,9 @@ Three signals, and each one is stated with what it can and cannot separate.
   is used for here is narrower than the retired version claimed, because
   measurement contradicted that claim. See `writer_uuid_collisions` below.
 
-AND THE DOCUMENT HAS TO NAME A BLOB AT ALL. `require_blob_names` is the gate the
-retired sweeper carried at `s3_repo_sweeper.py:2743` and this package dropped.
-A shard snapshot always restores a Lucene commit, so a document that yields no
+AND THE DOCUMENT HAS TO NAME A BLOB AT ALL. `require_blob_names` is the gate
+this project's retired sweeper carried, kept here after the sweeper itself
+was dropped. A shard snapshot always restores a Lucene commit, so a document that yields no
 blob names is a document that was not read, never a shard that references
 nothing. Returning it empty is what makes it indistinguishable from every other
 shard's document, and an empty live set condemns the whole directory.
@@ -149,18 +149,17 @@ def writer_uuid_collisions(
 ) -> Dict[str, Set[str]]:
     """Directories whose documents claim a Lucene writer another directory owns.
 
-    WHAT WAS MEASURED. Two Elasticsearch 9.5.2 repositories, both captured and
-    kept in `tests/fixtures`.
+    WHAT WAS MEASURED. Two Elasticsearch 9.5.2 repositories, both captured
+    whole and kept as fixtures in this project's own test suite.
 
-    `real-es952-repo.tar.gz`, nine shard documents across three indices of one
-    shard each:
+    The first, nine shard documents across three indices of one shard each:
 
       every cross-directory pairing, 27 of them:   overlap 0
       same-directory pairings, 6 of them:          overlap 0 in one, 2 or 9 in
                                                    the other five
 
-    `real-es952-twoshard-repo.tar.gz`, built for the case the first repository
-    could not reach, an index with TWO shards:
+    The second, built for the case the first repository could not reach, an
+    index with TWO shards:
 
       shard 0 against shard 1 of the same index:   overlap 0, 8 against 8
 

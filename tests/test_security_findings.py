@@ -8,14 +8,24 @@ entities, and reporting it anyway would have been crying wolf.
 
 import hashlib
 import os
+import socket
+import ssl
+import subprocess
 import sys
+import tempfile
+import types
 import unittest
+from unittest import mock
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 
 from generation_chain.errors import SourceReadError
 from generation_chain.reclaim import batch, checksum
 from generation_chain.sources import s3
+
+import reclaim_test_protocol as protocol
+import snapshot_churn_rig as rig
 
 BILLION_LAUGHS = b"""<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -128,6 +138,174 @@ class PlainHttpIsRefusedOffLoopback(unittest.TestCase):
         self.assertEqual(
             self._source("http://minio.lab.internal", allow_plain_http=True).scheme,
             "http")
+
+
+class ReclaimHarnessEndpointSchemeIsValidated(unittest.TestCase):
+    """--elasticsearch reaches reclaim_test_protocol.py's OWN calls (es_call),
+    the ones that drive the segment-mode settle wait. It is configuration,
+    read from a command line an operator typed, and bandit is right that
+    urllib.request.urlopen does not care whether that is http or file://.
+    Only http and https may reach it.
+    """
+
+    def test_file_scheme_is_refused(self):
+        with self.assertRaises(ValueError) as raised:
+            protocol.refuse_non_http_scheme(
+                "file:///etc/passwd", "--elasticsearch")
+        self.assertIn("http", str(raised.exception))
+
+    def test_ftp_scheme_is_refused(self):
+        with self.assertRaises(ValueError):
+            protocol.refuse_non_http_scheme(
+                "ftp://example.com/x", "--elasticsearch")
+
+    def test_https_is_accepted(self):
+        protocol.refuse_non_http_scheme(
+            "https://cluster.example.com", "--elasticsearch")
+
+    def test_plain_http_is_accepted(self):
+        # This harness's own calls are allowed over plain http, unlike the
+        # audit's manifest path: they drive a settle wait against a cluster
+        # the operator already pointed --elasticsearch at, not a delete.
+        protocol.refuse_non_http_scheme(
+            "http://127.0.0.1:9200", "--elasticsearch")
+
+    def test_es_call_refuses_before_urlopen_is_ever_reached(self):
+        # The guard exists in two places: an early check in main() for a fast
+        # command-line error, and here, inside es_call, on the actual network
+        # boundary. Patching urlopen to fail the test if called proves the
+        # second one is load bearing on its own, not just a fast-fail nicety.
+        args = types.SimpleNamespace(
+            elasticsearch="file:///etc/passwd", es_user="u", es_password="p")
+        with mock.patch.object(protocol.urllib.request, "urlopen") as opened:
+            with self.assertRaises(ValueError):
+                protocol.es_call(args, "/_snapshot")
+        opened.assert_not_called()
+
+
+class ChurnRigEndpointSchemeIsValidated(unittest.TestCase):
+    """snapshot_churn_rig.py makes its own urlopen calls straight against
+    --es and --s3-endpoint, both operator-supplied. Same finding as the
+    harness above, checked at the point each client is built rather than
+    once in main(), because Es and S3 are also exercised directly by tests
+    and by any future caller that skips main().
+    """
+
+    def test_es_refuses_file_scheme(self):
+        with self.assertRaises(SystemExit):
+            rig.Es("file:///etc/passwd", "elastic", "p", None, False)
+
+    def test_es_accepts_http(self):
+        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None, False)
+        self.assertEqual(es.base, "http://127.0.0.1:9200")
+
+    def test_s3_refuses_ftp_scheme(self):
+        with self.assertRaises(SystemExit):
+            rig.S3("ftp://evil.example.com", "us-east-1", "ak", "sk", "buk")
+
+    def test_s3_accepts_https(self):
+        made = rig.S3("https://s3.example.com", "us-east-1", "ak", "sk", "buk")
+        self.assertEqual(made.endpoint, "https://s3.example.com")
+
+
+class ChurnRigTlsVerifiesByDefault(unittest.TestCase):
+    """--insecure exists to skip verification against a lab cluster with a
+    self-signed certificate, and must keep working when an operator passes
+    it. What bandit flagged is that the context was built the same way,
+    ssl._create_unverified_context(), regardless of whether that branch was
+    reachable, which reads as insecure-by-construction in a diff. Pinned
+    here against ssl's own verification flags on both branches, not against
+    which function got called, so a future refactor that keeps the same
+    unconditional call under a different name still fails this test.
+    """
+
+    def test_verification_is_on_by_default(self):
+        es = rig.Es("https://cluster.example.com", "elastic", "p", None, False)
+        self.assertEqual(es.ctx.verify_mode, ssl.CERT_REQUIRED)
+        self.assertTrue(es.ctx.check_hostname)
+
+    def test_insecure_flag_still_disables_verification(self):
+        es = rig.Es("https://cluster.example.com", "elastic", "p", None, True)
+        self.assertEqual(es.ctx.verify_mode, ssl.CERT_NONE)
+        self.assertFalse(es.ctx.check_hostname)
+
+    def test_plain_http_still_needs_no_context(self):
+        # The rig's other job: drive a lab cluster over plain http on
+        # loopback. Guarding TLS must not touch the non-TLS path at all.
+        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None, False)
+        self.assertIsNone(es.ctx)
+
+
+class ChurnRigListingReusesTheAuditsDoctypeGuard(unittest.TestCase):
+    """The rig lists a bucket with the same stdlib ElementTree the audit
+    parses with, and entity expansion does not care which script asked. The
+    audit already carries refuse_doctype() for exactly this; this reuses it
+    rather than duplicating a second copy that could drift from the first.
+    """
+
+    def _s3(self):
+        return rig.S3("https://s3.example.com", "us-east-1", "ak", "sk", "buk")
+
+    def test_a_listing_with_a_doctype_is_refused(self):
+        made = self._s3()
+        made._call = lambda *a, **kw: (200, BILLION_LAUGHS)
+        with self.assertRaises(SourceReadError) as raised:
+            made.list("prefix")
+        self.assertIn("DOCTYPE", str(raised.exception))
+
+    def test_a_real_listing_still_parses(self):
+        made = self._s3()
+        made._call = lambda *a, **kw: (200, REAL_LISTING)
+        self.assertEqual(made.list("prefix"), [])
+
+
+def _closed_loopback_port():
+    """A TCP port on 127.0.0.1 nothing is listening on, for a fast refusal.
+
+    Binding and immediately closing gets the OS to hand back a currently-free
+    ephemeral port, so the connection this test drives fails for the right
+    reason (ECONNREFUSED) instead of a fixed port that happens to collide
+    with something already running on the test host.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+class VerifyRestorableEndpointSchemeIsValidated(unittest.TestCase):
+    """verify_restorable.py is a flat script, not a library: it parses
+    --elasticsearch and opens its first connection at module import time, so
+    there is no function to call in-process the way the other two harnesses
+    allow. Driven as a real subprocess instead, the same way an operator
+    runs it against a customer cluster, to prove the actual shipped entry
+    point refuses the bad scheme and never reaches urlopen.
+    """
+
+    def _run(self, elasticsearch):
+        with tempfile.NamedTemporaryFile("w", suffix=".pw") as pw:
+            pw.write("secret\n")
+            pw.flush()
+            return subprocess.run(
+                [sys.executable, os.path.join(ROOT, "verify_restorable.py"),
+                 "--elasticsearch", elasticsearch,
+                 "--repository", "repo",
+                 "--password-file", pw.name],
+                capture_output=True, text=True, timeout=15)
+
+    def test_file_scheme_is_refused_before_any_network_call(self):
+        completed = self._run("file:///etc/passwd")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("http", completed.stderr)
+
+    def test_https_scheme_passes_the_gate(self):
+        # Nothing is listening on this port, so the run still fails, on a
+        # connection error further down. That failure is expected and is
+        # NOT what this test checks; it only proves the scheme gate itself
+        # let a legitimate value through instead of rejecting it.
+        completed = self._run(f"https://127.0.0.1:{_closed_loopback_port()}")
+        self.assertNotIn("only http and https are accepted", completed.stderr)
 
 
 if __name__ == "__main__":

@@ -151,6 +151,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # The audit is invoked as `python3 -m generation_chain`, which resolves only
@@ -189,12 +190,32 @@ def counted(pattern, text):
     return int(match.group(1)) if match else 0
 
 
+# --elasticsearch comes from configuration, not from the network, but
+# configuration is not the same as trusted: it can be wrong, templated from
+# somewhere else, or a copy-paste of the wrong value. urlopen does not care,
+# and will happily open file:// or ftp://. This harness's own calls only ever
+# need http or https, so anything else is refused before it is opened.
+_ALLOWED_ES_SCHEMES = ("http", "https")
+
+
+def refuse_non_http_scheme(url, what):
+    scheme = urllib.parse.urlsplit(url).scheme
+    if scheme not in _ALLOWED_ES_SCHEMES:
+        raise ValueError(
+            f"{what} is {url!r}; only http and https are accepted, so a "
+            f"{scheme or '(no scheme)'!r} value cannot be opened")
+
+
 def es_call(args, path):
-    req = urllib.request.Request(args.elasticsearch.rstrip("/") + path)
+    url = args.elasticsearch.rstrip("/") + path
+    refuse_non_http_scheme(url, "--elasticsearch")
+    req = urllib.request.Request(url)
     token = base64.b64encode(
         f"{args.es_user}:{args.es_password}".encode()).decode()
     req.add_header("Authorization", "Basic " + token)
-    with urllib.request.urlopen(req, timeout=60) as r:
+    # refuse_non_http_scheme() above already confirmed only http or https
+    # reaches this call.
+    with urllib.request.urlopen(req, timeout=60) as r:  # nosec B310
         return json.loads(r.read())
 
 
@@ -522,6 +543,11 @@ def main():
 
     if args.transport == "oci" and not args.namespace:
         p.error("--transport oci needs --namespace")
+    if args.elasticsearch:
+        try:
+            refuse_non_http_scheme(args.elasticsearch, "--elasticsearch")
+        except ValueError as exc:
+            p.error(str(exc))
     if args.mode != "metadata" and not args.data_stream:
         p.error("segment mode needs --data-stream to check shard population")
     args.es_password = ""

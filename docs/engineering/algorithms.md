@@ -7,8 +7,7 @@ not cover deployment, network edges, or trust boundaries; see
 [architecture.md](architecture.md) for the system view and
 [../security/threat-model.md](../security/threat-model.md) for the security
 posture. It is not a tutorial; for that, start with
-[the project README](../../README.md), the
-[`generation_chain` package README](../../generation_chain/README.md), and
+[the project README](../../README.md) and
 [repository-layout-and-reachability.md](../repository-layout-and-reachability.md).
 
 Two terms recur everywhere below. A **generation** is one version of the
@@ -626,8 +625,7 @@ sequenceDiagram
 Two things are true at once and both matter to a reviewer. First, overlap
 must not move the answer: work is submitted and settled by key, one thread
 decides only when bytes arrive, never which bytes or which error belongs to
-which key, and that is what the determinism tests in
-`tests/test_generation_chain_readahead.py` hold. Second, exactly three reads
+which key, and that is what this project's determinism tests hold. Second, exactly three reads
 are escalated to a longer retry policy by `CriticalReads`: the listing,
 `index.latest`, and the root generation `index.latest` names. Those three end
 the whole run if they fail; everything else, a shard document, an existence
@@ -666,7 +664,7 @@ GB host was measured to die near 750,000 objects, at the end of a thirty
 minute run, with an OOM kill and no manifest. `sources/budget.py` also
 defines `MemoryBudget` and `with_budget`, a wrapper meant to refuse a listing
 too large for the host before a single object is read. As of this reading,
-that wrapper is exercised only by `tests/test_generation_chain_memory.py`;
+that wrapper is exercised only by this project's own tests;
 `generation_chain/cli.py` never calls `with_budget` or constructs a
 `MemoryBudget`, so the door check the module's own docstring describes is
 not reachable from the command line today. The only active memory

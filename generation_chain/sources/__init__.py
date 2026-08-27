@@ -152,10 +152,9 @@ def prepared(source, concurrency: int = overlap.DEFAULT_CONCURRENCY):
     reads that can end a run a longer retry policy than the reads that only
     shorten it. `ReadAhead` overlaps the rest.
 
-    None of the three can change what a key answers. That is the property the
-    determinism tests in tests/test_generation_chain_readahead.py hold, and it
-    is why this stack was allowed anywhere near a derivation nobody wants
-    rewritten.
+    None of the three can change what a key answers. That is the property
+    this project's own determinism tests hold, and it is why this stack was
+    allowed anywhere near a derivation nobody wants rewritten.
     """
     if isinstance(source, ReadAhead):
         # Already prepared by the caller, who may have chosen a different

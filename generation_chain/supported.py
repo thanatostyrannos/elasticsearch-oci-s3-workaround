@@ -9,10 +9,10 @@ WHAT IS SUPPORTED. A root generation whose `min_version` is 7.12.0 or later.
 version able to READ the repository, which Elasticsearch raises when it writes
 something that needs newer code. That reading was verified by measurement
 rather than taken on trust: two independent repositories written by
-Elasticsearch 9.5.2, the captured fixture in tests/fixtures and a repository
-built on the test cluster, both carry `min_version: 7.12.0` on every
-generation. A field naming the WRITER's version would say 9.5.2 there. It says
-the floor.
+Elasticsearch 9.5.2, a fixture captured whole and kept in this project's own
+test suite and a repository built on the test cluster, both carry
+`min_version: 7.12.0` on every generation. A field naming the WRITER's version
+would say 9.5.2 there. It says the floor.
 
 WHY THE DECLARATION RATHER THAN A SNIFF. The obvious alternative is to look
 for `index_metadata_identifiers` and `index_metadata_lookup`, the two fields

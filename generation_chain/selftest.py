@@ -7,9 +7,9 @@ percent-encoding, which fails the same way, Oracle's signing string and
 Authorization parameter order, which fail as a bare 401, and the PKCS#1 v1.5
 padding, which fails as the same 401 from a different cause.
 
-Repository behaviour is not tested here. That belongs in tests/, against
-captured Elasticsearch state, where a fixture can be regenerated when a guard
-gets stricter.
+Repository behaviour is not tested here. That belongs in this project's own
+test suite, against captured Elasticsearch state, where a fixture can be
+regenerated when a guard gets stricter.
 
 No private key is shipped. The padding is checked against the DigestInfo
 prefix RFC 8017 publishes for SHA-256, and the full private-key round trip

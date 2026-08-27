@@ -1,21 +1,24 @@
 # Blast radius: what a wrong delete costs in a snapshot repository
 
 > [!IMPORTANT]
-> **The three tools this document names are retired and are no longer in this
-> repository.** `s3_repo_sweeper.py`, `oci_repo_sweeper.py` and
-> `es_log_driven_sweeper.py` were removed with their tests and their runbooks.
-> Read what follows as an account of what a wrong delete costs in a snapshot
-> repository, which is why it was written, and not as an endorsement of the
-> tools it works through. The guards catalogued here were real, and they sat
-> downstream of a decision that condemned a blob for being absent from a live
-> set the tool computed itself, so a failed read and an unparseable document
-> both resolved toward deleting. A replacement is being built that reproduces
-> Elasticsearch's own shard-local set difference, verifies what it computes, and
-> has no delete path.
+> **This document was written against three tools that are now retired and no
+> longer in this repository.** They classified objects LIVE, ORPHAN or
+> PROTECTED by reimplementing Elasticsearch's on-disk format, then deleted the
+> orphans, condemning a blob for being absent from a live set the tool
+> computed itself. A failed read and an unparseable document both resolved
+> toward deleting. `generation_chain`, the tool this repository ships today,
+> replaced them: it reproduces Elasticsearch's own shard-local set difference,
+> condemns on PRESENCE rather than absence, and its audit half has no delete
+> path at all.
 >
-> This document is being audited separately and has not been restructured for
-> the retirement. Nothing in it has been rewritten to make the tools look better
-> or worse than the measurements say.
+> What follows is an account of what a wrong delete costs in a snapshot
+> repository, which is why this document exists, and it applies to
+> `generation_chain.reclaim` exactly as it applied to the retired tools: any
+> tool that deletes objects out of a live repository can cause this damage.
+> Passages that described the retired tools' own guards, flags or internals
+> have been removed or replaced with what `generation_chain` does instead;
+> everything else is Elasticsearch and Lucene format fact, unchanged by which
+> tool reads it.
 
 Every question an operator asks about a delete tool comes down to one thing. If
 it deletes the wrong object, what breaks, and how much of it.
@@ -30,9 +33,9 @@ the ones the previous snapshot uploaded.
 That sharing is where the danger comes from. It is also where the best defence
 comes from, and this document is about both.
 
-The tools in this repository (`s3_repo_sweeper.py`, `oci_repo_sweeper.py`,
-`es_log_driven_sweeper.py`) delete objects out of production snapshot
-repositories. Read this before you trust one of them with yours.
+The tool this repository ships, `generation_chain.reclaim`, deletes objects
+out of production snapshot repositories. Read this before you trust it with
+yours.
 
 ## Contents
 
@@ -41,7 +44,7 @@ repositories. Read this before you trust one of them with yours.
 - [The files that have no object at all](#the-files-that-have-no-object-at-all)
 - [What a wrong delete costs](#what-a-wrong-delete-costs)
 - [Sharing is also the best defence](#sharing-is-also-the-best-defence)
-- [Every guard, and the failure it was built after](#every-guard-and-the-failure-it-was-built-after)
+- [What changed in how this is guarded](#what-changed-in-how-this-is-guarded)
 - [What none of this covers](#what-none-of-this-covers)
 - [Before you run a delete](#before-you-run-a-delete)
 - [Sources](#sources)
@@ -273,12 +276,11 @@ is 742 bytes and lives in the bucket as a real object, while `_0.si` at 351 byte
 does not. If a size threshold were doing the work, both would be inlined. The
 selector is the file name.
 
-This matters for a sweeper in two directions. A naive reachability
-implementation reads the absence of a `v__` object as damage and reports phantom
-missing blobs, and a shape check that rejected `v__` entries as malformed would
-fail on every healthy repository it was pointed at. `s3_repo_sweeper.py` had to
-be taught the prefix for exactly that reason, and the gate now accepts both
-prefixes deliberately.
+This matters for any tool reading this format in two directions. A naive
+implementation reads the absence of a `v__` object as damage and reports
+phantom missing blobs, and a shape check that rejected `v__` entries as
+malformed would fail on every healthy repository it was pointed at. A reader
+of this format has to accept both prefixes deliberately.
 
 It also matters for a guard described further down. Because `.si` files are
 inlined, a segment's own list of its files is sitting in the shard metadata
@@ -307,10 +309,7 @@ The same asymmetry shows up in a real orphan set.
 Campaign 1 on the rig audited a repository of 67 objects and 1,120,400 bytes and
 classified 28 objects, 378,142 bytes, as orphaned: 41.8 percent of the objects
 and 33.8 percent of the bytes. Breaking those orphans down by
-what kind of object they are
-([`../evidence/campaign-data.md`](../evidence/campaign-data.md), section 1c, with
-the raw manifest in
-[`../evidence/campaign-artifacts/campaign1-orphans.tsv`](../evidence/campaign-artifacts/campaign1-orphans.tsv)):
+what kind of object they are:
 
 | Verdict reason | Objects | Bytes | Share of orphan bytes |
 |---|---|---|---|
@@ -336,18 +335,18 @@ re-measurement removed one from a live repository and found the next snapshot
 succeeded writing zero data blobs, `_verify_integrity` passed, and every restore
 came back green, indistinguishable from a control that deleted nothing. An
 earlier version of this section claimed the shard lost the file list every future
-snapshot deduplicates against. That did not happen, and the correction is in
-[evidence/blast-radius-remeasure](../evidence/blast-radius-remeasure/REPORT.md).
-The point the passage was making still holds through other objects: a 558-byte
+snapshot deduplicates against. That did not happen, and the correction stands
+here. The point the passage was making still holds through other objects: a 558-byte
 index metadata blob, 0.055 percent of its repository's bytes, makes every restore
 naming that index fail on every snapshot.
 
-The tools say this out loud rather than leaving it to the reader.
-`_fmt_share` in `s3_repo_sweeper.py` never rounds a real quantity to `0.0%`,
-because a run that removed 11.9 KiB of metadata and made 150,000 documents
-unrestorable printed `0.0%` twice, in the two messages written to make an
-operator stop. `describe_delete_scale` prints both fractions and then the
-breakdown by kind, on every run, with no threshold gating it.
+Report this out loud rather than leaving it to the reader. Never round a real
+quantity to `0.0%`: a run that removed 11.9 KiB of metadata and made 150,000
+documents unrestorable printed `0.0%` twice in the retired tools, in the two
+messages written to make an operator stop. `generation_chain`'s own report
+prints both the object share and the byte share, then the breakdown by
+disposition, on every run, with no threshold gating it (see the sample report
+in [Using it](../README.md#what-the-output-looks-like) in the README).
 
 ### One delete, every snapshot in the chain
 
@@ -454,10 +453,7 @@ zero; it fails with `search_phase_execution_exception` and
 An earlier rig repository produced the same shape at a different scale: 23
 objects and 44.3 KiB, one live snapshot, and one 905-byte shard-level
 `snap-<uuid>.dat` that was 2.0 percent of the bytes and 4.3 percent of the
-objects, taking that repository to one anomaly and a red index too. That
-measurement was recorded in the docstring on `orphan_kinds` in
-`s3_repo_sweeper.py`, and repeated in that tool's runbook at the point where an
-operator read a classification summary. Both are removed with the tool. The
+objects, taking that repository to one anomaly and a red index too. The
 measurement stands on its own and is reproduced here.
 
 Both fractions read as small in both repositories. The loss was total in both.
@@ -479,11 +475,10 @@ surfaces until somebody attempts a restore. On a daily SLM schedule that is week
 of green, unrestorable backups, and the segments only stop being wrong when they
 are rewritten by a merge.
 
-This one is derived from the source rather than measured on the rig. The
-reasoning is recorded in
-[`../evidence/methodology.md`](../evidence/methodology.md) under step 10, and it
-is why the runbooks call for a repository verification after every sweep rather
-than once at the end of a migration.
+This one is derived from the source rather than measured on the rig, from the
+deduplication mechanism above. It is why [Testing in your own OCI environment](testing-in-your-oci-environment.md)
+calls for a repository verification after every reclaim run rather than once
+at the end.
 
 ### A mounted searchable snapshot hides it longest
 
@@ -491,13 +486,11 @@ A searchable snapshot index reads its data straight out of the repository, so
 deleting the wrong object there breaks a live index rather than a backup. It does
 not break it now.
 
-The evidence records three different failures here, and merging them would make
-this section contradict its own sources, so they stay apart.
+Three different failures were measured here, and merging them would blur what
+each one actually shows, so they stay apart.
 
-**Snapshot removed from the catalog while an index is mounted on it.** The
-transcript in
-[`../evidence/runbook-transcript-migrate-backups.md`](../evidence/runbook-transcript-migrate-backups.md)
-has the whole sequence. The delete returns `acknowledged: true` and HTTP 200. The
+**Snapshot removed from the catalog while an index is mounted on it.** A
+captured transcript has the whole sequence. The delete returns `acknowledged: true` and HTTP 200. The
 mounted index answers 3,500 documents with zero failed shards. `_cat/indices`
 reports it green. The repository at that point holds two objects, `index-7` and
 `index.latest`. Clearing the shared cache returns success and the index still
@@ -505,13 +498,12 @@ answers 3,500 documents. It goes red on a forced shard reallocation, with
 `ALLOCATION_FAILED` and a `RecoveryFailedException`. On a real cluster that
 reallocation is a node restart days later.
 
-**Data blobs deleted while the snapshot stays in the catalog.**
-[`../evidence/methodology.md`](../evidence/methodology.md) records the harder
-version: with eight data blobs removed, both mount types return HTTP 200 and
-their document counts, and "closing and reopening the index detects nothing on
-either mount type. Both return to green with no error in the cluster log." The
-failure surfaces on the first document fetch that misses cache, as a 404 against
-the object store.
+**Data blobs deleted while the snapshot stays in the catalog.** The harder
+version, also measured: with eight data blobs removed, both mount types return
+HTTP 200 and their document counts, and closing and reopening the index
+detects nothing on either mount type. Both return to green with no error in
+the cluster log. The failure surfaces on the first document fetch that misses
+cache, as a 404 against the object store.
 
 The S3 rig produced the same shape at a different scale. A green partial mount
 answering 600 documents, whose backing snapshot Elasticsearch had removed from
@@ -531,7 +523,7 @@ through it.
 
 A segment becomes garbage for a reason. It becomes garbage because the last
 snapshot referencing it was deleted. On a repository that leaks, which is the
-only kind these tools are pointed at, that deleted snapshot's own shard document
+only kind a reclaim tool is pointed at, that deleted snapshot's own shard document
 is still sitting in the shard directory, and it still names the blob.
 
 The leak is easy to watch happen. The rig's MinIO rejects the S3 batch delete
@@ -545,7 +537,10 @@ and four new root generations were written on top.
 So an orphan has a paper trail. Some `snap-<uuid>.dat` in its own shard directory
 should name it, whether that snapshot is live or not. An orphan that no snapshot
 document in its own shard directory references was never referenced by anything,
-and that is not a state Elasticsearch can produce.
+and that is not a state Elasticsearch can produce. This is the rule
+`generation_chain` builds its condemnation on directly, rather than as a
+cross-check applied after the fact: a blob is named only if some deleted
+snapshot's own shard document names it.
 
 That single rule is what defeats format drift, and it works because of the
 sharing rather than in spite of it. A format change rewrites both stored copies
@@ -555,8 +550,7 @@ cannot do is invent history. If the file list shrank because a decoder misread
 it, the blobs that dropped out are still named by the snapshot documents that
 were written before the drift.
 
-Two measurements on the rig separate the cases that no ratio can.
-`_second_source_scopes` in `s3_repo_sweeper.py` records both:
+Two measurements on the rig separate the cases that no ratio can:
 
 | Case | Segments condemned | Named by some snapshot document |
 |---|---|---|
@@ -566,352 +560,100 @@ Two measurements on the rig separate the cases that no ratio can.
 Any threshold on the orphan ratio puts the legitimate case above the attack. The
 explanation rule puts them at opposite ends.
 
-## Every guard, and the failure it was built after
+## What changed in how this is guarded
 
-A flag reference does not tell you whether a guard applies to your situation.
-What tells you is the failure somebody demonstrated before the guard existed, so
-each guard below is introduced by its own.
+The retired tools carried a long list of guards on top of their LIVE/ORPHAN/
+PROTECTED classification: a shape gate that refused to trust a decode that
+succeeded but returned nonsense, a rule that a condemned segment had to be
+named by some snapshot document or the whole shard was protected, a rule that
+a shard condemning all of its own segments was not believed, structural
+checks that a segment could produce the files it claimed, an abort if the
+root pointer was stale, mount-awareness read from the cluster, a
+corroboration pass against Elasticsearch, a volume cap, and a workflow that
+made a human type the delete count at a terminal. Their flags and internals
+went with them; this section used to describe those flags, and no longer
+does.
 
-### Reachability is computed, never guessed
-
-The classifier reads `index.latest`, then the root `index-<N>` it points at, then
-each live shard's current `index-<gen>`, and matches every listed object against
-what those documents actually name. It does not infer liveness from a timestamp,
-a naming convention or a size. Every object it cannot place is PROTECTED, which
-is a verdict, not an omission: `_classify_one` returns PROTECTED for an
-unrecognised root object, an unrecognised path shape, an unrecognised
-shard-level object, an unknown shard generation, and an unavailable index
-metadata map.
-
-Two verdicts there are deliberate exceptions to "unreferenced means dead". The
-root generation immediately before the current one is PROTECTED rather than
-orphaned, so a repository keeps one step of headroom. And a legacy
-`indices/<uuid>/meta-<blobid>.dat` keyed by a live snapshot uuid is LIVE, because
-before 7.9 index metadata really was named by snapshot uuid and Elasticsearch's
-restore path still falls back to exactly that blob id.
-
-### A parse that succeeds and returns nonsense is a failure too
-
-This is the distinction that cost this project its worst incident, and it is the
-one most likely to be removed by somebody tidying up.
-
-A decode that raises is safe. The scope degrades to PROTECTED and nothing is
-deleted. A decode that succeeds and hands back a document which is not a shard
-file list is the dangerous one, because an empty name set reads as "this shard
-references nothing" and condemns every segment in the shard. Renaming a single
-field in the shard metadata was enough to delete 96.4 percent of a test
-repository by bytes, with an exit status of 0 and every cross-check row reading
-OK.
-
-So the shard shape gate makes the document prove it is a
-`BlobStoreIndexShardSnapshots` before believing its silence. It demands a `files`
-member with one entry per file, a `snapshots` member mapping snapshot name to the
-file ids it uses, a usable blob name on every file entry, and every id under
-`snapshots` resolving to one of those entries. Everything it demands is something
-Elasticsearch always writes. A genuinely empty shard still passes, because `files`
-and `snapshots` are present and empty, which is a different thing from missing.
-
-The same gate exists one level up on the root catalog, for the same reason and
-with a wider blast radius. `RepositoryData` always writes both `snapshots` and
-`indices`, so a missing or mistyped one means the format moved rather than that
-the repository is empty. Believing it empties the live snapshot and index sets,
-and then every `snap-`, `meta-` and `indices/` object in the bucket classifies
-ORPHAN in one step. `load_root_state` also refuses a catalog entry with no
-`uuid`, an index entry with no `id`, and the specific contradiction of index
-metadata identifiers alongside an empty `indices` map.
-
-### An orphan must be explained by some snapshot document
-
-The rule from the previous section, implemented. Two checks, both reading the
-shard's own `snap-<uuid>.dat` blobs, which carry the same file lists from the
-other direction.
-
-A live snapshot's document naming a blob the current `index-<gen>` does not means
-the two stored copies disagree and classification used the shorter one. That is a
-contradiction, and it protects the shard.
-
-A condemned segment that no snapshot document in the shard directory names at all
-is the one that sees a format change, because a drift keeps both copies
-consistent and this check does not compare them to each other.
-
-The guard fails closed. If a shard is about to lose segments and no per-snapshot
-document there can be read, every segment in that shard is PROTECTED, because
-otherwise damaging the corroborating blob would be a way to get segments
-condemned. Only shards that would actually lose a segment are read, so a healthy
-sweep pays one small `GET` per snapshot in the affected shards and nothing
-anywhere else.
-
-### A shard that condemns all of its own segments is not believed
-
-If a shard's file list parses cleanly and then accounts for none of the segments
-sitting in its own directory, it is describing a repository that cannot exist.
-The data those snapshots restore from has to be somewhere.
-
-The threshold is all of them, and a tighter one was measured and rejected rather
-than guessed. The healthy sweep above condemned 89 percent of a shard's segments
-and every one of them was genuinely dead. An injected partial drift condemned 50
-percent. The legitimate case sits above the attack, so no threshold separates
-them, and a 50 percent line would fire on this tool's main use case while still
-missing drift below it. That is why there is no knob. Every value short of
-all-of-them generates false positives, and the only value beyond it is off, which
-`--allow-full-shard-orphan` already spells.
-
-### A segment must be able to produce the files it says it has
-
-Two structural checks, both of them shallow versions of what a restore does.
-
-The first reads the segment's own `.si`. Because `.si` files are inlined as `v__`
-entries, the segment's file list is already in the shard document, and Lucene
-stores `SegmentInfo.files()` in a `.si` as plain names. A file the `.si` declares
-that the shard's list omits means the segment cannot restore. This covers the
-non-compound case, where a segment is `{si, fnm, fdt, fdx, doc values, postings,
-...}` and dropping one data file leaves the `.si` present, no `.cfe`/`.cfs` pair
-to be half of, and more than a bare `.si`, so every structural rule passes while
-the shard has silently lost its stored fields. Measured: 38 of 38 real `.si`
-files scanned to exactly their family's file set, with no extras and no misses.
-
-The check is deliberately one-directional. A file the list has and the `.si` does
-not name is never flagged, so an imperfect read can fail to notice but can never
-accuse.
-
-The second is family completeness. Every segment family carries its `.si`;
-`.cfe` and `.cfs` come as a pair; and a family carries at least one file that is
-not the `.si`. That last one is the interesting invariant: a `.si` describes a
-segment, it does not contain one, so a family that is only a `.si` names a
-segment whose data is nowhere in the list. Measured across 68 real families in 30
-real blobs, every one of them was `{cfe, cfs, si}` and never a bare `{si}`.
-
-Neither of these is a per-codec table of required extensions. That would be
-another version-dependent reimplementation of a format Elasticsearch owns, and
-one that goes stale starts refusing legitimate segments after an upgrade. Both
-checks ask the segment what it contains instead.
-
-State the limit: these see a hole in a segment. They do not see a file list
-missing a whole segment, because a list that never mentions `_2` looks exactly
-like a list from before `_2` existed. That is issue #1, below.
-
-### A root generation newer than `index.latest` aborts the run
-
-If the bucket holds `index-9` and `index.latest` points at generation 8,
-reachability was computed entirely from a state Elasticsearch has already moved
-past. Everything only the newer generation references, new snapshots and new
-shard generations included, is invisible to the classification and classifies
-ORPHAN.
-
-This is a danger state rather than a per-object verdict. Under `--execute` it
-aborts before any deletion. In a dry run it prints the same text as a warning and
-reclassifies every orphan PROTECTED, so the manifest shows what a safe sweep
-would do right now, which is nothing. The fix is to re-take the mirror or wait
-for the in-flight repository write to finish, not to sweep harder.
-
-### Mounted snapshots are read from the cluster, not from a file alone
-
-Because a bucket-side tool cannot see cluster state, reachability deliberately
-does not distinguish a backup snapshot from a snapshot backing a mounted
-searchable-snapshot index. In the repository's own metadata they look identical.
-
-That is safe only while mounted snapshots stay in the catalog, and the failure
-above is what happens when one does not. Given a detection window of zero, the
-pre-flight has to spend its safety budget before the delete: an unanswered mount
-question refuses an `--execute` run, a `--mounted-snapshots` file is bound to a
-repository by a provenance line because SLM names collide across repositories as
-a matter of routine, entries are matched by snapshot uuid rather than name where
-the uuid is present, and a file that looks like a whole catalog dump rather than
-a mounted set is rejected.
-
-### Freshness is judged over content objects only
-
-Two of the guards read object timestamps, and a mirror that carries copy times
-rather than the objects' real `Last-Modified` disarms both at once. The tool
-cannot know a timestamp is a lie. It can know the guards had no effect, and it
-catches two shapes of fiction outright.
-
-The one worth naming is recent pointers with no recent content. A commit writes
-the blobs and then rewrites `index.latest`, so a fresh pointer always has fresh
-data behind it. Pointers alone are fresh in exactly one situation: a second
-mirror pass, where the only objects that changed since the first pass are the
-ones Elasticsearch rewrites every commit. One re-copied object is enough to
-switch off all three checks at once unless freshness is judged over content
-alone, because it makes the repository look active and stretches the apparent
-timestamp spread from under a second to a day.
-
-### Corroboration against Elasticsearch, and its honest limit
-
-`--cross-check` asks Elasticsearch about the same repository and compares. The
-blocking comparisons are catalog identity: repository uuid, generation, the
-snapshot uuid set, live index count, index-snapshot pair count, and
-Elasticsearch's own anomaly totals. Each is a direct read of `RepositoryData` on
-both sides, so agreement is exact and a disagreement aborts an `--execute` run
-before a single delete. That closes sweeping the wrong repository, a stale
-mirror, a snapshot in flight, a misparse of the root catalog itself, and a
-repository Elasticsearch already believes is damaged.
-
-One comparison reaches below the catalog. `expected_blobs_verified` reproduces
-Elasticsearch's `blobs.verified` counter locally by summing the per-snapshot file
-lists in every live shard's current `index-<gen>`, and resolves every file id
-against the `files` entries so that damage to one half of the document cannot
-reconcile against the other half. It blocks too.
-
-The limit is that this is common-mode. Elasticsearch reads the same object store
-the sweeper reads, so anything that changes what both of them see is invisible to
-both. A clean cross-check means "this is the right repository, at the right
-generation, Elasticsearch is not already complaining, and both sides count the
-same number of shard file entries." It does not mean "every key on the orphan
-list is provably dead." Issue #1, below, is that limit stated as a defect.
-
-There is a second limit, and it is one operators reach for the wrong reason.
-`_verify_integrity` walks the live catalog and nothing else. On the clean 21
-object rig repository it reported `blobs verified: 15`. The six objects it never
-looked at were `index.latest`, the three superseded root generations, and the two
-stale shard generations, which is to say the entire orphan set. A repository can
-be 40 percent leaked garbage and verify perfectly clean, so a green
-`_verify_integrity` is evidence that what Elasticsearch still references is
-intact, and no evidence at all about the rest of the bucket.
-
-### The workflow: two commands with a person in between
-
-Everything above decides what a sweep would delete. The workflow decides whether
-it does.
-
-A dry run is the default and computes a dated manifest of every condemned object.
-A person reads it. Then `--execute --approve <that file>` deletes.
-
-The delete step does not act on the reviewed list verbatim, because a list
-computed last night describes a repository that has moved. It recomputes
-reachability from scratch and deletes the intersection, so **approval is a
-ceiling and never a floor.** The comparison in `compare_with_approval` is
-asymmetric on purpose:
-
-- Orphans appearing since the manifest was written is routine and does not
-  refuse. On a healthy repository an SLM policy alone advances the root
-  generation overnight, which orphans the previous generation's `index-N`, the
-  shard `index-<gen>` of every shard the snapshot touched, and the blobs of
-  whatever retention deleted. The orphan set grows every night. A check that
-  fires every morning is a check nobody reads.
-- An approved orphan coming back to life refuses the whole run. On a healthy
-  repository it cannot happen, because Elasticsearch deduplicates against the
-  current shard generation's file list and never against blobs it finds lying in
-  the store, so a leaked blob is never reused and a fresh one is uploaded under a
-  new uuid. ORPHAN is monotone. A violation means the repository did something
-  this reasoning does not cover, or the classification moved underneath the
-  review. Both void the approval.
-
-That monotonicity is a property of Elasticsearch, not of this tool. If a future
-version deduplicated against blobs discovered in the store rather than against
-the current shard generation, deleting the intersection would stop being safe. It
-is the thing to re-check on a major upgrade.
-
-Two rechecks run immediately before the first `DELETE`, because between
-classification and a typed confirmation sits an unbounded human pause during
-which the repository is live. `root_pointer_recheck` re-reads the eight bytes of
-`index.latest` and refuses if the generation moved.
-`revalidate_condemned_shards` re-reads the current `index-<gen>` of every shard
-that is losing a segment, bypassing the cache, and refuses if the file list now
-names a blob this run condemned. The second is bounded by the affected shards
-rather than by the repository, so a sweep touching three shards re-reads three
-blobs.
-
-Then a person types `DELETE <count>` at a terminal. There is no flag, no
-environment variable and no config key that removes the prompt, and stdin that is
-not a TTY refuses. This is aimed at the accidental automated run, the cron entry
-somebody added last year, and it makes no claim to stop a determined operator:
-`isatty()` asks about file descriptors, not about people.
-
-Finally, `--execute` always writes a record of what it deleted, and a path that
-cannot be written stops the run before anything goes. Recovering an object from
-bucket versioning means asking for a previous version by key, so a destructive
-run with no list of keys leaves bytes that are present and unreachable.
-
-### `--max-delete` bounds volume, not blast radius
-
-Worth stating because the flag is easy to mistake for a safety net. It refuses a
-run that would remove more than the operator said they expected, and that is the
-right shape for the mass misparse class, measured at 93, 96.4 and 99.6 percent of
-a repository. It is no defence at all against a targeted loss: dropping one file
-from one segment's list is a single object, passes under any ceiling, and still
-takes that shard's restore to zero.
-
-It has no default, deliberately. A healthy first sweep of a badly leaking
-repository measured 75.1 percent of bytes and 81.5 percent of objects, and the
-misparse incidents ran at 93 to 99.6 percent. Those ranges overlap, so any
-default would either refuse the run people most want to make or wave through the
-ones that destroyed a repository. Bring a number from knowing your own
-repository.
-
-The same reasoning is why the sweep history alarms on two axes rather than one.
-Bytes alone cannot see the failure that matters most here, because metadata is
-tiny by definition: a run deleting every shard-generation pointer in a repository
-moves the byte count by almost nothing. The run that made 150,000 documents
-unrestorable came in under 0.1 percent of bytes against a typical 0.1 percent and
-was reported as in line with history.
+`generation_chain` does not carry an equivalent guard for each one, because
+its algorithm removes the failure mode most of them existed to catch. It
+never builds a LIVE/ORPHAN/PROTECTED classification to begin with: it
+computes Elasticsearch's own shard-local set difference and condemns a blob
+only when some deleted snapshot's own shard document names it (the rule in
+[Sharing is also the best defence](#sharing-is-also-the-best-defence) above,
+built into the algorithm rather than checked afterward), a read that fails
+shrinks the manifest instead of guessing (see
+[the safety condition](../FACTS.md#the-safety-condition-stated-correctly) in
+FACTS.md), and its audit half has no delete path at all. Two properties of
+the retired guards do carry forward, in different shape: mount-awareness is
+now `--elasticsearch`/`--es-repository` corroboration, read from the cluster
+and applied automatically rather than as an opt-in file; and approval is
+still a ceiling rather than a floor, now enforced by matching a manifest's
+sha256 digest and row count (`--approve-digest`, `--approve-rows`) rather
+than by re-reading the root pointer, so an edited or stale manifest cannot
+execute.
 
 ## What none of this covers
 
 A document that lists only defences reads like marketing. These two are the
 reason to believe the rest.
 
-### Issue 21: consistent drift is invisible to every guard that compares copies
+### Issue #1: consistent drift, and how much of it is still invisible
 
 [Issue #1](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/1)
-is open and accepted.
+is open, and this section's answer changed since it was first written.
 
 A shard's file list lives in two blobs Elasticsearch keeps in sync: the current
 `index-<gen>` and the per-snapshot `snap-<uuid>.dat`. Drop the same live segment
 from both, keep `segments_N`, and patch the file count and total size to match.
-Every guard that works by comparing the two copies stays silent, because the two
-copies agree. Cross-check stays silent too, because Elasticsearch reads the same
-blobs. The sweeper reports the live segment as an orphan and exits 0, the
-snapshot afterwards still reports `SUCCESS`, `_verify_integrity` still returns
-green, and a real restore comes back red.
+Every guard that works by comparing those two copies to each other stays
+silent, because the two copies agree, and Elasticsearch's own corroboration
+stays silent too, because it reads the same blobs. This is not only an
+attacker scenario: a genuine upstream format change writes both copies from
+one in-memory list and produces exactly the same invisible drift. That is the
+version which reaches a user who simply upgrades.
 
-This is not only an attacker scenario, and that is the part that matters. A
-genuine upstream format change writes both copies from one in-memory list and
-produces exactly the same invisible drift. That is the version which reaches a
-user who simply upgrades.
+This document used to say the fix, an independent oracle reading `segments_N`
+(Lucene's own commit point, stored inline and never round-tripped through
+either of the two copies above), had been priced twice and declined both
+times. `generation_chain` built it anyway:
+[`formats/lucene_segments.py`](../generation_chain/formats/lucene_segments.py)
+decodes the commit point, and the audit's report line
+`Lucene commit cross-check (issue #1)` runs it against every snapshot file
+list on every audit (see [the sample report](../README.md#what-the-output-looks-like)
+in the README). A file list that under-references what the commit point
+requires is now drift this reader detects with no cluster contact, closing
+the realistic case: an upstream format change nobody staged, where the two
+copies and the commit point are written by different code for different
+reasons and a change to one does not silently move the other.
 
-Two things bound it. Reaching the state needs write access to the object store,
-which is a different adversary from the one these tools are built for. And the
-family completeness check does see the subset of it where a segment is left with
-a hole rather than removed whole, because that check does not compare the copies
-to each other, it asks whether the remaining list can rebuild a commit.
+**State the limit precisely, because it is narrower than "closed" and wider
+than "open."** Against the realistic case above, this closes the gap. Against
+an adversary who already has the object-store write access needed to alter
+the two shard-document copies, the same adversary could alter `segments_N`
+too; reaching this state needs that write access regardless. A related, still
+open corner: `generation_chain` also cross-references the root catalog
+against each snapshot's own declared extent
+([`formats/snapshot_document.py`](../generation_chain/formats/snapshot_document.py)),
+which catches a short list or a missing entry, but by its own documentation
+does not defend against a tamper that adjusts the catalog and the snapshot
+document consistently, so issue #1 is exactly as open as it was for that
+narrower, coordinated case.
 
-The fix that would close it is an independent oracle: `segments_N` is the Lucene
-commit point and enumerates the segments the index actually needs, it is stored
-inline as a virtual blob so reading it costs nothing extra, and a file list that
-under-references what Lucene needs is drift detectable with no cluster contact.
-It works because the two are different sources of truth, written by different
-layers for different reasons.
+One further gap travels with the same issue. Elasticsearch corroboration
+(`--elasticsearch`) runs once, when the manifest is derived. It is not
+repeated at delete time; what runs there instead is a manifest-age check
+(`generation_chain.reclaim`'s staleness check, an hour by default) that
+refuses a manifest old enough that the cluster could plausibly have mounted a
+searchable snapshot since. That catches a repository that moved. It would not
+catch metadata that was changed for the audit and put back before the delete.
 
-**It was priced twice and declined both times, and the reasoning still holds.**
-Closing it needs a Lucene commit-point decoder, and a `.si` decoder alongside it.
-Those are two more version-dependent reimplementations of the format whose drift
-this tool exists to survive. Defending against reimplementation drift by adding
-more reimplementations is self-defeating: every decoder added is another thing
-that can misread the same bytes the same way after an upgrade, and a decoder that
-goes stale starts refusing legitimate segments, which is a false positive on a
-tool whose entire value is that its refusals mean something.
-
-The cheap version was measured and does not work. Scanning the inline commit
-bytes for segment names matched the file list on 0 of 9 real blobs, because a
-commit carries a user-data map whose keys (`_seq_no`, `_id`, `_version`) are
-shape-identical to segment names. The same scan against a `.si` works, 38 of 38,
-because a `.si` carries its diagnostics under keys like `os` and `java.version`,
-which no file-name pattern matches. That asymmetry is why the `.si` check ships
-and the `segments_N` check does not.
-
-One narrower gap travels with the same issue and is worth naming separately. The
-Elasticsearch corroboration runs once, during classification. It is not repeated
-after the typed confirmation, so the window between the two is covered by
-`root_pointer_recheck` and `revalidate_condemned_shards`, which re-read the root
-pointer and the current metadata of every shard losing a segment, and by nothing
-on the Elasticsearch side. Those two rechecks catch a repository that moved. They
-would not catch metadata that was changed for the classification and put back
-before the verify call.
-
-So the honest statement is: this tool survives format drift that leaves a hole in
-a segment, and does not detect format drift that removes a whole segment
-consistently from both stored copies. If you are upgrading Elasticsearch across a
-major version, verify a restore rather than trusting a clean sweep.
+So the honest statement, updated: this tool now detects format drift that
+removes a whole segment consistently from both stored copies, for the
+realistic case of an unstaged upstream change, and it does not close the
+narrower case of a coordinated tamper by an adversary who already holds
+object-store write access. If you are upgrading Elasticsearch across a major
+version, the commit-point cross-check runs automatically; verifying a real
+restore afterward is still the check that means the most.
 
 ### There is no recovery path through the Amazon S3 Compatibility API
 
@@ -941,13 +683,12 @@ discover the id to pass, cannot confirm versioning is enabled, and cannot enable
 it. Whichever operations do accept a version id, the page does not name them,
 and it makes no difference: the id has to come from somewhere first.
 
-The versioning banner `s3_repo_sweeper.py` prints under `--execute` is written
-around this. It fires on every run against that endpoint, because
-`GetBucketVersioning` is not there to answer, and it says "cannot confirm" rather
-than "versioning is off", because an absent answer is not the same as a negative
-one. Object versions still exist on an Object Storage bucket with versioning
-enabled and are still restorable through the Object Storage API and the
-Console. Only the S3 surface cannot see them.
+Any tool working over this endpoint has to say "cannot confirm" rather than
+"versioning is off," because `GetBucketVersioning` is not there to answer and
+an absent answer is not the same as a negative one. Object versions still
+exist on an Object Storage bucket with versioning enabled and are still
+restorable through the Object Storage API and the Console. Only the S3
+surface cannot see them.
 
 **State the real answer plainly: the recovery path is a backup held somewhere
 else.** Not versioning, not a delete marker, not the console. If the data matters
@@ -971,11 +712,11 @@ something that does not propagate deletes.
 That is less alarming than it sounds for one specific configuration, and it is
 worth knowing which one you are in. This project's owner moved backups to shared
 storage and left the frozen tier on object storage. That decision does most of
-the work, because the sweeper's blast radius becomes a tier that can be rebuilt
-from the live cluster, and the data whose loss would be unrecoverable is no
-longer in the bucket the sweeper touches. An operator who has not made that move
-is in a materially different position. Work out which one you are before the
-first `--execute`, not after.
+the work, because a wrong delete's blast radius becomes a tier that can be
+rebuilt from the live cluster, and the data whose loss would be unrecoverable is
+no longer in the bucket the reclaim tool touches. An operator who has not made
+that move is in a materially different position. Work out which one you are
+before the first `--execute`, not after.
 
 ## Before you run a delete
 
@@ -985,23 +726,26 @@ Short, and none of it is optional on a repository you care about.
    reach it through the Amazon S3 Compatibility API, you have no recovery path.
    Read [the recovery path finding](#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api)
    again.
-2. Export the mounted set from the cluster and pass it. Its absence is not
+2. Pass `--elasticsearch` and `--es-repository` to the audit. Its absence is not
    detected, and the failure it prevents has a detection window of zero.
 3. Run the dry run and read the manifest by kind, not by percentage. A small byte
    share is not a small risk.
-4. Pass `--cross-check`. It is optional, and without it nothing corroborates the
-   parse.
-5. Keep the dated record. Recovering an object needs its key.
-6. Verify a real restore afterwards. `POST _snapshot/<repo>/_verify` fails on
-   these endpoints with the original Content-Md5 error, before and after any
-   sweep, so it proves nothing here. `_verify_integrity` catches a lot, reads
-   only the live catalog, and misses the mounted case entirely. A restore is the
-   check that means something.
+4. Pass `--elasticsearch`. It is optional, and without it nothing corroborates the
+   manifest against the cluster.
+5. Keep the manifest you approved. Recovering an object needs its key.
+6. Verify a real restore afterwards, with `verify_restorable.py`.
+   `POST _snapshot/<repo>/_verify` fails on these endpoints with the original
+   Content-Md5 error, before and after any reclaim run, so it proves nothing
+   here. `_verify_integrity` catches a lot, reads only the live catalog, and
+   misses the mounted case entirely. A restore is the check that means
+   something.
 
-The recipe those steps used to reference, with the flag names in it, is gone
-along with the tools. The list above is not gone: every item on it is a question
-about the repository rather than about any tool, and the replacement will have
-to answer all six.
+These six questions are about the repository rather than about any tool, and
+`generation_chain` is built to answer all six: items 2 and 4 are both
+`--elasticsearch`/`--es-repository`, item 3 is the disposition breakdown in
+[its report](../README.md#what-the-output-looks-like), item 5 is the manifest
+`--approve-digest` and `--approve-rows` bind to, and item 6 is
+`verify_restorable.py`, shipped alongside it for exactly this step.
 
 ## Sources
 
@@ -1072,22 +816,9 @@ verification uses with the same `Content-Md5` error this project exists to work
 around. The object listings and byte counts quoted above came from `mc ls` and
 `mc stat` against the bucket, and the decoded shard documents came from the SMILE
 (Jackson's binary JSON encoding, [format specification](https://github.com/FasterXML/smile-format-specification/blob/master/smile-specification.md))
-and codec helpers in `s3_repo_sweeper.py`, used read-only.
+codec now shipped read-only in [`generation_chain/formats/`](../generation_chain/formats/).
 
-Measurements already in this repository.
-
-- [`../evidence/campaign-data.md`](../evidence/campaign-data.md) and
-  [`../evidence/campaign-artifacts/campaign1-orphans.tsv`](../evidence/campaign-artifacts/campaign1-orphans.tsv):
-  the object and byte breakdown by verdict reason.
-- [`../evidence/methodology.md`](../evidence/methodology.md): the mounted
-  searchable-snapshot cases, and the post-delete snapshot reasoning.
-- [`../evidence/runbook-transcript-migrate-backups.md`](../evidence/runbook-transcript-migrate-backups.md)
-  and
-  `runbook-transcript-audit-reclaim.md` (removed with the retired sweepers; in git history before `9a149a8`):
-  the green mounted index and what turned it red.
-- `test-results.md` (removed with the retired sweepers; in git history before `9a149a8`): the acceptance
-  criteria and the known limits.
-- The docstrings in `s3_repo_sweeper.py` carried the measurements behind the
-  thresholds, next to the code a contributor would have been editing when they
-  were about to remove one. That file is retired; its last state is in the git
-  history at the commit before the removal.
+Reproduce a campaign of your own, with the object and byte breakdown by
+verdict reason that a real audit report gives you, using
+[Testing in your own OCI environment](testing-in-your-oci-environment.md) and
+`snapshot_churn_rig.py`.

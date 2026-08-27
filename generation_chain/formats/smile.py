@@ -1,10 +1,10 @@
 """Jackson SMILE, the subset Elasticsearch writes into shard documents.
 
 Written from the SMILE specification rather than adapted from the decoder in
-`s3_repo_sweeper.py`. That duplication is the point of this package: a shared
-decoder would make both derivations wrong in the same way at the same time,
-and two tools that agree because they share a bug are worse evidence than one
-tool on its own.
+one of this project's retired sweepers. That deliberate duplication is the
+point: a shared decoder would make both derivations wrong in the same way at
+the same time, and two tools that agree because they share a bug are worse
+evidence than one tool on its own.
 
 Every token this decoder does not recognise raises. Nothing is skipped and
 nothing is guessed, because a decoder that resynchronised after a token it did

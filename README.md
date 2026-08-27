@@ -130,7 +130,6 @@ nothing on the other:
 | [Find what leaked](#using-it), with `generation_chain` | Amazon S3 Compatibility API | Unchanged. It reads and writes a manifest; it cannot delete. |
 | [Reclaim what leaked](#step-two-delete-once-you-have-read-the-manifest), with `generation_chain.reclaim` | Amazon S3 Compatibility API | Unchanged, and the bucket stops growing. Deletes only what you approved. |
 | [Move backups to shared storage](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14), the split-repo migration, minus its two cleanup steps | Object Storage API for the audit calls | **A filesystem repository.** Elasticsearch reclaims space on its own again. |
-| Size what is there, with `snapshot_sizes.py` | neither; it reads Elasticsearch | Unchanged. It is read-only. |
 
 **There is no undo in this bucket, which is why deleting is gated behind a
 manifest a human reads and an approval bound to that exact file.** Oracle's supported-operations list for the
@@ -251,10 +250,10 @@ bucket root and makes every snapshot you have unreachable, with
 `{"acknowledged":true}` returned either way. See
 [base_path](#base_path-the-value-that-decides-what-your-repository-can-see).
 
-`snapshot_sizes.py` reads Elasticsearch and needs no bucket credential. The
-audit and the reclaim tool do read the bucket, so they need the Amazon S3
-Compatibility API credential described above. All of it needs nothing but
-Python 3.9 or newer.
+The audit and the reclaim tool read the bucket, so they need the Amazon S3
+Compatibility API credential described above. Passing `--elasticsearch` to
+the audit needs a read-only Elasticsearch credential instead, and no bucket
+credential at all. All of it needs nothing but Python 3.9 or newer.
 
 ```bash
 git clone https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround
@@ -266,9 +265,10 @@ python3 -m unittest discover -s tests     # no network needed
 > Elasticsearch does **not** block deleting a snapshot that backs a mounted
 > searchable-snapshot index. On a repository with working deletes, that destroys
 > the index. Here it leaves the index serving from leaked blobs. Mount clones,
-> never policy snapshots. Generate the pinned set with `snapshot_sizes.py
-> --emit-mounted` and treat it as the list nobody may delete from, by any
-> means.
+> never policy snapshots. Always pass `--elasticsearch` and `--es-repository`
+> to the audit: it asks the cluster which snapshots have a mounted index and
+> removes every one of them from the manifest before the reclaim tool ever
+> sees it. Treat that set as the list nobody may delete from, by any means.
 
 ### Keeping the repository operational in detail
 
@@ -465,8 +465,8 @@ If you have a clone, copy the directory somewhere, `cd` to its parent, and run
 `python3 -m generation_chain`.
 
 You also need Python 3.9 or newer, and a credentials file you write yourself.
-You do not need the tests, the evidence, the docs, `snapshot_sizes.py`, or
-anything else in this repository.
+You do not need the tests, the evidence, the docs, or anything else in this
+repository.
 
 ### The credentials file
 
@@ -813,11 +813,10 @@ exist to measure and to check.
 
 | Tool | Purpose |
 |---|---|
-| [`generation_chain/`](generation_chain/README.md) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [its README](generation_chain/README.md) for the safety condition, the exit codes, and what it cannot see. |
+| [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/quickstart-read-only.md#when-it-refuses) in the read-only quickstart. |
 | [`generation_chain/reclaim/`](generation_chain/reclaim/) | Deletes the keys in an approved manifest, in batches, with `Content-MD5`. Dry run by default. `--execute` requires `--approve-digest` and `--approve-rows` from that dry run, so an edited manifest cannot be executed. It contains no reference to Elasticsearch: the veto is applied when the manifest is derived. |
 | [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [generating load](docs/generating-load.md). |
 | [`verify_restorable.py`](verify_restorable.py) | Restores an index from the repository and counts documents. The only check that survives the others passing. |
-| `snapshot_sizes.py` | Per-day/week/month snapshot size report via `_snapshot/<repo>/<names>/_status` (incremental = real growth; total = restore size). Talks to ES directly, so no Kibana/LB timeouts. `--recommend` adds a sizing recommendation (baseline + retention-days x median daily growth + upgrade-day headroom, +20% margin) grounded in cited elastic.co docs; `--retention-days` accepts 5-10. `--split-frozen` separates SLM backups from frozen-tier mount snapshots; `--emit-classified` (with `--class` and `--out`) exports one row per snapshot, `--emit-mounted` exports the set of snapshots that mounted indices depend on. |
 
 ## Verify the repository after any deletion traffic, not just after the migration
 
@@ -838,10 +837,13 @@ snapshot index was still mounted on it is not in that list, so the blobs that
 mount needs are never inspected, and the check reports
 `total_anomalies: 0, result: pass` with the index already destroyed. Measured on
 the rig: all 5 backing blobs returning 404, index red with
-`RecoveryFailedException`, `_verify_integrity` clean. The check that sees that one
-is `snapshot_sizes.py --emit-classified`, which reports
-`0 mounted snapshot(s) MISSING-FROM-CATALOG` when the mounted set and the catalog
-agree. Run both. Neither covers the other.
+`RecoveryFailedException`, `_verify_integrity` clean. The check that sees that
+one compares two answers `_verify_integrity` never looks at side by side:
+`GET /*/_settings?filter_path=*.settings.index.store.snapshot_uuid` for the
+snapshots mounted indices depend on, against `GET /_snapshot/<repo>/_all` for
+the snapshots the catalog still lists. Any mounted snapshot uuid missing from
+the second answer is the failure `_verify_integrity` cannot see. Run both
+checks. Neither covers the other.
 
 Gate on `results.total_anomalies` and `results.result`. On Elasticsearch 9.5.2
 the `results` object contains exactly `status`, `final_repository_generation`,
@@ -867,8 +869,7 @@ is not a claim that tampering is detected.
 On a repository serving a frozen tier, do not substitute a search. Clearing the
 searchable snapshot cache and running a cold query passes on a mount whose blobs
 have been deleted: measured against a mount with all 8 of its data blobs gone,
-HTTP 200, `total=200`, `"failed": 0`. The rest of those measurements are in
-[campaign-data.md](evidence/campaign-data.md).
+HTTP 200, `total=200`, `"failed": 0`.
 
 ## `base_path`: the value that decides what your repository can see
 
@@ -927,10 +928,13 @@ post-SRA path. Then the algorithms collide. The SDK defaults to CRC32. The
 Amazon S3 Compatibility API accepts only `x-amz-checksum-sha256` and
 `x-amz-checksum-crc32c` as alternatives to `Content-MD5`, so the out-of-the-box
 default is the one algorithm such stores reject, and the whole batch comes back
-HTTP 400. Measured against a real Oracle bucket: `crc32` fails, while `crc32c`,
-`sha256` and `Content-MD5` all succeed against the same bucket with the same
-tool. See [what Oracle's S3 Compatibility API actually does](evidence/oci-s3-compatibility/README.md). The same collision explains why `WHEN_REQUIRED` cannot help: that setting narrows *which operations* get a
-checksum, not *which algorithm*.
+HTTP 400. Measured against a real Oracle bucket on 2026-08-26, in
+`us-ashburn-1`: `crc32` fails with `0 deleted, 2 failed, 400 InvalidRequest`,
+while `crc32c`, `sha256` and `Content-MD5` all succeed against the same bucket
+with the same tool (see [the full capture](FACTS.md#the-fault-this-repository-exists-for)
+in FACTS.md). The same collision explains why `WHEN_REQUIRED` cannot help:
+that setting narrows *which operations* get a checksum, not *which
+algorithm*.
 
 The affected releases are **Elasticsearch 8.19.17+ and 9.5.0+**. Releases
 8.19.0 through 8.19.16, 9.1 through 9.4, and everything predating the AWS SDK v2 migration
@@ -953,18 +957,19 @@ as though the leak persists.
 
 What this repository gives you:
 
-1. Repository sizing that measures the damage, separating backup growth from
-   frozen-tier footprint ([`skills/es-snapshot-audit`](skills/es-snapshot-audit/SKILL.md)).
-3. A validated runbook for getting off the broken path, moving backups to
-   block/NFS storage while the frozen tier stays mounted where it is
-   ([`skills/es-hybrid-migration`](skills/es-hybrid-migration/SKILL.md)), minus
-   its two cleanup steps, which drove a retired sweeper and are marked withdrawn
-   in place.
+1. An audit and reclaim pair that measures what already leaked and removes
+   only what a human approved from a written manifest (see [Using it](#using-it)).
+2. [A validated runbook for getting off the broken path](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14),
+   moving backups to block/NFS storage while the frozen tier stays mounted
+   where it is, minus its two cleanup steps, which drove a retired sweeper and
+   are marked withdrawn in place.
 
 Everything here was reproduced and validated end to end against a real
-Elasticsearch 9.5.2 cluster and a fault-reproducing object store. See
-[campaign-data.md](evidence/campaign-data.md) for the raw data and [methodology.md](evidence/methodology.md)
-for the replayable playbook.
+Elasticsearch 9.5.2 cluster and a fault-reproducing object store, including a
+campaign against a real Oracle bucket: 58 reclaim cycles, 888 objects deleted,
+zero failed and zero unconfirmed (see [Campaign results](FACTS.md#campaign-results-2026-08-27-against-a-real-oracle-bucket)
+in FACTS.md). Reproduce it against your own cluster with
+[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md).
 
 ## Root cause and upstream status
 
@@ -1142,11 +1147,11 @@ Sources:
 
 ## Authenticating to Elasticsearch with a read-only API key
 
-[`snapshot_sizes.py`](snapshot_sizes.py) talks to Elasticsearch and to nothing
-else. A read-only key is all it needs, and a read-only key is all it should
-ever be given.
-
-`snapshot_sizes.py` takes `--user user:password` or `--api-key <encoded>`.
+Two things here talk to Elasticsearch: the audit's `--elasticsearch` flag,
+described in [The credentials file](#the-credentials-file) above, and the
+manual `_verify_integrity` check in [Verify the repository](#verify-the-repository-after-any-deletion-traffic-not-just-after-the-migration).
+Neither writes to the cluster. A read-only key is all either needs, and a
+read-only key is all it should ever be given.
 
 One privilege needs care, and it is worth granting even though no tool here
 calls it any more. `_verify_integrity` is gated on
@@ -1175,8 +1180,8 @@ expiry, rather than reaching for `manage`.
 
 ### 1. Generate the key
 
-The toolkit only reads. It never writes, mounts, deletes or restores anything in
-ES, so the key below is strictly read-only: `monitor_snapshot` is snapshot and
+Both only read. Neither writes, mounts, deletes or restores anything in ES, so
+the key below is strictly read-only: `monitor_snapshot` is snapshot and
 repository *listing and detail*, `view_index_metadata` is *read-only* index
 metadata. Neither confers any write, delete, mount or restore ability anywhere in
 the cluster. Hand this key to operators and auditors freely. It cannot modify
@@ -1203,10 +1208,12 @@ POST /_security/api_key
 }
 ```
 
-`monitor_snapshot` covers `GET _snapshot/<repo>/*` and
-`GET _snapshot/<repo>/<names>/_status`. `view_index_metadata` on `*` is what lets
-`--split-frozen` and `--emit-mounted` read `index.store.snapshot` settings off
-mounted searchable-snapshot indices. Response:
+`monitor_snapshot` covers the calls `--elasticsearch` makes for corroboration,
+`GET _snapshot/<repo>/_all` and `GET _snapshot/_status`, plus
+`GET _snapshot/<repo>/<names>/_status` for the manual checks above.
+`view_index_metadata` on `*` is what lets corroboration read
+`index.store.snapshot` settings off mounted searchable-snapshot indices, which
+is how it knows which snapshots to remove from the manifest. Response:
 
 ```json
 {
@@ -1229,13 +1236,16 @@ That string is the `encoded` value.
 
 | Fact | Detail |
 |---|---|
-| What `--api-key` wants | The `encoded` field, verbatim. The script sends it as `Authorization: ApiKey <value>` with no transformation. |
+| What `elasticsearch.api_key` wants | The `encoded` field, verbatim, in the credentials file described above. It is sent as `Authorization: ApiKey <value>` with no transformation. |
 | If you only kept `id` and `api_key` | `encoded` is just `id:api_key` in base64, so `printf '%s' "$ID:$KEY" \| base64` reproduces it. Read both from a `0600` file rather than typing them. |
 | Lost the secret | It is shown once, at creation, and cannot be retrieved afterwards. `GET /_security/api_key` returns metadata only (id, name, creation, expiration, role_descriptors), never the secret. |
 | Recovery | Invalidate and reissue: `DELETE /_security/api_key` with `{"ids":["<the id>"]}`, then repeat step 1. |
 
-Don't paste the key literally onto the command line. It lands in shell history
-and in `ps` output. Read it from a `0600` file or an environment variable:
+Don't paste the key literally into a shell command. It lands in history and in
+`ps` output. Write it straight into the credentials file's
+`elasticsearch.api_key` field, keep that file `0600`, and if you need it as a
+shell variable for the manual checks below, read it from a file rather than
+typing it:
 
 ```bash
 export ES_API_KEY="$(cat /path/to/es-snapshot-readonly.key)"
@@ -1244,30 +1254,26 @@ export ES_API_KEY="$(cat /path/to/es-snapshot-readonly.key)"
 ### 3. Usage
 
 ```bash
-# per-day size report
-./snapshot_sizes.py --es https://es.example.com:9200 --repo my-repo --group day \
-    --api-key "$ES_API_KEY" --ca-cert /path/to/ca.crt
-
-# + repository sizing recommendation
-./snapshot_sizes.py --es https://es.example.com:9200 --repo my-repo --group day \
-    --recommend --retention-days 7 --api-key "$ES_API_KEY" --ca-cert /path/to/ca.crt
-
-# class-aware report (slm vs frozen-pinned vs other)
-./snapshot_sizes.py --es https://es.example.com:9200 --repo my-repo --group week \
-    --split-frozen --api-key "$(cat /path/to/es-snapshot-readonly.key)" \
-    --ca-cert /path/to/ca.crt
-
-# snapshots pinned by mounted indices: the set nobody may delete from
-# Use --out, not a > redirect: a redirect creates the file even when the command
-# failed, and an empty pre-flight file is what a failed export leaves behind.
-./snapshot_sizes.py --es https://es.example.com:9200 --repo my-repo \
-    --emit-mounted --api-key "$ES_API_KEY" --ca-cert /path/to/ca.crt \
-    --out /path/to/mounted.txt
-grep -cv '^#' /path/to/mounted.txt   # 0 is a STOP unless you confirmed no mounts
+python3 -m generation_chain \
+  --transport s3 \
+  --endpoint https://<namespace>.compat.objectstorage.<region>.oraclecloud.com \
+  --region <region> \
+  --bucket <bucket> \
+  --prefix <the repository's base_path> \
+  --credentials creds.json \
+  --elasticsearch https://es.example.com:9200 --es-repository my-repo \
+  --es-ca-cert /path/to/ca.crt \
+  --manifest orphans.tsv
 ```
 
-Pass `--api-key` alone. `--user` takes precedence if both are set, so a leftover
-`--user` silently shadows the key and you get a confusing 401.
+`creds.json` carries the `elasticsearch.api_key` field from step 1, in the
+shape [The credentials file](#the-credentials-file) shows above. The manual
+check `_verify_integrity` above is a separate call, made directly:
+
+```bash
+curl -s --cacert /path/to/ca.crt -H "Authorization: ApiKey $ES_API_KEY" \
+  -XPOST 'https://es.example.com:9200/_snapshot/my-repo/_verify_integrity'
+```
 
 ### 4. Verify
 
@@ -1291,7 +1297,7 @@ of them. The secret is never returned here. This is the cheap way to catch an
 expired or invalidated key before cron jobs start reporting 401s.
 
 To exercise it with curl, or anything that can set the header, run the same
-calls the toolkit makes, one per privilege:
+calls corroboration makes, one per privilege:
 
 ```bash
 # identity + auth type: proves the key authenticates at all
@@ -1324,30 +1330,28 @@ Failure modes:
 
 | Status | Cause | Fix |
 |---|---|---|
-| 401 | Key invalidated, expired, or malformed. Commonly a raw `id:api_key` passed instead of the base64 `encoded` value, or a stray `--user` overriding `--api-key`. | Reissue per step 1; pass `encoded`; drop `--user`. |
-| 403 on `_snapshot/...` | Missing cluster `monitor_snapshot`. Breaks the default report, `--recommend` and `--split-frozen`. | Add `"cluster": ["monitor_snapshot"]`. |
-| 403 on `_settings` | Missing index `view_index_metadata` on `*`. Breaks `--emit-mounted`; `--split-frozen` degrades to the unsplit report and prints why. | Add the `indices` block on `["*"]`. |
+| 401 | Key invalidated, expired, or malformed. Commonly a raw `id:api_key` passed instead of the base64 `encoded` value. | Reissue per step 1; put `encoded` in the credentials file. |
+| 403 on `_snapshot/...` | Missing cluster `monitor_snapshot`. Corroboration cannot proceed, and the audit refuses rather than run uncorroborated. | Add `"cluster": ["monitor_snapshot"]`. |
+| 403 on `_settings` | Missing index `view_index_metadata` on `*`. Same refusal: corroboration cannot confirm which snapshots are mounted. | Add the `indices` block on `["*"]`. |
 
-Operator runbooks for these tools, as installable skills: [skills/](skills).
+Validation: 363 unit tests (`python3 -m unittest discover -s tests`), two
+live-rig campaigns against a real Oracle bucket, and adversarial review; see
+[Campaign results](FACTS.md#campaign-results-2026-08-27-against-a-real-oracle-bucket)
+in FACTS.md for the raw numbers. Reproduce a campaign of your own with
+[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md).
 
-Validation: `test-results.md` (removed with the retired sweepers; in git history before `9a149a8`) (363 unit tests, two live-rig
-campaigns, and adversarial review), [methodology.md](evidence/methodology.md) (the
-replayable playbook; see its Known limits section for what has *not* been
-validated), [campaign-data.md](evidence/campaign-data.md) (raw data, including its own open
-discrepancies), and [manifests/](manifests) (the test rig).
+## Why this replaced three earlier tools
 
-## The three tools that were removed
-
-| Script | What it did, and why it is gone |
-|---|---|
-| `oci_repo_sweeper.py` | Classified every object in a repository LIVE, ORPHAN or PROTECTED by reimplementing Elasticsearch's on-disk format, then deleted the orphans over Oracle's Object Storage API. |
-| `s3_repo_sweeper.py` | The same classifier, reaching the bucket over the Amazon S3 Compatibility API with SigV4, for an operator whose only credential is a Customer Secret Key. |
-| `es_log_driven_sweeper.py` | Parsed the keys out of Elasticsearch's own failed-delete WARN lines and deleted exactly those, with no reachability logic of its own. |
+Three earlier tools took this project's original approach: classify every
+object LIVE, ORPHAN or PROTECTED by reimplementing Elasticsearch's on-disk
+format, then delete the orphans. They are retired, removed from this
+repository along with their tests and runbooks, and nothing below describes
+their flags or internals; the point that survives them is the one below.
 
 All three condemned a blob by its absence from a live set they built themselves,
 which put every failed read and every unparseable document on the deleting side
 of the decision. A reviewer drove one of them, along its documented path, to a
-real delete of a live segment blob. The log-driven tool started from a stronger
+real delete of a live segment blob. A log-driven variant started from a stronger
 premise, that Elasticsearch itself named the key, but it still had to answer
 whether some surviving snapshot referenced the key now, and that is the same
 absence test.

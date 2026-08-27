@@ -11,6 +11,9 @@ spec:
         app: minio-make-bucket
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: mc
           image: minio/mc:RELEASE.2025-01-17T23-25-50Z
@@ -20,3 +23,23 @@ spec:
             - >
               mc alias set rig http://minio:9000 CHANGEME-access CHANGEME-secret &&
               mc mb -p rig/es-snapshots
+          env:
+            # minio/mc runs as root by default and writes its alias config
+            # to $HOME/.mc; point it at the emptyDir below instead of
+            # relaxing readOnlyRootFilesystem.
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

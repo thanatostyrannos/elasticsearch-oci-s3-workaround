@@ -4,7 +4,7 @@ generator's --state-file (which names everything teardown removes) and
 --report-file (which the loop's preflight watches for the first expired
 snapshot, the same wait root .gitlab-ci.yml's qualify:oci job does inline).
 ReadWriteOnce, which is enough on a single-node cluster (this project's own
-manifests/ target Rancher Desktop, a single node). On a multi-node cluster,
+lab manifests target Rancher Desktop, a single node). On a multi-node cluster,
 either use a storage class that supports ReadWriteMany, or keep the
 churn-rig and qualify pods on the same node (a nodeSelector or a small
 node pool works).

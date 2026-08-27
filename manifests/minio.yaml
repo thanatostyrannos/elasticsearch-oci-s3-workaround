@@ -32,6 +32,15 @@ spec:
       labels:
         app: minio
     spec:
+      # The minio/minio image runs as root by default (no non-root user
+      # baked in), so this pins it to a fixed non-root uid/gid instead.
+      # fsGroup chowns the data PVC's group ownership so uid 1000 can write
+      # to it; without it MinIO authenticates its own startup and then dies
+      # unable to write its erasure-coding metadata.
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: minio
           image: minio/minio:RELEASE.2025-01-18T00-31-37Z
@@ -45,6 +54,12 @@ spec:
               value: CHANGEME-access
             - name: MINIO_ROOT_PASSWORD
               value: CHANGEME-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: api
               containerPort: 9000
@@ -65,10 +80,17 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            # MinIO's Go runtime uses the OS temp dir for scratch files
+            # outside the erasure-coded backend; with the root filesystem
+            # read-only, that needs its own writable mount.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: minio-data
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

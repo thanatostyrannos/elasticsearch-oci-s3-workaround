@@ -40,8 +40,8 @@ a failed call into an empty set of protections. A caller who asked for
 corroboration and could not have it gets an exception, and the run refuses.
 Proceeding would produce a LARGER manifest than a successful call would have,
 which is the one property this tool exists to guarantee it never does. Every
-failure in this module raises, and `tests/test_generation_chain_corroboration.py`
-holds a static tripwire that fails if any `except` here ever learns to return.
+failure in this module raises, and this project's own test suite holds a
+static tripwire that fails if any `except` here ever learns to return.
 
 IF THIS FAILS, FIX THE ACCESS, NOT THE FLAG. A 403, an unreachable endpoint or
 an unparseable answer means the run cannot be corroborated, and the remedy is

@@ -1,5 +1,5 @@
 {{/*
-Templated from manifests/ingress.yaml. Publishes the in-cluster
+Templated from this project's lab manifest for ingress. Publishes the in-cluster
 Elasticsearch and MinIO through an existing ingress controller instead of
 kubectl port-forward, which is a process on your workstation that dies with
 the pod it points at. Only useful when elasticsearch.external is false

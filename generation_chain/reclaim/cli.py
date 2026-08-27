@@ -56,8 +56,8 @@ def normalise_prefix(prefix: str) -> str:
 
     Kept here rather than imported so this package never reaches into the
     read transport for anything. Duplicated as one expression rather than a
-    dependency; `tests/test_reclaim_cli.py` pins it against `S3CompatibleSource`
-    directly so the two cannot silently drift apart.
+    dependency; this project's own test suite pins it against
+    `S3CompatibleSource` directly so the two cannot silently drift apart.
     """
     return (prefix.strip("/") + "/") if prefix.strip("/") else ""
 

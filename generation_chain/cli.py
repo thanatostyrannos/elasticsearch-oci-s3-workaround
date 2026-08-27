@@ -232,7 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--classification", metavar="FILE",
                         help="every key in the store and its disposition")
     parser.add_argument("--coverage-json", metavar="FILE",
-                        help="the coverage record, for evidence/")
+                        help="the coverage record, to keep as evidence of this run")
     parser.add_argument("--elasticsearch", metavar="URL",
                         help="ask a cluster what to protect. Everything it "
                              "reports leaves the manifest; what it does not "

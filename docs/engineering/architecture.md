@@ -82,11 +82,10 @@ same read-only guarantee as the Amazon S3 Compatibility API shown here. The
 [connection diagram](#4-connections-protocols-and-who-can-mutate-what) lists
 them.
 
-Two auxiliary tools are deliberately left off this diagram because they are
-one-way and lower-stakes than the four above: `snapshot_sizes.py` only reads
-Elasticsearch, and `verify_restorable.py` only reads Elasticsearch and
-restores into it to prove a snapshot is real. Neither touches the object
-store, and neither is one of the four tools operators confuse.
+`verify_restorable.py` is deliberately left off this diagram because it is
+one-way and lower-stakes than the four above: it only reads Elasticsearch and
+restores into it to prove a snapshot is real. It never touches the object
+store, and it is not one of the four tools operators confuse.
 
 ## 2. Component structure of `generation_chain/`
 
@@ -141,8 +140,7 @@ module-load-time dependency. Everything else is a real top-level import.
 Two things worth an architect's attention here. First, `reclaim/` is its own
 subtree hanging off `reclaim/cli.py`; nothing under `derivation/`,
 `sources/`, or `formats/` imports anything under `reclaim/`, which is the
-source-level proof behind the claim in `generation_chain/README.md` that the
-audit "has no delete path." Second, `model.py` and `errors.py` (omitted
+source-level proof that the audit has no delete path. Second, `model.py` and `errors.py` (omitted
 above because every single module in the package imports `errors.py`, which
 would make it a hairball rather than a diagram) are the only two leaves:
 nothing in `generation_chain/` imports back up into `cli.py` or
@@ -184,8 +182,7 @@ flowchart TD
 ```
 
 `audit.py` is the one place every other module in this subpackage gets
-joined, matching what `generation_chain/README.md` says about it being the
-whole entry point (`run_audit`). `keys.py` sits at the bottom of the
+joined: it is the whole entry point, `run_audit`. `keys.py` sits at the bottom of the
 subpackage's own dependency order, imported by every other module here and
 importing none of them back (its one internal import, `sources.RepositorySource`,
 is guarded behind `TYPE_CHECKING` and never runs). `identity.py` is reached
@@ -506,8 +503,9 @@ The branch point that matters is the single diamond in the middle:
 and it happens to be the one algorithm Oracle's Amazon S3 Compatibility API
 does not accept for this operation (it accepts `Content-MD5`,
 `x-amz-checksum-sha256`, and `x-amz-checksum-crc32c`, measured directly
-against a live Oracle bucket and recorded in
-[`evidence/oci-s3-compatibility/README.md`](../../evidence/oci-s3-compatibility/README.md)).
+against a live Oracle bucket; see
+[the full capture](../../FACTS.md#the-fault-this-repository-exists-for) in
+FACTS.md).
 Nothing about the delete algorithm inside `generation_chain/` is on this
 diagram; that box is the thing `generation_chain` is compensating for from
 outside the cluster, and `generation_chain.reclaim` sends `Content-MD5` by

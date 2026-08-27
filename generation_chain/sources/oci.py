@@ -5,11 +5,10 @@ key. Two calls are used: ListObjects to enumerate the repository and
 GetObject to read one blob.
 
 No OCI endpoint exists in this project's test environment, so this transport's
-correctness rests on the offline known-answer vector in
-tests/test_generation_chain_signing.py and on the in-process rig in
-tests/test_generation_chain_transports.py, which verifies each signature
-against the public half of the test key. Nothing here has been exercised
-against a real tenancy, and that is stated rather than implied.
+correctness rests on the offline known-answer vector and the in-process rig
+in this project's own signing and transport tests, which verify each
+signature against the public half of the test key. Nothing here has been
+exercised against a real tenancy, and that is stated rather than implied.
 """
 
 from __future__ import annotations

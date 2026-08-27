@@ -33,7 +33,7 @@ UNSAFE = re.compile(r"[\x00-\x1f\x7f]")
 # repository rather than a run that stopped partway. `write_manifest` never
 # writes this itself: a caller writing to a file appends it, and a caller
 # reading the return value of `write_manifest` alone (this module's own
-# tests, and the direct callers in tests/test_generation_chain_liveness.py)
+# tests, and the direct callers in this project's liveness tests)
 # never sees rows that were not actually written pretending otherwise.
 COMPLETION_MARKER = "# derivation complete\n"
 
