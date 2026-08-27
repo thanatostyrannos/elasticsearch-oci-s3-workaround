@@ -83,12 +83,11 @@ an argument is visible in `ps` to every other user on the host.
 ```json
 {
   "s3": {
-    "access_key": "<customer secret key: access key id>",
-    "secret_key": "<customer secret key: secret>"
+    "access_key_id": "<customer secret key: access key id>",
+    "secret_access_key": "<customer secret key: secret>"
   },
   "elasticsearch": {
-    "username": "elastic",
-    "password": "<cluster password>"
+    "api_key": "<an Elasticsearch API key>"
   }
 }
 ```
@@ -96,6 +95,11 @@ an argument is visible in `ps` to every other user on the host.
 ```
 chmod 600 creds.json
 ```
+
+The key names are the ones the code asks for, `access_key_id` and
+`secret_access_key`, and a run stops on the first one it cannot find. The
+`elasticsearch` section takes either an `api_key`, as above, or a `username`
+and a `password`.
 
 The `elasticsearch` section is what the audit itself uses when it asks the
 cluster which objects to protect. It is separate from the password file the
@@ -467,7 +471,7 @@ a weekly schedule. `audit:orphans` runs on a schedule and nothing else does:
 scheduled audit is safe, and it holds because the scheduled job cannot delete
 anything rather than because it has been asked not to.
 
-The audit publishes `orphans.txt` as an artifact with a ninety day expiry, so
+The audit publishes `orphans.tsv` as an artifact with a ninety day expiry, so
 you can watch the count between runs. A number that climbs is the leak. A
 number that drops after a reclaim is the reclaim working.
 
@@ -481,6 +485,10 @@ from the run. If a qualification job ends strangely, run it.
 
 A generator that outlives its job keeps ingesting and keeps leaking. That is
 the failure worth guarding against here, not a wasted pipeline minute.
+
+`RIG_PREFIX` defaults to `leaktest` and names everything the rig creates, so
+teardown removes exactly what this run made and nothing else. Change it if that
+name collides with something already in the bucket or the cluster.
 
 **Deletes are off by default.** `DRY_RUN_ONLY` is `yes` in the pipeline
 variables. Run it that way first, read what it names, and only then run the

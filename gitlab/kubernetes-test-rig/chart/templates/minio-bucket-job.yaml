@@ -1,0 +1,43 @@
+{{/* Templated from manifests/minio-bucket-job.yaml. */}}
+{{- if .Values.minio.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rig.fullname" . }}-minio-make-bucket
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: {{ include "rig.fullname" . }}-minio-make-bucket
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc
+          command:
+            - /bin/sh
+            - -c
+            - >
+              mc alias set rig http://{{ include "rig.fullname" . }}-minio:9000
+              "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
+              mc mb -p rig/{{ .Values.minio.bucket }}
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rig.fullname" . }}-minio-credentials
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rig.fullname" . }}-minio-credentials
+                  key: root-password
+{{- end }}

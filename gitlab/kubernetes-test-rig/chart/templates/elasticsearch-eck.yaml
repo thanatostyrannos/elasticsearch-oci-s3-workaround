@@ -1,0 +1,85 @@
+{{/*
+Templated from manifests/elasticsearch.yaml. Only rendered when
+elasticsearch.external is false: this chart's default is an EXTERNAL
+cluster, because not every Kubernetes cluster this chart is installed into
+also runs Elasticsearch. Flip elasticsearch.external to false to get this
+in-cluster, ECK-managed Elasticsearch instead. Requires the ECK operator
+already installed; see manifests/README.md. This chart does not install the
+operator.
+*/}}
+{{- if not .Values.elasticsearch.external }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "rig.fullname" . }}-es-s3-secure-settings
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- if .Values.minio.enabled }}
+  s3.client.default.access_key: {{ .Values.minio.rootUser | quote }}
+  s3.client.default.secret_key: {{ .Values.minio.rootPassword | quote }}
+  {{- end }}
+  # The Oracle S3 compatibility client. Without these, a repository
+  # registered with --s3-client oci silently talks to real AWS S3 and fails
+  # with "The AWS Access Key Id you provided does not exist in our
+  # records," which reads like a credential problem rather than a missing
+  # endpoint.
+  s3.client.oci.access_key: {{ .Values.credentials.s3.accessKeyId | quote }}
+  s3.client.oci.secret_key: {{ .Values.credentials.s3.secretAccessKey | quote }}
+---
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: {{ include "rig.fullname" . }}
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+spec:
+  version: {{ .Values.elasticsearch.eck.version | quote }}
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: {{ .Values.elasticsearch.eck.disableTls }}
+  secureSettings:
+    - secretName: {{ include "rig.fullname" . }}-es-s3-secure-settings
+  nodeSets:
+    - name: default
+      count: {{ .Values.elasticsearch.eck.nodeCount }}
+      config:
+        node.store.allow_mmap: false
+
+        # Required, and static: it cannot be set with PUT _cluster/settings.
+        # Without it a data_frozen node refuses to mount a partial
+        # searchable snapshot, and the churn rig refuses to start at all.
+        # This is OFF-HEAP and counts against the container memory limit
+        # alongside the heap.
+        xpack.searchable.snapshot.shared_cache.size: {{ .Values.elasticsearch.eck.sharedCacheSize | quote }}
+
+        {{- if .Values.minio.enabled }}
+        s3.client.default.endpoint: "http://{{ include "rig.fullname" . }}-minio.{{ include "rig.namespace" . }}.svc:9000"
+        s3.client.default.protocol: http
+        s3.client.default.path_style_access: true
+        {{- end }}
+
+        {{- if and .Values.elasticsearch.eck.ociNamespace .Values.elasticsearch.eck.ociRegion }}
+        s3.client.oci.endpoint: "https://{{ .Values.elasticsearch.eck.ociNamespace }}.compat.objectstorage.{{ .Values.elasticsearch.eck.ociRegion }}.oraclecloud.com"
+        s3.client.oci.protocol: https
+        s3.client.oci.path_style_access: true
+        # Oracle answers 501 on chunked-encoding uploads; not optional.
+        s3.client.oci.disable_chunked_encoding: true
+        {{- end }}
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              env:
+                - name: ES_JAVA_OPTS
+                  value: "-Xms{{ .Values.elasticsearch.eck.heapSize }} -Xmx{{ .Values.elasticsearch.eck.heapSize }}"
+              resources:
+                requests:
+                  memory: {{ .Values.elasticsearch.eck.memoryRequest | quote }}
+                limits:
+                  memory: {{ .Values.elasticsearch.eck.memoryLimit | quote }}
+{{- end }}

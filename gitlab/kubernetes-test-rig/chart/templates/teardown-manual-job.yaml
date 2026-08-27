@@ -1,0 +1,47 @@
+{{/*
+The same teardown, as a plain (not helm-hook) Job template, for a manual
+run: `kubectl create job -n <namespace> --from=job/<release>-teardown-manual
+teardown-retry-1`. A safety net for when the pre-delete hook's pod never
+started (the cluster was unreachable at uninstall time, the node it landed
+on was draining) and `helm uninstall` already reported success anyway,
+because Helm does not retry a hook it could not schedule.
+*/}}
+{{- if .Values.teardown.standalone.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rig.fullname" . }}-teardown-manual
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+    rig-component: teardown-manual
+spec:
+  suspend: true
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "rig.fullname" . }}-teardown
+    spec:
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "rig.sourceInitContainers" . | nindent 8 }}
+      containers:
+        - name: teardown
+          image: {{ .Values.image.python | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: {{ include "rig.workdir" . }}
+          command: ["python3", "snapshot_churn_rig.py", "teardown"]
+          args:
+            {{- include "rig.teardownArgs" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.teardown.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "rig.teardownVolumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "rig.teardownVolumes" . | nindent 8 }}
+{{- end }}

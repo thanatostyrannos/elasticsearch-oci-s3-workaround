@@ -224,10 +224,11 @@ nothing**: that is exactly what the S3-compatible repository already returns whi
 leaking. Count files on disk instead:
 
 ```bash
-COUNT='find <fs-repo-location> -type f | wc -l'
 # run inside any node that has the volume, before:
+find <fs-repo-location> -type f | wc -l
 $ES -XDELETE '/_snapshot/backups-fs/<one-backup-snapshot>'
-# and again after.
+# and again after:
+find <fs-repo-location> -type f | wc -l
 ```
 
 **Acceptance.** The file count **drops**. Blobs genuinely unlink. In the reference
@@ -605,8 +606,16 @@ python3 -m generation_chain.reclaim \
     --prefix <the same base_path> --credentials creds.json \
     --execute --approve-digest <the digest 9b printed> \
     --approve-rows <the count 9b printed> \
+    --elasticsearch <cluster> --es-repository <repository> \
     --report deleted.jsonl
 ```
+
+`--execute` refuses to run without one of `--elasticsearch` with
+`--es-repository`, or `--without-elasticsearch`. The manifest's protection was
+decided when it was derived, and a searchable snapshot mounted since then is not
+in it, so the tool makes you say whether to re-check. Step 9a passes the cluster
+every time and this step does the same. Use `--without-elasticsearch` only when
+the repository is orphaned and there is no cluster left to ask.
 
 The approval covers one file. It will not execute a different manifest, and
 editing a manifest invalidates its approval, which is the point: the digest is

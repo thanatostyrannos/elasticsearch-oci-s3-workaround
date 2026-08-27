@@ -1,0 +1,134 @@
+{{/*
+python3 reclaim_test_protocol.py: audits, dry runs, and (only when
+qualify.dryRunOnly is false) executes against the digest that dry run
+printed, cycle after cycle. Manual only: this template is a plain Job, and
+gitlab/kubernetes-test-rig/.gitlab-ci.yml refuses to trigger it from a
+schedule for the same reason the CI variant does. Nothing here decides to
+delete on its own; generation_chain.reclaim's own approval-digest handshake
+still gates every cycle's execute step.
+*/}}
+{{- if .Values.qualify.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rig.fullname" . }}-qualify
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+    app: {{ include "rig.fullname" . }}-qualify
+    rig-component: qualify
+spec:
+  backoffLimit: {{ .Values.qualify.backoffLimit | int64 }}
+  # int64: a bare large integer from values.yaml decodes as float64 and Go's
+  # default float formatting would otherwise render it in scientific
+  # notation, which is not valid here.
+  activeDeadlineSeconds: {{ .Values.qualify.activeDeadlineSeconds | int64 }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "rig.fullname" . }}-qualify
+    spec:
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "rig.sourceInitContainers" . | nindent 8 }}
+      containers:
+        - name: qualify
+          image: {{ .Values.image.python | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: {{ include "rig.workdir" . }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p "$(dirname "{{ .Values.qualify.outPath }}")"
+              {{- if .Values.churnRig.enabled }}
+              echo "waiting for the load generator's first snapshot to expire"
+              i=0
+              while [ "$i" -lt 60 ]; do
+                if [ -f "{{ .Values.churnRig.reportFilePath }}" ] && grep -q first_snapshot_expired "{{ .Values.churnRig.reportFilePath }}"; then
+                  echo "  a snapshot has expired: objects are now being stranded"
+                  break
+                fi
+                i=$((i + 1))
+                sleep 30
+              done
+              if [ -f "{{ .Values.churnRig.reportFilePath }}" ] && ! grep -q first_snapshot_expired "{{ .Values.churnRig.reportFilePath }}"; then
+                echo "no snapshot expired in 30 minutes; the loop will still run, but expect it to find nothing yet" >&2
+              fi
+              {{- else }}
+              echo "churnRig.enabled is false: running the loop against a pre-existing repository, no wait"
+              {{- end }}
+              # int64 on every bare number here: values.yaml decodes a large
+              # integer as float64, and Go's default float formatting renders
+              # it in scientific notation (e.g. "1e+05"), which this tool's
+              # argparse int() refuses.
+              args="--cycles {{ .Values.qualify.cycles | int64 }} --start {{ .Values.qualify.start | int64 }} --mode {{ .Values.qualify.mode }}"
+              args="$args --min-docs-per-shard {{ .Values.qualify.minDocsPerShard | int64 }}"
+              args="$args --settle-timeout {{ .Values.qualify.settleTimeout | int64 }}"
+              args="$args --fresh-snapshots {{ .Values.qualify.freshSnapshots | int64 }}"
+              {{- if .Values.qualify.settlePoll }}
+              args="$args --settle-poll {{ .Values.qualify.settlePoll }}"
+              {{- end }}
+              args="$args --sleep {{ .Values.qualify.sleep | int64 }}"
+              args="$args --transport {{ .Values.qualify.transport }}"
+              args="$args --endpoint {{ .Values.qualify.endpoint }} --region {{ .Values.qualify.region }}"
+              {{- if .Values.qualify.ociNamespace }}
+              args="$args --namespace {{ .Values.qualify.ociNamespace }}"
+              {{- end }}
+              args="$args --bucket {{ .Values.qualify.bucket }} --prefix {{ .Values.qualify.prefix }}"
+              args="$args --credentials /secrets/{{ .Values.credentials.keys.credentialsJson }}"
+              {{- if .Values.qualify.askElasticsearch }}
+              args="$args --elasticsearch {{ include "rig.esUrl" . }}"
+              args="$args --es-user {{ .Values.credentials.harnessEsUser }}"
+              args="$args --es-password-file /secrets/{{ .Values.credentials.keys.esPassword }}"
+              {{- end }}
+              args="$args --repository {{ .Values.qualify.repository }}"
+              args="$args --data-stream {{ .Values.qualify.dataStream }}"
+              args="$args --out {{ .Values.qualify.outPath }}"
+              {{- if .Values.qualify.timeout }}
+              args="$args --timeout {{ .Values.qualify.timeout }}"
+              {{- end }}
+              {{- if .Values.qualify.dryRunOnly }}
+              args="$args --dry-run-only"
+              echo "DRY RUN ONLY. Nothing will be deleted. qualify.dryRunOnly is true."
+              {{- else }}
+              echo "DELETES ARE ENABLED for this run (qualify.dryRunOnly is false)."
+              {{- end }}
+              echo "starting: python3 reclaim_test_protocol.py $args"
+              # shellcheck disable=SC2086
+              python3 reclaim_test_protocol.py $args
+              status=$?
+              echo "done, exit $status"
+              echo "totals, read from the per-cycle execute files rather than the summary:"
+              if ls "{{ .Values.qualify.outPath }}"/exec-*.txt >/dev/null 2>&1; then
+                awk '/^deleted:/{d+=$2} /^failed:/{f+=$2} /^unconfirmed:/{u+=$2}
+                     END {printf "    deleted=%d failed=%d unconfirmed=%d\n", d, f, u}' \
+                    "{{ .Values.qualify.outPath }}"/exec-*.txt
+              else
+                echo "    no execute files: nothing was deleted"
+              fi
+              exit "$status"
+          resources:
+            {{- toYaml .Values.qualify.resources | nindent 12 }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: state
+              mountPath: /state
+            - name: credentials
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        {{- include "rig.sourceVolumes" . | nindent 8 }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "rig.fullname" . }}-state
+        - name: credentials
+          secret:
+            secretName: {{ include "rig.credentialsSecretName" . }}
+            defaultMode: 0600
+{{- end }}

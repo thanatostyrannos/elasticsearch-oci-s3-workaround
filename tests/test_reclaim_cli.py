@@ -135,6 +135,19 @@ class DryRunSendsNothing(ReclaimCase):
             self.assertEqual(rig.keys(), {"a", "b"})
         self.assertIn("DRY RUN", stderr)
 
+    def test_the_dry_run_prints_a_command_that_execute_will_accept(self):
+        # The dry run tells the operator what to run next, and README copied
+        # that text verbatim into its delete step. The printed command named
+        # only the approval, so running exactly what the tool suggested hit
+        # the corroboration gate and exited EXIT_USAGE. A tool that prints an
+        # invocation it will then refuse teaches the wrong command to
+        # everyone who copies it, including whoever writes the docs.
+        write_manifest(self.manifest_path, ["a"])
+        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+            _code, _stdout, stderr = self.run_cli(rig, execute=False)
+        self.assertIn("--without-elasticsearch", stderr)
+        self.assertIn("--elasticsearch", stderr)
+
     def test_the_dry_run_prints_the_exact_approval_needed_next(self):
         # The dry run's printed digest and row count must be the ones
         # verify_approval actually accepts, so an operator copying them

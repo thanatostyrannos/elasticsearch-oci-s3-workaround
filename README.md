@@ -254,7 +254,7 @@ bucket root and makes every snapshot you have unreachable, with
 `snapshot_sizes.py` reads Elasticsearch and needs no bucket credential. The
 audit and the reclaim tool do read the bucket, so they need the Amazon S3
 Compatibility API credential described above. All of it needs nothing but
-Python 3.10 or newer.
+Python 3.9 or newer.
 
 ```bash
 git clone https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround
@@ -440,7 +440,7 @@ sweeper's module docstring has the drain procedure.
 One directory:
 
 ```
-generation_chain/     49 modules, 350 KB of Python, standard library only
+generation_chain/     50 modules, 375 KB of Python, standard library only
 ```
 
 Nothing to install, no packaging, no requirements file, no third-party import.
@@ -464,7 +464,7 @@ If even that is blocked, download the ZIP through a browser and copy
 If you have a clone, copy the directory somewhere, `cd` to its parent, and run
 `python3 -m generation_chain`.
 
-You also need Python 3.10 or newer, and a credentials file you write yourself.
+You also need Python 3.9 or newer, and a credentials file you write yourself.
 You do not need the tests, the evidence, the docs, `snapshot_sizes.py`, or
 anything else in this repository.
 
@@ -743,8 +743,21 @@ python3 -m generation_chain.reclaim \
   --prefix <base_path> --credentials creds.json \
   --execute --approve-digest <the digest the dry run printed> \
   --approve-rows <the count the dry run printed> \
+  --elasticsearch https://<cluster>:9200 --es-repository <repository> \
   --report deleted.jsonl
 ```
+
+**`--execute` will not run without you saying which of those last two lines you
+mean.** The manifest's protection was decided when it was derived, and a
+searchable snapshot mounted since then is not in it. So the tool makes you
+choose: pass `--elasticsearch` with `--es-repository` to re-check the veto
+against the cluster as it is now, as above, or pass `--without-elasticsearch`
+to state that there is no cluster to ask, which is the case when the repository
+is orphaned and its cluster is gone.
+
+Neither is the default. Defaulting to checking would break anyone reclaiming an
+orphaned repository, and defaulting to not checking would make the dangerous
+path the quiet one.
 
 The approval covers that one file. An approval for one manifest will not execute
 another, and editing a manifest invalidates its approval. It refuses a manifest missing its
@@ -794,7 +807,7 @@ come back is the only check that catches it.
 
 ## The tools
 
-Four, all Python 3.10+ and standard library only. Two are the working pair, an
+Four, all Python 3.9+ and standard library only. Two are the working pair, an
 audit that names what leaked and a separate tool that reclaims it. The other two
 exist to measure and to check.
 

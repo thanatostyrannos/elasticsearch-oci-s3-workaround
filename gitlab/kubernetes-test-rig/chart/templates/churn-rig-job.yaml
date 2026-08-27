@@ -1,0 +1,147 @@
+{{/* python3 snapshot_churn_rig.py run: builds a leaking repository on purpose. */}}
+{{- if .Values.churnRig.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rig.fullname" . }}-churn-rig
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+    app: {{ include "rig.fullname" . }}-churn-rig
+    rig-component: churn-rig
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: {{ include "rig.fullname" . }}-churn-rig
+    spec:
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "rig.sourceInitContainers" . | nindent 8 }}
+      containers:
+        - name: churn-rig
+          image: {{ .Values.image.python | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: {{ include "rig.workdir" . }}
+          command: ["python3", "snapshot_churn_rig.py", "run"]
+          args:
+            - --es
+            - {{ include "rig.esUrl" . | quote }}
+            - --user
+            - {{ .Values.credentials.harnessEsUser | quote }}
+            - --password-file
+            - /secrets/{{ .Values.credentials.keys.esPassword }}
+            {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+            - --ca-cert
+            - /es-ca-cert/ca.crt
+            {{- end }}
+            {{- if .Values.elasticsearch.insecureTls }}
+            - --insecure
+            {{- end }}
+            - --prefix
+            - {{ .Values.churnRig.prefix | quote }}
+            {{- if .Values.churnRig.dataStream }}
+            - --data-stream
+            - {{ .Values.churnRig.dataStream | quote }}
+            {{- end }}
+            - --state-file
+            - {{ .Values.churnRig.stateFilePath | quote }}
+            - --repo-type
+            - {{ .Values.churnRig.repository.type | quote }}
+            - --bucket
+            - {{ .Values.churnRig.repository.bucket | quote }}
+            - --s3-client
+            - {{ .Values.churnRig.repository.s3Client | quote }}
+            {{- if .Values.churnRig.repository.basePath }}
+            - --base-path
+            - {{ .Values.churnRig.repository.basePath | quote }}
+            {{- end }}
+            {{- if .Values.churnRig.repository.location }}
+            - --location
+            - {{ .Values.churnRig.repository.location | quote }}
+            {{- end }}
+            {{- if .Values.churnRig.listing.enabled }}
+            {{- if .Values.churnRig.listing.s3Endpoint }}
+            - --s3-endpoint
+            - {{ .Values.churnRig.listing.s3Endpoint | quote }}
+            {{- end }}
+            - --s3-region
+            - {{ .Values.churnRig.listing.s3Region | quote }}
+            {{- if .Values.churnRig.listing.s3AccessKey }}
+            - --s3-access-key
+            - {{ .Values.churnRig.listing.s3AccessKey | quote }}
+            {{- end }}
+            - --s3-secret-key-file
+            - /secrets/{{ .Values.credentials.keys.s3SecretAccessKey }}
+            {{- end }}
+            - --snapshot-interval
+            - {{ .Values.churnRig.snapshotInterval | quote }}
+            - --retention
+            - {{ .Values.churnRig.retention | quote }}
+            - --retention-check-interval
+            - {{ .Values.churnRig.retentionCheckInterval | quote }}
+            {{- if .Values.churnRig.slmCron }}
+            - --slm-cron
+            - {{ .Values.churnRig.slmCron | quote }}
+            {{- end }}
+            - --ilm-poll-interval
+            - {{ .Values.churnRig.ilmPollInterval | quote }}
+            - --docs-per-second
+            # int64, not quote alone: a bare integer from values.yaml decodes as
+            # float64, and Go's default float formatting renders anything at or
+            # above one million in scientific notation ("1e+08"), which this
+            # tool's argparse int() then refuses. int64 forces normal decimal.
+            - {{ .Values.churnRig.docsPerSecond | int64 | quote }}
+            - --doc-bytes
+            - {{ .Values.churnRig.docBytes | int64 | quote }}
+            - --shards
+            - {{ .Values.churnRig.shards | int64 | quote }}
+            - --rollover-max-age
+            - {{ .Values.churnRig.rolloverMaxAge | quote }}
+            - --rollover-max-docs
+            - {{ .Values.churnRig.rolloverMaxDocs | int64 | quote }}
+            - --frozen-min-age
+            - {{ .Values.churnRig.frozenMinAge | quote }}
+            - --delete-min-age
+            - {{ .Values.churnRig.deleteMinAge | quote }}
+            - --duration
+            - {{ .Values.churnRig.duration | quote }}
+            - --report-interval
+            - {{ .Values.churnRig.reportInterval | quote }}
+            - --report-file
+            - {{ .Values.churnRig.reportFilePath | quote }}
+          resources:
+            {{- toYaml .Values.churnRig.resources | nindent 12 }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: state
+              mountPath: /state
+            - name: credentials
+              mountPath: /secrets
+              readOnly: true
+            {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+            - name: es-ca-cert
+              mountPath: /es-ca-cert
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- include "rig.sourceVolumes" . | nindent 8 }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "rig.fullname" . }}-state
+        - name: credentials
+          secret:
+            secretName: {{ include "rig.credentialsSecretName" . }}
+            defaultMode: 0600
+        {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+        - name: es-ca-cert
+          configMap:
+            name: {{ include "rig.fullname" . }}-es-ca-cert
+        {{- end }}
+{{- end }}

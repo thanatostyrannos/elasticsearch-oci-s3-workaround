@@ -1,0 +1,65 @@
+{{/*
+Templated from manifests/ingress.yaml. Publishes the in-cluster
+Elasticsearch and MinIO through an existing ingress controller instead of
+kubectl port-forward, which is a process on your workstation that dies with
+the pod it points at. Only useful when elasticsearch.external is false
+and/or minio.enabled is true; enabling this against an external
+Elasticsearch has nothing to route to.
+*/}}
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.elasticsearch.external }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rig.fullname" . }}-es
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.elasticsearchHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "rig.fullname" . }}-es-http
+                port:
+                  number: 9200
+{{- end }}
+{{- if .Values.minio.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rig.fullname" . }}-minio
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  rules:
+    - host: {{ .Values.ingress.minioHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "rig.fullname" . }}-minio
+                port:
+                  number: 9000
+    - host: {{ .Values.ingress.minioConsoleHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "rig.fullname" . }}-minio
+                port:
+                  number: 9001
+{{- end }}
+{{- end }}

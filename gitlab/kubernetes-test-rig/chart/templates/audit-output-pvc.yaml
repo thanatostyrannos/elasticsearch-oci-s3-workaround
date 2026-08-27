@@ -1,0 +1,19 @@
+{{/*
+Survives across CronJob runs and across successfulJobsHistoryLimit pod
+garbage collection, unlike the CronJob pod's own filesystem.
+*/}}
+{{- if and .Values.auditCronJob.enabled .Values.auditCronJob.persistOutput }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "rig.fullname" . }}-audit-output
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.auditCronJob.outputStorageSize | quote }}
+{{- end }}

@@ -1,0 +1,399 @@
+# Every option every tool this chart runs accepts, grouped by tool. Comments
+# are taken from each tool's --help text. Run `--help` yourself before
+# changing a default here; this file is meant to stay in sync with it.
+#
+#   python3 -m generation_chain --help              (audit, read-only)
+#   python3 snapshot_churn_rig.py run --help         (load generator)
+#   python3 snapshot_churn_rig.py teardown --help
+#   python3 reclaim_test_protocol.py --help          (the audit-and-reclaim loop)
+#
+# generation_chain.reclaim, the tool that actually deletes, is never invoked
+# directly by this chart. reclaim_test_protocol.py calls it internally, one
+# cycle at a time, gated by the dry-run/approval-digest handshake described
+# in that tool's own --help. There is no values.yaml key that skips that
+# handshake.
+
+# Short on purpose. Every object name in this chart is
+# "<release>-<nameOverride>-<suffix>" (e.g. "-teardown-manual",
+# "-es-s3-secure-settings"), and a Job's name becomes a pod label
+# (job-name), which Kubernetes caps at 63 characters. The chart's own
+# package name (elasticsearch-oci-s3-workaround-test-rig) is far too long
+# for that budget once a release name and a suffix are added, so this
+# overrides it. Change it if you like, but keep release-name plus this
+# plus your longest suffix (longest is "-es-s3-secure-settings", 22
+# characters, though only Job names are hard-capped) under 63.
+nameOverride: "es-rig"
+
+# -----------------------------------------------------------------------
+# Namespace
+# -----------------------------------------------------------------------
+namespace:
+  # If false, this chart's resources go into whatever namespace `helm
+  # install -n` names, and you are responsible for creating it.
+  create: true
+  name: es-rig
+
+# -----------------------------------------------------------------------
+# How the tool's code reaches a pod
+# -----------------------------------------------------------------------
+# This project has no dependency and no install step: "a copied directory
+# runs as it stands" (generation_chain/__main__.py). There is no published
+# container image with the code baked in, so this chart does not assume one.
+# An initContainer clones the repository holding this tool into an emptyDir
+# that every job mounts read-only, and the runtime container is a plain
+# python:3.12-slim. If you built and pushed your own image with the code
+# already inside it, set source.enabled to false and point image.python at
+# that image instead; the initContainer step is skipped.
+source:
+  enabled: true
+  # A private GitLab this chart runs against still needs to be told where the
+  # code lives; that is your fork or mirror of this project, not this chart's
+  # own repository.
+  repoUrl: "https://gitlab.example.com/you/elasticsearch-oci-s3-workaround.git"
+  ref: "main"           # branch, tag or commit; pin a commit for a repeatable rig
+  cloneImage: "alpine/git:2.47.2"
+  # A private repository needs credentials for the clone. Reference a Secret
+  # holding an SSH deploy key (mounted as an SSH identity) or a
+  # username+token embedded in repoUrl (https://user:token@host/...), never
+  # entered here in plain text.
+  existingSshSecret: ""    # Secret with key "id_rsa" or "id_ed25519"; leave empty for a public repo
+
+image:
+  python: "python:3.12-slim"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# -----------------------------------------------------------------------
+# Credentials
+# -----------------------------------------------------------------------
+# Every tool here reads secrets from a file, never a command-line argument or
+# a bare environment variable in a container spec (a container's environment
+# shows up in `kubectl describe`, an argument shows up in `ps` inside the
+# pod). A Secret volume mounted with defaultMode 0600 already satisfies the
+# "must be 600 or 400" check every one of these tools makes; unlike the
+# GitLab CI variant, no `install -m 600` step is needed here.
+#
+# Leave existingSecret empty to have this chart create the Secret below from
+# the plaintext values that follow (fine for a first local run against MinIO).
+# For anything pointed at a real cluster or a real bucket, create the Secret
+# yourself and set existingSecret, so the credential never appears in
+# `helm install --values`, a CI log, or this release's Helm history:
+#
+#   kubectl create secret generic rig-credentials -n es-rig \
+#     --from-file=creds.json=./creds.json \
+#     --from-literal=s3-secret-access-key=... \
+#     --from-literal=es-password=...
+credentials:
+  existingSecret: ""
+  # Keys inside existingSecret (or the Secret this chart creates), matching
+  # what each tool mounts.
+  keys:
+    credentialsJson: creds.json                 # --credentials for the audit and the loop
+    s3SecretAccessKey: s3-secret-access-key      # the load generator's own --s3-secret-key-file
+    esPassword: es-password                      # the harness's own --password-file / --es-password-file
+
+  # Only read when existingSecret is empty.
+  s3:
+    accessKeyId: "CHANGEME-access-key-id"          # an Oracle Customer Secret Key id, not your console password
+    secretAccessKey: "CHANGEME-secret-access-key"
+  elasticsearch:
+    # generation_chain's OWN corroboration credential, written into
+    # creds.json's "elasticsearch" section. Defaults to an API key: a leaked
+    # key can be scoped and revoked on its own, a leaked password takes the
+    # whole account with it.
+    authMethod: apiKey        # apiKey | usernamePassword
+    apiKey: "CHANGEME-es-api-key"
+    username: "elastic"
+    password: "CHANGEME-es-password"              # only used when authMethod is usernamePassword
+  # The harness's OWN login for its OWN calls to the cluster: creating and
+  # polling ILM/SLM policies, health checks, the segment-mode shard wait.
+  # This is a DIFFERENT credential from credentials.elasticsearch above: the
+  # tools read it from a different place (a flag, not creds.json), and it
+  # needs write access to cluster settings, while the corroboration
+  # credential above only ever needs read access to the repository metadata
+  # it corroborates against.
+  harnessEsUser: "elastic"
+  harnessEsPassword: "CHANGEME-harness-es-password"
+
+# -----------------------------------------------------------------------
+# Elasticsearch
+# -----------------------------------------------------------------------
+# This tool has no client-certificate (mTLS) support anywhere in its
+# Elasticsearch path: every code path authenticates with a password, an API
+# key, or basic auth, never a client certificate. There is deliberately no
+# values.yaml key for one.
+elasticsearch:
+  # true: every tool below points at a standalone cluster via `external.url`.
+  # This is the default because not every cluster this chart is installed
+  # into also runs Elasticsearch; a cluster you already have is usually the
+  # one you want to test against.
+  # false: deploy the in-cluster ECK-managed Elasticsearch from
+  # elasticsearch.eck below and point every tool at that instead.
+  external: true
+  url: "https://your-cluster.example.com:9200"
+  # PEM content of a CA this cluster's certificate chains to, if it is not
+  # already trusted by the python:3.12-slim image. Mounted read-only and
+  # passed as --ca-cert (the load generator) and --es-ca-cert (the audit).
+  # reclaim_test_protocol.py's OWN cluster calls (its --es-user /
+  # --es-password-file, used for the segment-mode shard wait) take no CA or
+  # TLS flag at all in this tool's current CLI; see the chart README.
+  caCert: ""
+  # Skip TLS verification for a lab cluster with a self-signed certificate.
+  # Only the load generator (snapshot_churn_rig.py) exposes this flag
+  # (--insecure); the audit has no equivalent and relies on --es-ca-cert
+  # instead.
+  insecureTls: false
+
+  # An in-cluster, ECK-managed Elasticsearch, templated from this project's
+  # manifests/elasticsearch.yaml. Requires the ECK operator already
+  # installed (see manifests/README.md); this chart does not install the
+  # operator itself. Only rendered when elasticsearch.external is false.
+  eck:
+    version: "9.5.2"
+    nodeCount: 1
+    heapSize: "8g"          # -Xms/-Xmx; half of memoryLimit is the ratio Elasticsearch expects
+    memoryLimit: "16Gi"
+    memoryRequest: "16Gi"
+    # Off-heap and REQUIRED: without it a data_frozen node refuses to mount a
+    # partial searchable snapshot and the churn rig's frozen phase stalls.
+    # It counts against the container memory limit alongside the heap.
+    sharedCacheSize: "2gb"
+    disableTls: true        # matches manifests/elasticsearch.yaml: plain HTTP on 9200
+    # The OCI S3-compatibility client Elasticsearch itself uses to register
+    # a repository with --s3-client oci. Leave namespace/region empty if you
+    # are not registering an OCI-backed repository from the in-cluster ES.
+    ociNamespace: ""
+    ociRegion: ""
+
+# -----------------------------------------------------------------------
+# MinIO (optional local control alongside OCI)
+# -----------------------------------------------------------------------
+# A local object store that reproduces the same batch-delete-rejection fault
+# as OCI, for a rig that needs no OCI credentials at all to prove itself.
+# Pinned deliberately to RELEASE.2025-01-18T00-31-37Z, the last release that
+# rejects the request; see manifests/README.md for why the next release does
+# not.
+minio:
+  enabled: false
+  image: "minio/minio:RELEASE.2025-01-18T00-31-37Z"
+  rootUser: "CHANGEME-access"
+  rootPassword: "CHANGEME-secret"
+  bucket: "es-snapshots"
+  storageSize: "10Gi"
+  storageClassName: ""     # empty uses the cluster default StorageClass
+
+# -----------------------------------------------------------------------
+# Ingress (reach the rig without kubectl port-forward)
+# -----------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: "traefik"
+  elasticsearchHost: "es-rig.demo"
+  minioHost: "minio-rig.demo"
+  minioConsoleHost: "minio-console.demo"
+
+# =========================================================================
+# The load generator: python3 snapshot_churn_rig.py run
+# =========================================================================
+# Builds a leaking repository on purpose, so the loop below has something to
+# find. Defaults match the published run recorded in FACTS.md.
+churnRig:
+  enabled: true
+  # namespace: (cluster:) --es/--user/--password-file/--ca-cert/--insecure
+  # come from the shared `elasticsearch` and `credentials` blocks above.
+  prefix: "leaktest"              # (namespace:) unique namespace for everything this run
+                                   # creates; lowercase letters and digits only
+  dataStream: ""                  # (namespace:) write into this instead of <prefix>-stream;
+                                   # empty uses the default
+  stateFilePath: "/state/rig-state.json"   # (namespace:) --state-file; teardown needs this
+
+  repository:
+    type: s3                      # (repository:) --repo-type {s3,fs}; s3 reproduces the leak,
+                                   # fs exists for plumbing tests
+    bucket: "es-snapshots"        # --bucket; the s3 repository writes into this
+    s3Client: "oci"                # --s3-client; named client in elasticsearch.yml whose
+                                   # credentials the repository uses ("default" for MinIO
+                                   # per manifests/elasticsearch.yaml, "oci" for OCI)
+    basePath: ""                  # --base-path; key prefix inside the bucket; empty
+                                   # defaults to churnRig.prefix
+    location: ""                  # --location; filesystem path, only for repo-type fs
+
+  # (repository listing, optional; enables object-count, generation-count and
+  # leak fields in reports) — the load generator's OWN read access to the
+  # bucket, separate from the repository Elasticsearch itself registers.
+  listing:
+    enabled: false
+    s3Endpoint: ""                 # --s3-endpoint
+    s3Region: "us-east-1"          # --s3-region
+    s3AccessKey: ""                # --s3-access-key; not secret by itself, an access key id
+
+  snapshotInterval: "60s"          # --snapshot-interval; SLM's clock, one leak per interval
+                                    # once retention bites
+  retention: "5m"                  # --retention; how long a snapshot lives before SLM expires it
+  retentionCheckInterval: "5m"     # --retention-check-interval; without this the cluster
+                                    # default checks once a day at 01:30
+  slmCron: ""                      # --slm-cron; explicit cron schedule, overrides snapshotInterval
+  ilmPollInterval: "10s"           # --ilm-poll-interval; the cluster default of 10m stalls
+                                    # every short-age phase in the policy
+  docsPerSecond: 60                # --docs-per-second; ingest rate
+  docBytes: 1024                   # --doc-bytes; approximate payload size per document
+  shards: 2                        # --shards; primary shards per backing index
+  rolloverMaxAge: "24h"            # --rollover-max-age
+  rolloverMaxDocs: 100000000       # --rollover-max-docs
+  frozenMinAge: "2m"               # --frozen-min-age; how long after rollover ILM converts
+                                    # an index to a partial searchable snapshot
+  deleteMinAge: "10m"              # --delete-min-age; must leave the frozen phase time to finish
+  duration: "5h"                   # --duration; how long the script ingests and reports; SLM
+                                    # and ILM keep churning after it exits, until teardown
+  reportInterval: "60s"            # --report-interval
+  reportFilePath: "/state/reports.jsonl"   # --report-file
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+
+# =========================================================================
+# The loop: python3 reclaim_test_protocol.py
+# =========================================================================
+# Exercises the metadata and segment paths of the audit against the leaking
+# repository the load generator built, repeatedly. Deletes stay off by
+# default; only a deliberate flip of qualify.dryRunOnly turns them on, and
+# even then every cycle still goes through the dry-run/approval-digest
+# handshake generation_chain.reclaim itself enforces.
+qualify:
+  enabled: true
+  cycles: 50                       # --cycles; fifty is the point the published results
+                                    # were considered to mean something
+  start: 1                         # --start; first cycle number, to resume an interrupted run
+  mode: "mixed"                    # --mode {mixed,metadata,segment}; mixed is the only
+                                    # setting that exercises both paths
+  minDocsPerShard: 1000            # --min-docs-per-shard; segment mode holds until the
+                                    # emptiest primary shard holds this many documents
+  settleTimeout: 600               # --settle-timeout (seconds); give up waiting and audit
+                                    # anyway, recording that it did not settle
+  freshSnapshots: 2                # --fresh-snapshots; snapshots that must complete AFTER
+                                    # shards are populated, in segment mode
+  settlePoll: ""                   # --settle-poll; empty uses the tool's own default
+  sleep: 30                        # --sleep (seconds); between cycles
+  transport: "s3"                  # --transport {s3,oci}
+  endpoint: "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"  # --endpoint (required)
+  region: "us-ashburn-1"           # --region (required)
+  bucket: "es-snapshots"           # --bucket (required)
+  prefix: "leaktest/"              # --prefix (required); keep the trailing slash
+  ociNamespace: ""                 # --namespace; required for --transport oci
+  askElasticsearch: true           # sets --elasticsearch; ask the cluster what to protect
+                                    # while deriving. Needs credentials.elasticsearch (in
+                                    # creds.json) as well as credentials.harnessEsUser /
+                                    # harnessEsPassword for this harness's OWN cluster calls
+  repository: "leaktest-repo"      # --repository
+  dataStream: "leaktest-stream"    # --data-stream; the stream whose shards segment mode watches
+  outPath: "/state/test-cycle-output"    # --out; on the same PVC as the load generator's
+                                          # --state-file, so a Job that inspects it later
+                                          # (or `kubectl cp`) finds it without a second volume
+  timeout: ""                      # --timeout; empty uses the tool's own default
+  dryRunOnly: true                 # --dry-run-only; audit and dry run, never execute.
+                                    # DELETES STAY OFF UNTIL THIS IS EXPLICITLY SET TO false.
+
+  # Run as a plain Job, never a CronJob. A scheduled qualify run would put the
+  # delete path on a timer, and the safety property this whole split
+  # depends on is that the thing on a timer cannot delete anything.
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+  activeDeadlineSeconds: 21600     # 6h, matching the CI variant's job timeout
+  backoffLimit: 0                   # do not silently retry a run that touches delete approvals
+
+# =========================================================================
+# Teardown: python3 snapshot_churn_rig.py teardown
+# =========================================================================
+# The rig's state lives inside Elasticsearch and in the bucket, nowhere a
+# Kubernetes controller reaches on its own, so this chart tears it down two
+# ways: a Helm hook that runs automatically on `helm uninstall`, and a
+# standalone Job template you can run by hand as a safety net if the hook's
+# pod never started (e.g. the cluster was unreachable at uninstall time).
+teardown:
+  hook:
+    enabled: true          # run automatically on `helm uninstall` (post-delete hook)
+  standalone:
+    enabled: false          # also render an always-present Job you can trigger with
+                             # `kubectl create job --from=job/<release>-teardown-manual manual-1`
+  deriveFromPrefix: false   # --derive-from-prefix; proceed without a state file. Read the
+                             # tool's own refusal text before setting this: derived names
+                             # are ordinary ones and may belong to a repository this rig
+                             # never created
+  purgeBucket: true          # --purge-bucket; also remove the leaked blobs with
+                             # single-object deletes, which succeed even where the batch
+                             # delete fails. Without this the leaked corpus survives for
+                             # measurement, which is the point of a QUALIFICATION run but
+                             # not of a rig you are tearing down for good
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+# =========================================================================
+# The scheduled audit: python3 -m generation_chain
+# =========================================================================
+# Read-only. Its HTTP transport permits GET and HEAD, and the one POST that
+# lists a bucket, and refuses anything else. It does not import the package
+# that deletes. This is the one piece of the rig safe to run on a schedule,
+# matching gitlab/readonly-scan for a target reachable from inside the
+# cluster.
+auditCronJob:
+  enabled: true
+  schedule: "0 3 * * *"       # daily at 03:00; adjust to your bucket's write volume
+  concurrencyPolicy: Forbid    # never run two audits of the same repository at once
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  transport: "s3"               # --transport {s3,oci,local}
+  localRepo: ""                 # --local-repo; a mirrored bucket on disk, instead of transport/endpoint/bucket
+  endpoint: "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"  # --endpoint
+  region: "us-ashburn-1"        # --region
+  bucket: "es-snapshots"        # --bucket
+  prefix: "leaktest/"           # --prefix
+  ociNamespace: ""              # --namespace; OCI Object Storage namespace, --transport oci only
+  ociRegion: ""                 # --oci-region; --transport oci only
+  profile: ""                   # --profile; profile name inside ~/.aws/credentials
+  ociProfile: ""                # --oci-profile; profile name inside ~/.oci/config
+
+  askElasticsearch: false       # sets --elasticsearch; empty repository coverage is honest
+                                 # without a cluster, it just cannot see mounts
+  esRepository: ""              # --es-repository; required if askElasticsearch is true
+
+  concurrency: 8                 # --concurrency (max 32); outstanding store reads at once
+  maxRam: ""                     # --max-ram, e.g. "4GiB"; cannot be set together with memoryMb
+  memoryMb: ""                   # --memory-mb; kept for parity with the CI variant, leave
+                                  # both empty to let the run ask the host
+  insecureHttp: false            # --insecure-http; only for a lab store on a network you trust
+  quiet: true                    # --quiet; drop per-minute progress lines, keep the final report
+
+  writeClassification: true      # write --classification, every key and its disposition
+  writeCoverageJson: true        # write --coverage-json, the machine-readable coverage record
+
+  # A CronJob's pods are garbage collected once successfulJobsHistoryLimit /
+  # failedJobsHistoryLimit is exceeded, which would take the manifest with
+  # it if it only ever lived in the pod's own filesystem. true keeps every
+  # run's output (one timestamped directory per run) on a small PVC instead,
+  # retrievable later with `kubectl cp`.
+  persistOutput: true
+  outputStorageSize: "2Gi"
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"

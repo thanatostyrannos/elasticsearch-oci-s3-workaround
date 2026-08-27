@@ -1,0 +1,212 @@
+{{/*
+Chart name, truncated the way every Helm starter chart does it, so generated
+object names stay under Kubernetes' 63 character label limit.
+*/}}
+{{- define "rig.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "rig.fullname" -}}
+{{- printf "%s-%s" .Release.Name (include "rig.name" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "rig.namespace" -}}
+{{- .Values.namespace.name | default .Release.Namespace -}}
+{{- end -}}
+
+{{- define "rig.labels" -}}
+app.kubernetes.io/name: {{ include "rig.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
+{{- end -}}
+
+{{/*
+The name of the Secret every tool's credentials come from: either the one
+this chart creates from values.credentials.*, or an operator-supplied one.
+*/}}
+{{- define "rig.credentialsSecretName" -}}
+{{- if .Values.credentials.existingSecret -}}
+{{- .Values.credentials.existingSecret -}}
+{{- else -}}
+{{- printf "%s-credentials" (include "rig.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The Elasticsearch endpoint every tool points at: the external URL, or the
+in-cluster ECK service when elasticsearch.external is false.
+*/}}
+{{- define "rig.esUrl" -}}
+{{- if .Values.elasticsearch.external -}}
+{{- .Values.elasticsearch.url -}}
+{{- else -}}
+{{- printf "http://%s-es-http.%s.svc:9200" (include "rig.fullname" .) (include "rig.namespace" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The initContainer that clones this tool's source into /workspace, shared by
+every Job/CronJob pod in this chart. A no-op list when source.enabled is
+false, so a caller can `{{- include "rig.sourceInitContainers" . | nindent 6 }}`
+unconditionally.
+*/}}
+{{- define "rig.sourceInitContainers" -}}
+{{- if .Values.source.enabled }}
+- name: clone-source
+  image: {{ .Values.source.cloneImage | quote }}
+  command:
+    - sh
+    - -c
+    - |
+      set -eu
+      {{- if .Values.source.existingSshSecret }}
+      mkdir -p /root/.ssh
+      cp /ssh/* /root/.ssh/
+      chmod 600 /root/.ssh/*
+      ssh-keyscan -H "$(echo "$REPO_URL" | sed -E 's#.*@##; s#:.*##; s#/.*##')" >> /root/.ssh/known_hosts 2>/dev/null || true
+      {{- end }}
+      git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" /workspace
+  env:
+    - name: REPO_URL
+      value: {{ .Values.source.repoUrl | quote }}
+    - name: REPO_REF
+      value: {{ .Values.source.ref | quote }}
+  {{- if .Values.source.existingSshSecret }}
+  volumeMounts:
+    - name: ssh-key
+      mountPath: /ssh
+      readOnly: true
+  {{- end }}
+  volumeMounts:
+    - name: workspace
+      mountPath: /workspace
+{{- end }}
+{{- end -}}
+
+{{/*
+Volumes backing rig.sourceInitContainers plus the shared workspace, common to
+every pod that runs one of these tools.
+*/}}
+{{- define "rig.sourceVolumes" -}}
+- name: workspace
+  emptyDir: {}
+{{- if and .Values.source.enabled .Values.source.existingSshSecret }}
+- name: ssh-key
+  secret:
+    secretName: {{ .Values.source.existingSshSecret }}
+    defaultMode: 0600
+{{- end }}
+{{- end -}}
+
+{{/*
+Where the tool's code lives inside the container: /workspace when this chart
+cloned it, or the image's own working directory when it is baked in.
+*/}}
+{{- define "rig.workdir" -}}
+{{- if .Values.source.enabled -}}
+/workspace
+{{- else -}}
+/app
+{{- end -}}
+{{- end -}}
+
+{{/*
+python3 snapshot_churn_rig.py teardown's full argument list, shared between
+the automatic pre-delete hook and the standalone manual safety-net Job so
+the two can never drift apart.
+*/}}
+{{- define "rig.teardownArgs" -}}
+- --es
+- {{ include "rig.esUrl" . | quote }}
+- --user
+- {{ .Values.credentials.harnessEsUser | quote }}
+- --password-file
+- /secrets/{{ .Values.credentials.keys.esPassword }}
+{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+- --ca-cert
+- /es-ca-cert/ca.crt
+{{- end }}
+{{- if .Values.elasticsearch.insecureTls }}
+- --insecure
+{{- end }}
+- --prefix
+- {{ .Values.churnRig.prefix | quote }}
+{{- if .Values.churnRig.dataStream }}
+- --data-stream
+- {{ .Values.churnRig.dataStream | quote }}
+{{- end }}
+- --state-file
+- {{ .Values.churnRig.stateFilePath | quote }}
+- --repo-type
+- {{ .Values.churnRig.repository.type | quote }}
+- --bucket
+- {{ .Values.churnRig.repository.bucket | quote }}
+- --s3-client
+- {{ .Values.churnRig.repository.s3Client | quote }}
+{{- if .Values.churnRig.repository.basePath }}
+- --base-path
+- {{ .Values.churnRig.repository.basePath | quote }}
+{{- end }}
+{{- if .Values.churnRig.repository.location }}
+- --location
+- {{ .Values.churnRig.repository.location | quote }}
+{{- end }}
+{{- if .Values.churnRig.listing.enabled }}
+{{- if .Values.churnRig.listing.s3Endpoint }}
+- --s3-endpoint
+- {{ .Values.churnRig.listing.s3Endpoint | quote }}
+{{- end }}
+- --s3-region
+- {{ .Values.churnRig.listing.s3Region | quote }}
+{{- if .Values.churnRig.listing.s3AccessKey }}
+- --s3-access-key
+- {{ .Values.churnRig.listing.s3AccessKey | quote }}
+{{- end }}
+- --s3-secret-key-file
+- /secrets/{{ .Values.credentials.keys.s3SecretAccessKey }}
+{{- end }}
+{{- if .Values.teardown.deriveFromPrefix }}
+- --derive-from-prefix
+{{- end }}
+{{- if .Values.teardown.purgeBucket }}
+- --purge-bucket
+{{- end }}
+{{- end -}}
+
+{{/*
+Volume mounts and volumes shared by every teardown container. Kept separate
+from rig.sourceVolumes because teardown also needs the state PVC (to read
+--state-file) and the credentials Secret, which not every pod using
+rig.sourceVolumes needs.
+*/}}
+{{- define "rig.teardownVolumeMounts" -}}
+- name: workspace
+  mountPath: /workspace
+- name: state
+  mountPath: /state
+- name: credentials
+  mountPath: /secrets
+  readOnly: true
+{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+- name: es-ca-cert
+  mountPath: /es-ca-cert
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "rig.teardownVolumes" -}}
+{{- include "rig.sourceVolumes" . }}
+- name: state
+  persistentVolumeClaim:
+    claimName: {{ include "rig.fullname" . }}-state
+- name: credentials
+  secret:
+    secretName: {{ include "rig.credentialsSecretName" . }}
+    defaultMode: 0600
+{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+- name: es-ca-cert
+  configMap:
+    name: {{ include "rig.fullname" . }}-es-ca-cert
+{{- end }}
+{{- end -}}

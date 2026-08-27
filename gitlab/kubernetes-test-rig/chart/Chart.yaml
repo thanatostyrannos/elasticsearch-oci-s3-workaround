@@ -1,0 +1,15 @@
+apiVersion: v2
+name: elasticsearch-oci-s3-workaround-test-rig
+description: >-
+  Deploys the qualification rig for elasticsearch-oci-s3-workaround: a load
+  generator that manufactures a leaking snapshot repository on purpose, a
+  loop that audits and reclaims what it finds, a scheduled read-only audit,
+  and optionally an in-cluster Elasticsearch and MinIO for a fully local run.
+type: application
+version: 0.1.0
+appVersion: "1.0.1"
+keywords:
+  - elasticsearch
+  - oracle-object-storage
+  - s3
+  - snapshot-lifecycle-management

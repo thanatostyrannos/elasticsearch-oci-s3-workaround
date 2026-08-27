@@ -1,0 +1,159 @@
+# The read-only audit, packaged for a private GitLab instance.
+#
+# This pipeline runs `python3 -m generation_chain`. That tool's HTTP transport
+# permits GET and HEAD, and the one POST that lists a bucket, and raises on
+# anything else. It does not import the package that deletes. There is no
+# --execute flag here because the audit does not have one: deleting is a
+# separate tool, `generation_chain.reclaim`, and this pipeline never calls it.
+#
+# Every option the audit accepts is a CI/CD variable below, so an operator can
+# point this at their own cluster and bucket without editing the script.
+#
+# Copy this file (and this directory's README) into a project that has a copy
+# of this tool's source at its root, and set the variables under Settings ->
+# CI/CD -> Variables. CREDS_JSON must be a File-type variable: GitLab then
+# hands the job a path instead of a value, which matches how this tool wants
+# secrets. It never takes one as an argument because argv is visible in `ps`
+# to every other user on the host. To use username and password instead of an
+# API key, put "username" and "password" in CREDS_JSON's elasticsearch
+# section instead of "api_key"; nothing else in this file changes.
+
+stages:
+  - audit
+
+default:
+  image: python:3.12-slim
+  before_script:
+    - python3 --version
+
+variables:
+  # --- what to scan -----------------------------------------------------
+  GENCHAIN_TRANSPORT: "s3"          # s3, oci or local; see GENCHAIN_LOCAL_REPO below
+  GENCHAIN_LOCAL_REPO: ""           # a mirrored bucket on disk; set this instead of
+                                     # TRANSPORT/ENDPOINT/BUCKET to scan a local mirror
+  GENCHAIN_ENDPOINT: "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
+  GENCHAIN_REGION: "us-ashburn-1"   # region for the s3 compatibility path
+  GENCHAIN_BUCKET: "es-snapshots"
+  GENCHAIN_PREFIX: "leaktest/"      # the repository's base_path inside the bucket
+  GENCHAIN_NAMESPACE: ""            # OCI Object Storage namespace, only for --transport oci
+  GENCHAIN_OCI_REGION: ""           # only for --transport oci
+  GENCHAIN_PROFILE: ""              # profile name inside ~/.aws/credentials, if you use that
+                                     # instead of GENCHAIN_CREDENTIALS
+  GENCHAIN_OCI_PROFILE: ""          # profile name inside ~/.oci/config, only for --transport oci
+
+  # --- the cluster --------------------------------------------------------
+  # Empty by default: the audit runs against the bucket alone and still
+  # produces a correct, honest manifest. Set this to also ask Elasticsearch
+  # what a mounted searchable snapshot is protecting, which the bucket alone
+  # cannot show. Without it the report just cannot see mounts; it does not
+  # lie in their absence.
+  GENCHAIN_ELASTICSEARCH: ""
+  GENCHAIN_ES_REPOSITORY: ""        # required if GENCHAIN_ELASTICSEARCH is set
+  GENCHAIN_ES_CA_CERT: ""           # path to a CA bundle, if the cluster serves a
+                                     # certificate this image does not already trust
+
+  # --- how it reads ---------------------------------------------------
+  GENCHAIN_CONCURRENCY: "8"         # outstanding store reads at once (max 32); 1 makes
+                                     # every read wait for the one before it, for a store
+                                     # that answers a burst with 429s
+  GENCHAIN_MAX_RAM: ""              # e.g. 4GiB; how much memory this run may plan on
+                                     # using. Cannot be combined with GENCHAIN_MEMORY_MB
+  GENCHAIN_MEMORY_MB: ""            # same meaning as MAX_RAM in megabytes, kept for
+                                     # scripts already using it; leave both empty to let
+                                     # the run ask the host
+  GENCHAIN_INSECURE_HTTP: "no"      # "yes" sends to a plain http endpoint that is not
+                                     # loopback. A manifest names exactly which production
+                                     # objects a delete would remove, so this is for a lab
+                                     # store on a network you trust, never for OCI
+  GENCHAIN_QUIET: "yes"             # "yes" drops the per-minute progress lines from the
+                                     # job log and keeps only the final report; a run
+                                     # against a large repository can otherwise print for
+                                     # ten minutes before the numbers appear
+
+  # --- what to keep ---------------------------------------------------
+  GENCHAIN_WRITE_CLASSIFICATION: "yes"  # "yes" also writes every key in the store and its
+                                         # disposition, not just the orphaned ones
+  GENCHAIN_WRITE_COVERAGE_JSON: "yes"   # "yes" also writes the machine-readable coverage
+                                         # record this pipeline's next run, or a human, can
+                                         # diff against
+
+# CREDS_JSON is a File-type CI/CD variable holding the JSON credentials file
+# this tool reads: an "s3" section (access_key_id, secret_access_key) for the
+# s3 and oci transports, and an "elasticsearch" section when
+# GENCHAIN_ELASTICSEARCH is set. Default that section to api_key, not
+# username/password: a stolen API key can be revoked by itself, a stolen
+# password takes the account with it.
+#
+#   { "s3": {"access_key_id": "...", "secret_access_key": "..."},
+#     "elasticsearch": {"api_key": "..."} }
+#
+# GitLab writes the file for you but does not promise its mode, and the tool
+# refuses anything looser than 600, so fix it here rather than let the audit
+# refuse with less context than this comment has.
+.credentials: &credentials
+  - install -m 600 "$CREDS_JSON" ./creds.json
+
+# ---------------------------------------------------------------------------
+# The only job in this pipeline. Read-only by construction: there is no
+# --execute flag on this tool, so there is nothing here that could delete.
+# ---------------------------------------------------------------------------
+
+audit:orphans:
+  stage: audit
+  script:
+    - *credentials
+    - |
+      args=(
+        python3 -m generation_chain
+        --transport "$GENCHAIN_TRANSPORT"
+        --endpoint "$GENCHAIN_ENDPOINT" --region "$GENCHAIN_REGION"
+        --bucket "$GENCHAIN_BUCKET" --prefix "$GENCHAIN_PREFIX"
+        --credentials ./creds.json
+        --manifest orphans.tsv
+      )
+      # `[ ... ] && args+=(...)` would abort the script under this shell's
+      # errexit whenever the test is false (an empty, opted-out variable), so
+      # every optional flag is gated by an if instead.
+      if [ -n "$GENCHAIN_LOCAL_REPO" ]; then args+=(--local-repo "$GENCHAIN_LOCAL_REPO"); fi
+      if [ -n "$GENCHAIN_NAMESPACE" ]; then args+=(--namespace "$GENCHAIN_NAMESPACE"); fi
+      if [ -n "$GENCHAIN_OCI_REGION" ]; then args+=(--oci-region "$GENCHAIN_OCI_REGION"); fi
+      if [ -n "$GENCHAIN_PROFILE" ]; then args+=(--profile "$GENCHAIN_PROFILE"); fi
+      if [ -n "$GENCHAIN_OCI_PROFILE" ]; then args+=(--oci-profile "$GENCHAIN_OCI_PROFILE"); fi
+      if [ -n "$GENCHAIN_ELASTICSEARCH" ]; then args+=(--elasticsearch "$GENCHAIN_ELASTICSEARCH" --es-repository "$GENCHAIN_ES_REPOSITORY"); fi
+      if [ -n "$GENCHAIN_ES_CA_CERT" ]; then args+=(--es-ca-cert "$GENCHAIN_ES_CA_CERT"); fi
+      if [ -n "$GENCHAIN_CONCURRENCY" ]; then args+=(--concurrency "$GENCHAIN_CONCURRENCY"); fi
+      if [ -n "$GENCHAIN_MAX_RAM" ]; then args+=(--max-ram "$GENCHAIN_MAX_RAM"); fi
+      if [ -n "$GENCHAIN_MEMORY_MB" ]; then args+=(--memory-mb "$GENCHAIN_MEMORY_MB"); fi
+      if [ "$GENCHAIN_INSECURE_HTTP" = "yes" ]; then args+=(--insecure-http); fi
+      if [ "$GENCHAIN_QUIET" = "yes" ]; then args+=(--quiet); fi
+      if [ "$GENCHAIN_WRITE_CLASSIFICATION" = "yes" ]; then args+=(--classification classification.tsv); fi
+      if [ "$GENCHAIN_WRITE_COVERAGE_JSON" = "yes" ]; then args+=(--coverage-json coverage.json); fi
+
+      # The human report (coverage numbers, then the orphaned/live/unexplained
+      # counts) always goes to stderr, whether or not --quiet is set. Split
+      # streams here so the log stays readable and the summary artifact holds
+      # exactly the report, nothing else.
+      status=0
+      "${args[@]}" 2> audit-summary.txt || status=$?
+      cat audit-summary.txt
+      exit "$status"
+  artifacts:
+    name: "orphans-$CI_PIPELINE_ID"
+    when: always
+    paths:
+      - orphans.tsv
+      - audit-summary.txt
+      - classification.tsv
+      - coverage.json
+    expire_in: 90 days
+  rules:
+    # Scheduled by default: this is the job worth running unattended, because
+    # nothing it does can remove an object. A "web" trigger still runs it
+    # manually for an ad hoc check between schedules.
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+      when: manual
+      allow_failure: true

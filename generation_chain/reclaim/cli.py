@@ -286,7 +286,13 @@ def _dry_run(manifest: ManifestData, batches, args: argparse.Namespace,
         f"  {header}: {value}\n"
         "To execute against this exact manifest:\n"
         f"  --execute --approve-digest {manifest.digest} "
-        f"--approve-rows {len(manifest.keys)}\n")
+        f"--approve-rows {len(manifest.keys)}\n"
+        "and one of these, because this manifest's protection was decided "
+        "when it was derived\nand a searchable snapshot mounted since then "
+        "is not in it:\n"
+        "  --elasticsearch URL --es-repository NAME   re-check the veto now\n"
+        "  --without-elasticsearch                    no cluster left to "
+        "ask\n")
     return EXIT_OK
 
 

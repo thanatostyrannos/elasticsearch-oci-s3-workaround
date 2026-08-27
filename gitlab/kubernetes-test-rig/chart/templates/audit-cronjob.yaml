@@ -1,0 +1,148 @@
+{{/*
+python3 -m generation_chain, read-only, on a schedule. Its HTTP transport
+permits GET and HEAD, and the one POST that lists a bucket, and refuses
+anything else. It does not import the package that deletes. This is the one
+piece of this chart safe to run unattended; the qualify Job is deliberately
+never a CronJob for the same reason.
+*/}}
+{{- if .Values.auditCronJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "rig.fullname" . }}-audit
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+    rig-component: audit
+spec:
+  schedule: {{ .Values.auditCronJob.schedule | quote }}
+  concurrencyPolicy: {{ .Values.auditCronJob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.auditCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.auditCronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "rig.labels" . | nindent 8 }}
+        app: {{ include "rig.fullname" . }}-audit
+        rig-component: audit
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: {{ include "rig.fullname" . }}-audit
+        spec:
+          restartPolicy: Never
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            {{- include "rig.sourceInitContainers" . | nindent 12 }}
+          containers:
+            - name: audit
+              image: {{ .Values.image.python | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              workingDir: {{ include "rig.workdir" . }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  args="--transport {{ .Values.auditCronJob.transport }}"
+                  {{- if .Values.auditCronJob.localRepo }}
+                  args="$args --local-repo {{ .Values.auditCronJob.localRepo }}"
+                  {{- end }}
+                  args="$args --endpoint {{ .Values.auditCronJob.endpoint }}"
+                  args="$args --region {{ .Values.auditCronJob.region }}"
+                  args="$args --bucket {{ .Values.auditCronJob.bucket }}"
+                  args="$args --prefix {{ .Values.auditCronJob.prefix }}"
+                  {{- if .Values.auditCronJob.ociNamespace }}
+                  args="$args --namespace {{ .Values.auditCronJob.ociNamespace }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.ociRegion }}
+                  args="$args --oci-region {{ .Values.auditCronJob.ociRegion }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.profile }}
+                  args="$args --profile {{ .Values.auditCronJob.profile }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.ociProfile }}
+                  args="$args --oci-profile {{ .Values.auditCronJob.ociProfile }}"
+                  {{- end }}
+                  args="$args --credentials /secrets/{{ .Values.credentials.keys.credentialsJson }}"
+                  args="$args --manifest /output/orphans.tsv"
+                  {{- if .Values.auditCronJob.writeClassification }}
+                  args="$args --classification /output/classification.tsv"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.writeCoverageJson }}
+                  args="$args --coverage-json /output/coverage.json"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.askElasticsearch }}
+                  args="$args --elasticsearch {{ include "rig.esUrl" . }}"
+                  args="$args --es-repository {{ .Values.auditCronJob.esRepository }}"
+                  {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+                  args="$args --es-ca-cert /es-ca-cert/ca.crt"
+                  {{- end }}
+                  {{- end }}
+                  {{- if .Values.auditCronJob.concurrency }}
+                  {{/* int64: a bare large integer from values.yaml decodes as float64,
+                       which Go renders in scientific notation past one million. */}}
+                  args="$args --concurrency {{ .Values.auditCronJob.concurrency | int64 }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.maxRam }}
+                  args="$args --max-ram {{ .Values.auditCronJob.maxRam }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.memoryMb }}
+                  args="$args --memory-mb {{ .Values.auditCronJob.memoryMb | int64 }}"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.insecureHttp }}
+                  args="$args --insecure-http"
+                  {{- end }}
+                  {{- if .Values.auditCronJob.quiet }}
+                  args="$args --quiet"
+                  {{- end }}
+                  RUN_DIR="/output/$(date -u +%Y%m%dT%H%M%SZ)"
+                  mkdir -p "$RUN_DIR"
+                  args=$(echo "$args" | sed "s#/output/#$RUN_DIR/#g")
+                  echo "starting: python3 -m generation_chain $args"
+                  status=0
+                  # The human report always goes to stderr; keep it as its
+                  # own artifact rather than mixed into pod logs that scroll
+                  # off after successfulJobsHistoryLimit CronJob runs.
+                  # shellcheck disable=SC2086
+                  python3 -m generation_chain $args 2> "$RUN_DIR/audit-summary.txt" || status=$?
+                  cat "$RUN_DIR/audit-summary.txt"
+                  exit "$status"
+              resources:
+                {{- toYaml .Values.auditCronJob.resources | nindent 16 }}
+              volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
+                - name: output
+                  mountPath: /output
+                - name: credentials
+                  mountPath: /secrets
+                  readOnly: true
+                {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+                - name: es-ca-cert
+                  mountPath: /es-ca-cert
+                  readOnly: true
+                {{- end }}
+          volumes:
+            {{- include "rig.sourceVolumes" . | nindent 12 }}
+            - name: output
+              {{- if .Values.auditCronJob.persistOutput }}
+              persistentVolumeClaim:
+                claimName: {{ include "rig.fullname" . }}-audit-output
+              {{- else }}
+              emptyDir: {}
+              {{- end }}
+            - name: credentials
+              secret:
+                secretName: {{ include "rig.credentialsSecretName" . }}
+                defaultMode: 0600
+            {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+            - name: es-ca-cert
+              configMap:
+                name: {{ include "rig.fullname" . }}-es-ca-cert
+            {{- end }}
+{{- end }}

@@ -1,0 +1,38 @@
+{{ include "rig.fullname" . }} deployed into namespace {{ include "rig.namespace" . }}.
+
+{{- if .Values.churnRig.enabled }}
+
+Load generator (Job {{ include "rig.fullname" . }}-churn-rig):
+  kubectl -n {{ include "rig.namespace" . }} logs -f job/{{ include "rig.fullname" . }}-churn-rig
+{{- end }}
+{{- if .Values.qualify.enabled }}
+
+Qualification loop (Job {{ include "rig.fullname" . }}-qualify):
+  kubectl -n {{ include "rig.namespace" . }} logs -f job/{{ include "rig.fullname" . }}-qualify
+{{- if .Values.qualify.dryRunOnly }}
+  qualify.dryRunOnly is true: this run cannot delete anything.
+{{- else }}
+  qualify.dryRunOnly is FALSE: this run will execute deletes it approves.
+{{- end }}
+{{- end }}
+{{- if .Values.auditCronJob.enabled }}
+
+Scheduled read-only audit (CronJob {{ include "rig.fullname" . }}-audit, {{ .Values.auditCronJob.schedule }}):
+  kubectl -n {{ include "rig.namespace" . }} get cronjob {{ include "rig.fullname" . }}-audit
+  kubectl -n {{ include "rig.namespace" . }} create job --from=cronjob/{{ include "rig.fullname" . }}-audit audit-now
+{{- end }}
+
+Tear down:
+  helm uninstall {{ .Release.Name }} -n {{ include "rig.namespace" . }}
+{{- if .Values.teardown.hook.enabled }}
+  runs snapshot_churn_rig.py teardown automatically as a pre-delete hook.
+{{- else }}
+  teardown.hook.enabled is false: nothing removes the rig's state from
+  Elasticsearch or the bucket on uninstall. Run it yourself first:
+  kubectl -n {{ include "rig.namespace" . }} create job --from=job/{{ include "rig.fullname" . }}-teardown-manual teardown-1
+{{- end }}
+
+The rig's state lives inside Elasticsearch and in the bucket, not in
+anything Kubernetes tracks. `helm uninstall` alone does not prove the
+bucket is empty; check the teardown job's own output, which names the
+`oci os object bulk-delete` command to run by hand if anything is left.

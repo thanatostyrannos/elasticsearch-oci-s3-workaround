@@ -70,6 +70,9 @@ PACKAGED_TREES = (
     # The operator-facing loop runner and its example config. Someone testing
     # this has a shell, not necessarily anything else.
     ("scripts", (".sh", ".example")),
+    # The GitLab pipelines and the Helm chart. Same reason as the load
+    # generator: the documentation tells the reader to use them.
+    ("gitlab", (".yml", ".yaml", ".md", ".tpl", ".txt")),
 )
 
 # Individual files shipped, each with the reason it earns its place.

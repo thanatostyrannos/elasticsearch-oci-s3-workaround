@@ -17,7 +17,6 @@ raw output those numbers are read off.
 | File | What it holds |
 |---|---|
 | `cycles.tsv` | One row per cycle: timestamp, manifest size, keys deleted, failed, absent, object count before and after, exit code. The `deleted` column reads 0 for the first twelve rows, which is a defect in the loop's scoreboard, not the tool. Take deleted counts from `exec-N.txt`. |
-| `derive-N.txt` | The audit pass for cycle N: what it read, what it classified, what it condemned. |
 | `dry-N.txt` | The dry run for cycle N. Reports the manifest path, its key count and its sha256. Sends nothing. |
 | `exec-N.txt` | The execute pass for cycle N. Carries the authoritative `deleted`, `failed` and `unconfirmed` counts. |
 | `intact-N.txt` | The did-we-break-Elasticsearch check after cycle N: cluster health, snapshot states, `_verify_integrity`, then a real restore that counts documents. |

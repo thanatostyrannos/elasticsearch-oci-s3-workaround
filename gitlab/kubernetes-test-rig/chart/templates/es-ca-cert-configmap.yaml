@@ -1,0 +1,12 @@
+{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rig.fullname" . }}-es-ca-cert
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+data:
+  ca.crt: |
+    {{- .Values.elasticsearch.caCert | nindent 4 }}
+{{- end }}

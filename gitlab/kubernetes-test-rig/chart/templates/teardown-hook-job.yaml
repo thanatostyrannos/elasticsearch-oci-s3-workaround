@@ -1,0 +1,55 @@
+{{/*
+python3 snapshot_churn_rig.py teardown, run automatically by `helm
+uninstall` as a pre-delete hook. Pre-delete, not post-delete: a post-delete
+hook runs AFTER Helm deletes this release's normal resources, including the
+state PVC this teardown needs to read --state-file from. Pre-delete hooks
+run before that deletion, so the PVC (and the ES cluster and bucket this Job
+talks to) are still there.
+
+This is the CI variant's `after_script` teardown, moved to the one place in
+Kubernetes that reliably runs regardless of how the release is being torn
+down: a failed qualify Job, a manual uninstall, or a CI job that calls `helm
+uninstall` itself all go through this same hook.
+*/}}
+{{- if .Values.teardown.hook.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rig.fullname" . }}-teardown-hook
+  namespace: {{ include "rig.namespace" . }}
+  labels:
+    {{- include "rig.labels" . | nindent 4 }}
+    rig-component: teardown-hook
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "rig.fullname" . }}-teardown
+    spec:
+      restartPolicy: Never
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "rig.sourceInitContainers" . | nindent 8 }}
+      containers:
+        - name: teardown
+          image: {{ .Values.image.python | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: {{ include "rig.workdir" . }}
+          command: ["python3", "snapshot_churn_rig.py", "teardown"]
+          args:
+            {{- include "rig.teardownArgs" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.teardown.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "rig.teardownVolumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "rig.teardownVolumes" . | nindent 8 }}
+{{- end }}
