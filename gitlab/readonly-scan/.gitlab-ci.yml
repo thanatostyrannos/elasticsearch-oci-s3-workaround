@@ -31,10 +31,14 @@ variables:
   GENCHAIN_TRANSPORT: "s3"          # s3, oci or local; see GENCHAIN_LOCAL_REPO below
   GENCHAIN_LOCAL_REPO: ""           # a mirrored bucket on disk; set this instead of
                                      # TRANSPORT/ENDPOINT/BUCKET to scan a local mirror
-  GENCHAIN_ENDPOINT: "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
-  GENCHAIN_REGION: "us-ashburn-1"   # region for the s3 compatibility path
-  GENCHAIN_BUCKET: "es-snapshots"
-  GENCHAIN_PREFIX: "leaktest/"      # the repository's base_path inside the bucket
+  # These four have NO default on purpose. Set them as project CI/CD
+  # variables. A placeholder that happens to resolve is worse than an empty
+  # one: the run goes somewhere instead of stopping, and "es-snapshots" is a
+  # plausible enough bucket name to be someone else's.
+  GENCHAIN_ENDPOINT: ""             # https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+  GENCHAIN_REGION: ""               # region for the s3 compatibility path
+  GENCHAIN_BUCKET: ""               # the bucket holding the repository
+  GENCHAIN_PREFIX: ""               # the repository's base_path inside the bucket
   GENCHAIN_NAMESPACE: ""            # OCI Object Storage namespace, only for --transport oci
   GENCHAIN_OCI_REGION: ""           # only for --transport oci
   GENCHAIN_PROFILE: ""              # profile name inside ~/.aws/credentials, if you use that
@@ -101,6 +105,26 @@ variables:
 audit:orphans:
   stage: audit
   script:
+    - |
+      missing=""
+      need() { eval "v=\${$1:-}"; [ -n "$v" ] || missing="$missing $1"; }
+      need CREDS_JSON
+      if [ -z "${GENCHAIN_LOCAL_REPO:-}" ]; then
+        need GENCHAIN_ENDPOINT; need GENCHAIN_REGION
+        need GENCHAIN_BUCKET;   need GENCHAIN_PREFIX
+      fi
+      [ -z "${GENCHAIN_ELASTICSEARCH:-}" ] || need GENCHAIN_ES_REPOSITORY
+      if [ -n "$missing" ]; then
+        echo "This pipeline is configured entirely from project CI/CD variables," >&2
+        echo "and these are not set:" >&2
+        for m in $missing; do echo "    $m" >&2; done
+        echo >&2
+        echo "Set them under Settings, CI/CD, Variables. CREDS_JSON must be of" >&2
+        echo "type File; the rest are ordinary variables. Nothing is defaulted" >&2
+        echo "here, because a default that resolves would point this run at a" >&2
+        echo "bucket nobody chose." >&2
+        exit 1
+      fi
     - *credentials
     - |
       args=(

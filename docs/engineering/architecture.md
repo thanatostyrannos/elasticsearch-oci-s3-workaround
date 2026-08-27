@@ -220,19 +220,24 @@ flowchart TD
 ```
 
 `sources/http_reads.py` is the module that actually enforces the read-only
-promise: `ALLOWED_METHODS = frozenset({"GET", "HEAD"})`, checked by an
-`assert` in both `s3.py`'s and `oci.py`'s own `_request` methods before a
-request is built. There is no `POST` in this subpackage at all, in either
-transport. One documentation note worth flagging here rather than burying
-it: `gitlab/readonly-scan/.gitlab-ci.yml`'s header comment and the audit
-CronJob's template comment both describe the audit's transport as permitting
-"GET and HEAD, and the one POST that lists a bucket." The code disagrees.
-Bucket listing is `GET` with `list-type=2` in the query string
-(`sources/s3.py`, `list_keys`), not a `POST`. The only `POST` anywhere in
-this codebase is in `reclaim/transport.py`, the batch-delete request, which
-is not part of the audit at all. The safety property the comment is trying
-to state (the audit cannot delete) is still true; the specific mechanism
-described is not what the code does.
+promise: `ALLOWED_METHODS = frozenset({"GET", "HEAD"})`, checked before a
+request is built, and a method outside that set raises `ForbiddenMethod`.
+
+It is a raised exception and deliberately **not** an assert. That distinction
+is the whole guarantee: `python3 -O` strips `assert`, and while this check was
+one, a DELETE reached the transport. The source says so where the check is,
+so nobody re-introduces the weaker form by tidying.
+
+There is no `POST` in this subpackage at all, in either transport. Bucket
+listing is a `GET` with `list-type=2` in the query string (`sources/s3.py`,
+`list_keys`). The only `POST` anywhere in the project is
+`reclaim/batch.py`'s delete request, which belongs to the separate delete
+tool and is never imported on the audit path.
+
+Several documents used to describe this transport as permitting "GET, HEAD
+and the one POST that lists a bucket". They were wrong, and they understated
+the property while getting the mechanism wrong. They now say GET and HEAD and
+nothing else.
 
 `local.py` is the odd one out: no network, no signing, reads a directory
 tree that mirrors a bucket layout, and its only internal dependency is

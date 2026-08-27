@@ -1,212 +1,44 @@
-# Running the audit and the qualification rig from GitLab CI.
+# What this repository does when GitLab runs it: a read-only audit, and
+# nothing else.
 #
-# Two things live here and they are deliberately not the same pipeline.
+# GitLab picks this file up automatically, so it decides what someone gets by
+# importing this project and pressing the button. That has to be the safe
+# thing. The audit reads a snapshot repository and reports which objects a
+# failed delete stranded there. It cannot delete: its HTTP transport permits
+# GET and HEAD and nothing else, and refuses any other method rather than
+# trusting a caller to behave.
 #
-#   audit      read-only, safe, meant for a schedule. It cannot delete: the
-#              read path allows GET and HEAD, and nothing else. POST and
-#              DELETE are unreachable, refused at the transport.
+# The full qualification rig, which mutates a cluster for hours and deletes
+# objects when told to, is deliberately NOT here. It lives in
+# gitlab/kubernetes-test-rig/, is manual only, and refuses to run from a
+# schedule. Keeping it out of the file GitLab runs by default means nobody
+# reaches it by accident.
 #
-#   qualify    the full rig. It mutates your cluster, runs for hours, and
-#              deletes objects when you let it. Manual only, never scheduled.
+# Everything this pipeline needs comes from project CI/CD variables. Nothing
+# is defaulted, because a default that resolves would point the run at a
+# bucket nobody chose. The job refuses and names what is missing.
 #
-# The line between them is the point. A scheduled audit is safe precisely
-# because the thing on the timer cannot delete anything. Do not add --execute
-# to the audit job to save a pipeline.
+#   Settings, CI/CD, Variables:
+#
+#     CREDS_JSON            File   the JSON credentials file, s3 section plus
+#                                  an elasticsearch section if you set
+#                                  GENCHAIN_ELASTICSEARCH
+#     GENCHAIN_ENDPOINT     Var    https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+#     GENCHAIN_REGION       Var    us-ashburn-1, or wherever the bucket is
+#     GENCHAIN_BUCKET       Var    the bucket holding the repository
+#     GENCHAIN_PREFIX       Var    the repository's base_path, trailing slash
+#
+#   Optional, and worth setting: GENCHAIN_ELASTICSEARCH with
+#   GENCHAIN_ES_REPOSITORY, so the audit can also ask the cluster what a
+#   mounted searchable snapshot is protecting. Without them the report cannot
+#   see mounts; it does not pretend they are absent.
+#
+# Mark CREDS_JSON Masked and Protected. It is a File variable so the job gets
+# a path rather than a value: a secret in an argument is visible in `ps` to
+# every other user on the runner.
+#
+# The definition itself lives in gitlab/readonly-scan/ so there is one copy of
+# it rather than two that drift apart.
 
-stages:
-  - audit
-  - qualify
-  - teardown
-
-# These tools import the standard library and nothing else. curl is here for
-# the loop script's preflight, which checks the cluster answers before cycle 1
-# rather than failing confusingly on cycle 40.
-default:
-  image: python:3.12-slim
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq curl >/dev/null
-    - python3 --version
-
-variables:
-  OCI_ENDPOINT: "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
-  OCI_REGION: "us-ashburn-1"
-  OCI_BUCKET: "es-leak-test"
-  OCI_PREFIX: "leaktest/"
-  ES_URL: "http://elasticsearch.es-rig.svc.cluster.local:9200"
-  ES_REPOSITORY: "leaktest-repo"
-  ES_DATA_STREAM: "leaktest-stream"
-  RIG_PREFIX: "leaktest"
-  # Cycles to run in the qualification job. Fifty is the point at which the
-  # published results were considered to mean something.
-  CYCLES: "50"
-  # Deletes are off unless you turn them on for a single run.
-  DRY_RUN_ONLY: "yes"
-  # GitLab kills after_script early by default. Teardown talks to a cluster
-  # and a bucket, so give it room.
-  RUNNER_AFTER_SCRIPT_TIMEOUT: 10m
-
-# CREDS_JSON and ES_PASSWORD are File-type CI/CD variables, so GitLab writes
-# them to disk and hands you a path rather than a value. That matches how
-# these tools want secrets: a path, never an argument, because argv is visible
-# in `ps` to every other user on the host. GitLab's own file mode is not
-# guaranteed, and the tools refuse anything looser than 600, so fix it here.
-.credentials: &credentials
-  - install -m 600 "$CREDS_JSON" ./creds.json
-  - install -m 600 "$ES_PASSWORD" ./espw
-
-# ---------------------------------------------------------------------------
-# Read only. Schedule this one.
-# ---------------------------------------------------------------------------
-
-audit:orphans:
-  stage: audit
-  script:
-    - *credentials
-    - |
-      python3 -m generation_chain \
-        --transport s3 \
-        --endpoint "$OCI_ENDPOINT" --region "$OCI_REGION" \
-        --bucket "$OCI_BUCKET" --prefix "$OCI_PREFIX" \
-        --credentials ./creds.json \
-        --elasticsearch "$ES_URL" --es-repository "$ES_REPOSITORY" \
-        --manifest orphans.tsv 2> audit-summary.txt
-      tail -20 audit-summary.txt
-  artifacts:
-    name: "orphans-$CI_PIPELINE_ID"
-    paths:
-      - orphans.tsv
-      - audit-summary.txt
-    expire_in: 90 days
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_PIPELINE_SOURCE == "web"
-      when: manual
-      allow_failure: true
-
-# ---------------------------------------------------------------------------
-# The full rig. Manual, long, and it cleans up after itself.
-# ---------------------------------------------------------------------------
-
-qualify:oci:
-  stage: qualify
-  timeout: 6h
-  script:
-    - *credentials
-
-    # The generator has to keep ingesting while the loop audits, so it runs in
-    # the background. Its state file is what teardown needs, and it is saved as
-    # an artifact even when this job fails.
-    - |
-      python3 snapshot_churn_rig.py run \
-        --es "$ES_URL" --user elastic --password-file ./espw \
-        --prefix "$RIG_PREFIX" --state-file ./rig-state.json \
-        --repo-type s3 --bucket "$OCI_BUCKET" --base-path "${OCI_PREFIX%/}" \
-        --s3-client oci \
-        --shards 2 --docs-per-second 60 \
-        --rollover-max-age 24h --rollover-max-docs 100000000 \
-        --frozen-min-age 2m --delete-min-age 10m \
-        --snapshot-interval 60s --retention 5m \
-        --retention-check-interval 5m --ilm-poll-interval 10s \
-        --duration 5h --report-file ./reports.jsonl > rig.log 2>&1 &
-      echo "$!" > rig.pid
-
-    # Nothing has leaked until a snapshot has expired, and an audit run before
-    # that correctly finds nothing. Waiting here turns a confusing zero into a
-    # clear wait.
-    - |
-      echo "waiting for the first snapshot to expire"
-      for _ in $(seq 1 60); do
-        if grep -q first_snapshot_expired reports.jsonl 2>/dev/null; then
-          echo "  a snapshot has expired: objects are now being stranded"
-          break
-        fi
-        sleep 30
-      done
-      grep -q first_snapshot_expired reports.jsonl || {
-        echo "no snapshot expired in 30 minutes. Check rig.log"; tail -30 rig.log; exit 1; }
-
-    # The loop script takes a config file rather than arguments, for the same
-    # reason the tools take credential paths.
-    - |
-      cat > ci.conf <<CONF
-      ENDPOINT="$OCI_ENDPOINT"
-      REGION="$OCI_REGION"
-      BUCKET="$OCI_BUCKET"
-      PREFIX="$OCI_PREFIX"
-      CREDENTIALS="$(pwd)/creds.json"
-      ELASTICSEARCH="$ES_URL"
-      ES_PASSWORD_FILE="$(pwd)/espw"
-      REPOSITORY="$ES_REPOSITORY"
-      DATA_STREAM="$ES_DATA_STREAM"
-      OUT="$(pwd)/test-cycle-output"
-      CYCLES=$CYCLES
-      MODE="mixed"
-      SLEEP_BETWEEN=5
-      SETTLE_TIMEOUT=300
-      DRY_RUN_ONLY="$DRY_RUN_ONLY"
-      CONF
-      chmod 600 ci.conf
-
-    - ./scripts/run-test-cycle.sh ci.conf
-
-    # Read totals from the per-cycle execute files rather than the summary
-    # line. The summary has been wrong before; the execute files are what
-    # actually happened.
-    - |
-      if ls test-cycle-output/exec-*.txt >/dev/null 2>&1; then
-        awk '/^deleted:/{d+=$2} /^failed:/{f+=$2} /^unconfirmed:/{u+=$2}
-             END {printf "deleted=%d failed=%d unconfirmed=%d\n", d, f, u}' \
-            test-cycle-output/exec-*.txt | tee totals.txt
-      fi
-      problems=$(awk -F'\t' 'NR>1 && ($8!=0 || $9!=0 || $11!=0)' \
-                 test-cycle-output/cycles.tsv | wc -l)
-      echo "cycles with a failure, an unconfirmed delete or a non-zero exit: $problems"
-      [ "$problems" -eq 0 ] || exit 1
-
-  # Runs on success, on failure and on timeout. A generator that outlives its
-  # job keeps ingesting and keeps leaking, so this is not optional.
-  after_script:
-    - |
-      [ -f rig.pid ] && kill "$(cat rig.pid)" 2>/dev/null || true
-      python3 snapshot_churn_rig.py teardown \
-        --es "$ES_URL" --user elastic --password-file ./espw \
-        --prefix "$RIG_PREFIX" --state-file ./rig-state.json \
-        --repo-type s3 --bucket "$OCI_BUCKET" --base-path "${OCI_PREFIX%/}" \
-        || echo "teardown did not complete. Run the teardown job."
-
-  artifacts:
-    name: "qualify-$CI_PIPELINE_ID"
-    when: always
-    paths:
-      - test-cycle-output/
-      - rig-state.json
-      - reports.jsonl
-      - rig.log
-      - totals.txt
-    expire_in: 90 days
-
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - when: manual
-
-# ---------------------------------------------------------------------------
-# Safety net. after_script covers the ordinary cases; this covers a runner
-# that died without running it.
-# ---------------------------------------------------------------------------
-
-teardown:oci:
-  stage: teardown
-  needs: ["qualify:oci"]
-  script:
-    - *credentials
-    - |
-      python3 snapshot_churn_rig.py teardown \
-        --es "$ES_URL" --user elastic --password-file ./espw \
-        --prefix "$RIG_PREFIX" --state-file ./rig-state.json \
-        --repo-type s3 --bucket "$OCI_BUCKET" --base-path "${OCI_PREFIX%/}"
-    - echo "The bucket still holds the leaked objects. The store will not"
-    - echo "delete them, which is the fault. Empty it with the native API:"
-    - echo "  oci os object bulk-delete --bucket-name $OCI_BUCKET --prefix $OCI_PREFIX"
-  rules:
-    - when: manual
+include:
+  - local: gitlab/readonly-scan/.gitlab-ci.yml

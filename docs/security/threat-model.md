@@ -398,8 +398,8 @@ permissions at the store.
 flowchart TD
     subgraph AuditBox["Audit: python3 -m generation_chain"]
         A_Holds["Holds: the store credential (S3 or OCI), optionally an Elasticsearch read credential"]
-        A_Can["Can: GET, HEAD, the one bucket-listing POST. ALLOWED_METHODS in http_reads.py names exactly these two verbs"]
-        A_Cannot["Structurally cannot: send DELETE or any other POST. ForbiddenMethod is raised if a caller ever tries, and reclaim/ is never imported here, so the code path to build one does not exist in this process"]
+        A_Can["Can: GET and HEAD, nothing else. Listing a bucket is a GET with list-type=2. ALLOWED_METHODS in http_reads.py names exactly these two verbs"]
+        A_Cannot["Structurally cannot: send DELETE or POST at all. ForbiddenMethod is raised if a caller ever tries, and reclaim/ is never imported here, so the code path to build one does not exist in this process"]
     end
 
     subgraph ReclaimBox["Reclaim: python3 -m generation_chain.reclaim"]
