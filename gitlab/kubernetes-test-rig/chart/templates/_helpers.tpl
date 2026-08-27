@@ -101,20 +101,55 @@ else, and it does nothing but the copy.
   securityContext:
     runAsUser: 0
   command:
-    - sh
+    - python3
     - -c
     - |
-      set -eu
-      for f in /secrets-raw/*; do
-        [ -e "$f" ] || continue
-        install -m 0600 -o {{ .Values.securityContext.runAsUser | int64 }}           -g {{ .Values.securityContext.runAsGroup | int64 }}           "$f" "/secrets/$(basename "$f")"
-      done
+      import json, os, pathlib, shutil
+      raw, out = pathlib.Path("/secrets-raw"), pathlib.Path("/secrets")
+      uid, gid = {{ .Values.securityContext.runAsUser | int64 }}, {{ .Values.securityContext.runAsGroup | int64 }}
+
+      for src in sorted(raw.iterdir()):
+          if src.is_file():
+              dst = out / src.name
+              shutil.copyfile(src, dst)
+              os.chown(dst, uid, gid)
+              os.chmod(dst, 0o600)
+
+      # An in-cluster cluster does not use the password from values: ECK
+      # generates its own for the elastic user and rotates it whenever the
+      # cluster is rebuilt. Take it from there, or every tool authenticates
+      # with a password nothing ever set.
+      eck = pathlib.Path("/eck-elastic-user/elastic")
+      if eck.exists():
+          password = eck.read_text().strip()
+          for name, write in (
+                  ({{ .Values.credentials.keys.esPassword | quote }},
+                   lambda p: p.write_text(password)),
+                  ({{ .Values.credentials.keys.credentialsJson | quote }},
+                   None)):
+              path = out / name
+              if write is not None:
+                  write(path)
+              else:
+                  doc = json.loads(path.read_text())
+                  section = doc.setdefault("elasticsearch", {})
+                  section.pop("api_key", None)
+                  section["username"], section["password"] = "elastic", password
+                  path.write_text(json.dumps(doc))
+              os.chown(path, uid, gid)
+              os.chmod(path, 0o600)
+          print("elastic user password taken from the ECK-generated secret")
   volumeMounts:
     - name: credentials-raw
       mountPath: /secrets-raw
       readOnly: true
     - name: credentials
       mountPath: /secrets
+    {{- if not .Values.elasticsearch.external }}
+    - name: eck-elastic-user
+      mountPath: /eck-elastic-user
+      readOnly: true
+    {{- end }}
 {{- end -}}
 
 {{/*
@@ -128,6 +163,12 @@ read /secrets and never see /secrets-raw.
     defaultMode: 0600
 - name: credentials
   emptyDir: {}
+{{- if not .Values.elasticsearch.external }}
+- name: eck-elastic-user
+  secret:
+    secretName: {{ include "rig.fullname" . }}-es-elastic-user
+    defaultMode: 0600
+{{- end }}
 {{- end -}}
 
 {{/*
