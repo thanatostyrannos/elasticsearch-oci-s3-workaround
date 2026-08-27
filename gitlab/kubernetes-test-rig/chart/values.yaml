@@ -58,6 +58,13 @@ source:
   # entered here in plain text.
   existingSshSecret: ""    # Secret with key "id_rsa" or "id_ed25519"; leave empty for a public repo
 
+# The user every tool runs as. The UBI base image ships uid 1001, and these
+# values must match it: the staging init container chowns the credentials to
+# this uid, and a mismatch leaves the tools unable to read their own secret.
+securityContext:
+  runAsUser: 1001
+  runAsGroup: 0
+
 # Red Hat Universal Base Image 9. It carries Python 3.12 and git 2.52 in one
 # image, so the same base serves both the clone step and every tool, and it is
 # pinned by digest rather than by tag: a tag moves, and a rig that silently
@@ -136,7 +143,7 @@ elasticsearch:
   external: true
   url: "https://your-cluster.example.com:9200"
   # PEM content of a CA this cluster's certificate chains to, if it is not
-  # already trusted by the python:3.12-slim image. Mounted read-only and
+  # already trusted by the UBI 9 base image. Mounted read-only and
   # passed as --ca-cert (the load generator) and --es-ca-cert (the audit).
   # reclaim_test_protocol.py's OWN cluster calls (its --es-user /
   # --es-password-file, used for the segment-mode shard wait) take no CA or

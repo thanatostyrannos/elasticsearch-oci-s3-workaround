@@ -38,6 +38,7 @@ spec:
       {{- end }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
+        {{- include "rig.credentialStagingInit" . | nindent 8 }}
       containers:
         - name: teardown
           image: {{ .Values.image.python | quote }}

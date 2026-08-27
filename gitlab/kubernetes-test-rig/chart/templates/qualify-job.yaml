@@ -35,6 +35,7 @@ spec:
       {{- end }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
+        {{- include "rig.credentialStagingInit" . | nindent 8 }}
       containers:
         - name: qualify
           image: {{ .Values.image.python | quote }}
@@ -127,8 +128,5 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: {{ include "rig.fullname" . }}-state
-        - name: credentials
-          secret:
-            secretName: {{ include "rig.credentialsSecretName" . }}
-            defaultMode: 0600
+        {{- include "rig.credentialVolumes" . | nindent 8 }}
 {{- end }}

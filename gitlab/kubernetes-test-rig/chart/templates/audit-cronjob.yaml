@@ -39,6 +39,7 @@ spec:
           {{- end }}
           initContainers:
             {{- include "rig.sourceInitContainers" . | nindent 12 }}
+            {{- include "rig.credentialStagingInit" . | nindent 12 }}
           containers:
             - name: audit
               image: {{ .Values.image.python | quote }}
@@ -136,10 +137,7 @@ spec:
               {{- else }}
               emptyDir: {}
               {{- end }}
-            - name: credentials
-              secret:
-                secretName: {{ include "rig.credentialsSecretName" . }}
-                defaultMode: 0600
+            {{- include "rig.credentialVolumes" . | nindent 12 }}
             {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
             - name: es-ca-cert
               configMap:

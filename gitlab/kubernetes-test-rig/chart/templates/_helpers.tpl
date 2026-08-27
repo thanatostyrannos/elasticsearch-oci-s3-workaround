@@ -72,16 +72,62 @@ unconditionally.
       value: {{ .Values.source.repoUrl | quote }}
     - name: REPO_REF
       value: {{ .Values.source.ref | quote }}
-  {{- if .Values.source.existingSshSecret }}
-  volumeMounts:
-    - name: ssh-key
-      mountPath: /ssh
-      readOnly: true
-  {{- end }}
   volumeMounts:
     - name: workspace
       mountPath: /workspace
+    {{- if .Values.source.existingSshSecret }}
+    - name: ssh-key
+      mountPath: /ssh
+      readOnly: true
+    {{- end }}
 {{- end }}
+{{- end -}}
+
+{{/*
+Stage the credentials where the runtime user can actually read them.
+
+A Secret volume is owned by root. Every tool here refuses a credentials file
+carrying any group or world bit, so the mount has to be 0600, and 0600 owned by
+root is unreadable to a container that does not run as root. The UBI base image
+runs as uid 1001, so the tools cannot open their own credential.
+
+This copies each file into an emptyDir, owned by the runtime user and still
+0600. It is the only container here that runs as root, it runs before anything
+else, and it does nothing but the copy.
+*/}}
+{{- define "rig.credentialStagingInit" -}}
+- name: stage-credentials
+  image: {{ .Values.image.python | quote }}
+  securityContext:
+    runAsUser: 0
+  command:
+    - sh
+    - -c
+    - |
+      set -eu
+      for f in /secrets-raw/*; do
+        [ -e "$f" ] || continue
+        install -m 0600 -o {{ .Values.securityContext.runAsUser | int64 }}           -g {{ .Values.securityContext.runAsGroup | int64 }}           "$f" "/secrets/$(basename "$f")"
+      done
+  volumeMounts:
+    - name: credentials-raw
+      mountPath: /secrets-raw
+      readOnly: true
+    - name: credentials
+      mountPath: /secrets
+{{- end -}}
+
+{{/*
+The Secret as mounted, and the emptyDir the staging step writes into. Tools
+read /secrets and never see /secrets-raw.
+*/}}
+{{- define "rig.credentialVolumes" -}}
+- name: credentials-raw
+  secret:
+    secretName: {{ include "rig.credentialsSecretName" . }}
+    defaultMode: 0600
+- name: credentials
+  emptyDir: {}
 {{- end -}}
 
 {{/*
@@ -200,10 +246,7 @@ rig.sourceVolumes needs.
 - name: state
   persistentVolumeClaim:
     claimName: {{ include "rig.fullname" . }}-state
-- name: credentials
-  secret:
-    secretName: {{ include "rig.credentialsSecretName" . }}
-    defaultMode: 0600
+{{ include "rig.credentialVolumes" . }}
 {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
 - name: es-ca-cert
   configMap:
