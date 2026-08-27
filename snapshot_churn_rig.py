@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-
-If you would rather see it than read it, the diagrams are in
-docs/engineering/architecture.md, which shows where this sits in the system
-and how it is deployed, and docs/engineering/algorithms.md, which shows what
-the audit does with what this manufactures. The security view, including
-what this credential can do that the audit's cannot, is in
-docs/security/threat-model.md under mode 3.
 """
 snapshot_churn_rig.py: stand up a continuously churning Elasticsearch
 snapshot repository, so that tooling which classifies and reclaims leaked
@@ -75,6 +68,13 @@ Example, defaults spelled out:
 
   ./snapshot_churn_rig.py status --es http://localhost:9200 --user elastic
   ./snapshot_churn_rig.py teardown --es http://localhost:9200 --user elastic
+
+If you would rather see it than read it, the diagrams are in
+docs/engineering/architecture.md, which shows where this sits in the system
+and how it is deployed, and docs/engineering/algorithms.md, which shows what
+the audit does with what this manufactures. The security view, including
+what this credential can do that the audit cannot, is in
+docs/security/threat-model.md under mode 3.
 """
 
 import argparse
