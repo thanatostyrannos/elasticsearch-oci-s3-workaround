@@ -1,0 +1,8 @@
+manifest: $WORK/minio10/manifest-9.tsv
+  214 key(s), sha256 62c6888ccb22279c59a32a201f13ecd2e41ae9c65c0a386f694af6dee83ed8c5
+  1 batch(es) of up to 1000, checksum algorithm md5
+  target: http://localhost:9000/scalerig-snaps/scalerig
+deleted: 214
+already absent: 0
+failed: 0
+unconfirmed: 0

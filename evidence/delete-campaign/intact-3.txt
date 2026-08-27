@@ -1,0 +1,11 @@
+== cluster ==
+  status=green nodes=1 unassigned=0
+== snapshots ==
+  11 snapshot(s): {'SUCCESS': 11}
+== integrity ==
+  http=200 anomalies=0
+== restore, which is the only check that survives the others passing ==
+  restore churndeep-snap-20260826-133845-esfcuqe7shgsq6enpcv74q index .ds-churndeep-stream-2026.08.26-000071 -> probe1787751531: http=200
+  shards: {'total': 24, 'failed': 0, 'successful': 24}
+  documents restored: 246000
+  INTACT

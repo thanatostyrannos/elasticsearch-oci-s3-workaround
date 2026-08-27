@@ -1,0 +1,102 @@
+[
+ {
+  "emulated_pages": 1,
+  "fail_rate": 0.001,
+  "objects_that_implies": 1000,
+  "predicted_pct_from_pages_plus_2": 0.3,
+  "refusals_flagged_transient": 3,
+  "refused": 3,
+  "refused_pct": 0.75,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 1,
+  "fail_rate": 0.01,
+  "objects_that_implies": 1000,
+  "predicted_pct_from_pages_plus_2": 2.97,
+  "refusals_flagged_transient": 14,
+  "refused": 14,
+  "refused_pct": 3.5,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 10,
+  "fail_rate": 0.001,
+  "objects_that_implies": 10000,
+  "predicted_pct_from_pages_plus_2": 1.19,
+  "refusals_flagged_transient": 4,
+  "refused": 4,
+  "refused_pct": 1.0,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 10,
+  "fail_rate": 0.01,
+  "objects_that_implies": 10000,
+  "predicted_pct_from_pages_plus_2": 11.36,
+  "refusals_flagged_transient": 42,
+  "refused": 42,
+  "refused_pct": 10.5,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 52,
+  "fail_rate": 0.001,
+  "objects_that_implies": 52000,
+  "predicted_pct_from_pages_plus_2": 5.26,
+  "refusals_flagged_transient": 16,
+  "refused": 16,
+  "refused_pct": 4.0,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 52,
+  "fail_rate": 0.01,
+  "objects_that_implies": 52000,
+  "predicted_pct_from_pages_plus_2": 41.88,
+  "refusals_flagged_transient": 155,
+  "refused": 155,
+  "refused_pct": 38.75,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 129,
+  "fail_rate": 0.001,
+  "objects_that_implies": 129000,
+  "predicted_pct_from_pages_plus_2": 12.28,
+  "refusals_flagged_transient": 43,
+  "refused": 43,
+  "refused_pct": 10.75,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 129,
+  "fail_rate": 0.01,
+  "objects_that_implies": 129000,
+  "predicted_pct_from_pages_plus_2": 73.2,
+  "refusals_flagged_transient": 277,
+  "refused": 277,
+  "refused_pct": 69.25,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 257,
+  "fail_rate": 0.001,
+  "objects_that_implies": 257000,
+  "predicted_pct_from_pages_plus_2": 22.83,
+  "refusals_flagged_transient": 83,
+  "refused": 83,
+  "refused_pct": 20.75,
+  "trials": 400
+ },
+ {
+  "emulated_pages": 257,
+  "fail_rate": 0.01,
+  "objects_that_implies": 257000,
+  "predicted_pct_from_pages_plus_2": 92.6,
+  "refusals_flagged_transient": 368,
+  "refused": 368,
+  "refused_pct": 92.0,
+  "trials": 400
+ }
+]

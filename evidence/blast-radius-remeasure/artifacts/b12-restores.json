@@ -1,0 +1,39 @@
+[
+  {
+    "snapshot": "blast-g-1",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-g-1",
+        "indices": [
+          "bxrb12-1-gstate"
+        ],
+        "shards": {
+          "total": 1,
+          "failed": 0,
+          "successful": 1
+        }
+      }
+    },
+    "elapsed_s": 0.7,
+    "cat_indices": [
+      {
+        "index": "bxrb12-1-gstate",
+        "health": "green",
+        "status": "open",
+        "docs.count": "500",
+        "store.size": "133.8kb"
+      }
+    ],
+    "counts": {
+      "bxrb12-1-gstate": {
+        "count": 500,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  }
+]

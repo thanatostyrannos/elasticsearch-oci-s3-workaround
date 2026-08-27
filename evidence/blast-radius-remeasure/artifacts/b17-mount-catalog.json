@@ -1,0 +1,269 @@
+{
+  "steps": [
+    {
+      "step": "clone",
+      "result": 9
+    },
+    {
+      "step": "register",
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "mount",
+      "result": {
+        "snapshot": {
+          "snapshot": "blast-ms-1",
+          "indices": [
+            "bxmsb17"
+          ],
+          "shards": {
+            "total": 1,
+            "failed": 0,
+            "successful": 1
+          }
+        }
+      }
+    },
+    {
+      "step": "after_mount",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null,
+        "objects_in_bucket": 9
+      }
+    },
+    {
+      "step": "delete_snapshot_from_catalog",
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "after_catalog_delete",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null,
+        "objects_in_bucket": 10
+      }
+    },
+    {
+      "step": "catalog_now",
+      "result": {
+        "snapshots": [],
+        "total": 0,
+        "remaining": 0
+      }
+    },
+    {
+      "step": "verify_integrity_after_catalog_delete",
+      "result": {
+        "status": {
+          "repository": {
+            "name": "blast-b17",
+            "uuid": "rMZpJqIVQMaOlby1aYPTUA",
+            "generation": 1
+          },
+          "snapshots": {
+            "verified": 0,
+            "total": 0
+          },
+          "indices": {
+            "verified": 0,
+            "total": 0
+          },
+          "index_snapshots": {
+            "verified": 0,
+            "total": 0
+          },
+          "blobs": {
+            "verified": 0
+          }
+        },
+        "final_repository_generation": 1,
+        "total_anomalies": 0,
+        "result": "pass"
+      }
+    },
+    {
+      "step": "delete_orphaned_data_blobs",
+      "result": {
+        "keys": [
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__9-dZ_AmXS86Rw9661Ji83g",
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__XM5STEWUTFGMtBvG0YiMtA"
+        ],
+        "http": [
+          204,
+          204
+        ]
+      }
+    },
+    {
+      "step": "after_blob_sweep",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null,
+        "objects_in_bucket": 8
+      }
+    },
+    {
+      "step": "clear_shared_cache",
+      "result": {
+        "_shards": {
+          "total": 9,
+          "successful": 9,
+          "failed": 0
+        }
+      }
+    },
+    {
+      "step": "after_cache_clear",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception",
+        "objects_in_bucket": 8
+      }
+    },
+    {
+      "step": "close",
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true,
+        "indices": {
+          "bxmsb17": {
+            "closed": true
+          }
+        }
+      }
+    },
+    {
+      "step": "open",
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true
+      }
+    },
+    {
+      "step": "after_close_reopen",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception",
+        "objects_in_bucket": 8
+      }
+    },
+    {
+      "step": "exclude_node",
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "after_exclude",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception",
+        "objects_in_bucket": 8
+      }
+    },
+    {
+      "step": "unexclude_node",
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "after_unexclude",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb17",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "0b"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception",
+        "objects_in_bucket": 8
+      }
+    },
+    {
+      "step": "explain",
+      "result": {
+        "index": "bxmsb17",
+        "shard": 0,
+        "current_state": "started"
+      }
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+=== cycle 1 [segment] ===
+    shards populated (60662 docs); waiting for 2 snapshot(s) to supersede any file-less documents
+    waiting: inflight=0 emptiest=60662 want>=1000
+    waiting: inflight=0 emptiest=60662 want>=1000
+    waiting: inflight=0 emptiest=60662 want>=1000
+    waiting: inflight=0 emptiest=62464 want>=1000
+    waiting: inflight=1 emptiest=62608 want>=1000
+    waiting: inflight=1 emptiest=62608 want>=1000
+    waiting: inflight=1 emptiest=62608 want>=1000
+    waiting: inflight=1 emptiest=62608 want>=1000
+    waiting: inflight=0 emptiest=64521 want>=1000
+    waiting: inflight=0 emptiest=64521 want>=1000
+    waiting: inflight=0 emptiest=64521 want>=1000
+    waiting: inflight=0 emptiest=64521 want>=1000
+    waiting: inflight=1 emptiest=66530 want>=1000
+    waiting: inflight=0 emptiest=66530 want>=1000
+    waiting: inflight=0 emptiest=66530 want>=1000
+    waiting: inflight=0 emptiest=66530 want>=1000
+    waiting: inflight=0 emptiest=68337 want>=1000
+    waiting: inflight=0 emptiest=68504 want>=1000
+    waiting: inflight=0 emptiest=68504 want>=1000
+    waiting: inflight=0 emptiest=68504 want>=1000
+    waiting: inflight=0 emptiest=68504 want>=1000
+    waiting: inflight=0 emptiest=70392 want>=1000
+  shards 2/2  segments 252  deleted 0  failed 0  unconfirmed 0
+=== cycle 2 [segment] ===
+    shards populated (78192 docs); waiting for 2 snapshot(s) to supersede any file-less documents
+    waiting: inflight=0 emptiest=78192 want>=1000
+    waiting: inflight=0 emptiest=78192 want>=1000
+    waiting: inflight=0 emptiest=79986 want>=1000
+    waiting: inflight=0 emptiest=80105 want>=1000
+    waiting: inflight=0 emptiest=80105 want>=1000
+    waiting: inflight=0 emptiest=80105 want>=1000
+    waiting: inflight=0 emptiest=80105 want>=1000
+    waiting: inflight=0 emptiest=82083 want>=1000
+    waiting: inflight=0 emptiest=82083 want>=1000
+    waiting: inflight=0 emptiest=82083 want>=1000
+    waiting: inflight=0 emptiest=82083 want>=1000
+    waiting: inflight=1 emptiest=84063 want>=1000
+    waiting: inflight=0 emptiest=84063 want>=1000
+    waiting: inflight=0 emptiest=84063 want>=1000
+    waiting: inflight=0 emptiest=84063 want>=1000
+    waiting: inflight=0 emptiest=85946 want>=1000
+    waiting: inflight=0 emptiest=86164 want>=1000
+    waiting: inflight=0 emptiest=86164 want>=1000
+    waiting: inflight=0 emptiest=86164 want>=1000
+    waiting: inflight=0 emptiest=86164 want>=1000
+    waiting: inflight=0 emptiest=88085 want>=1000
+    waiting: inflight=0 emptiest=88085 want>=1000
+  shards 2/2  segments 380  deleted 0  failed 0  unconfirmed 0
+=== cycle 3 [segment] ===
+    shards populated (99742 docs); waiting for 2 snapshot(s) to supersede any file-less documents
+    waiting: inflight=1 emptiest=99742 want>=1000
+    waiting: inflight=0 emptiest=99742 want>=1000
+    waiting: inflight=0 emptiest=99742 want>=1000
+    waiting: inflight=0 emptiest=99742 want>=1000
+    waiting: inflight=1 emptiest=101734 want>=1000
+    waiting: inflight=0 emptiest=101734 want>=1000
+    waiting: inflight=0 emptiest=101734 want>=1000
+    waiting: inflight=0 emptiest=101734 want>=1000
+    waiting: inflight=0 emptiest=103525 want>=1000
+    waiting: inflight=0 emptiest=103645 want>=1000
+    waiting: inflight=0 emptiest=103645 want>=1000
+    waiting: inflight=0 emptiest=103645 want>=1000
+    waiting: inflight=0 emptiest=103645 want>=1000
+    waiting: inflight=0 emptiest=105614 want>=1000
+    waiting: inflight=0 emptiest=105614 want>=1000
+    waiting: inflight=0 emptiest=105614 want>=1000
+    waiting: inflight=0 emptiest=105614 want>=1000
+    waiting: inflight=0 emptiest=107565 want>=1000
+    waiting: inflight=0 emptiest=107565 want>=1000
+    waiting: inflight=0 emptiest=107565 want>=1000
+    waiting: inflight=0 emptiest=107565 want>=1000
+    waiting: inflight=0 emptiest=109388 want>=1000
+  shards 2/2  segments 508  deleted 0  failed 0  unconfirmed 0
+=== totals over 3 cycles ===
+  deleted: 0
+  failed: 0
+  unconfirmed: 0
+  segments: 1140

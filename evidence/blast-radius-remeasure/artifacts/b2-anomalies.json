@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp_in_millis": 1787696388823,
+    "anomaly": "missing blob",
+    "snapshot": {
+      "snapshot": "blast-snap-3",
+      "uuid": "tJyJxYawQwiWDGV4EvJYlg"
+    },
+    "index": {
+      "name": "blast-share1",
+      "uuid": "23PewvPeSIipJ0w0z-3ypQ",
+      "metadata_blob": "MwD9OqABiKEMB984_UGL",
+      "shards": 1
+    },
+    "shard_id": 0,
+    "blob_name": "__qBc58MdXQ2KxZm_FZECRfQ",
+    "physical_file_name": "_1.cfs",
+    "part_index": 0,
+    "part_count": 1,
+    "file_length_in_bytes": 24544,
+    "part_length_in_bytes": 24544
+  }
+]

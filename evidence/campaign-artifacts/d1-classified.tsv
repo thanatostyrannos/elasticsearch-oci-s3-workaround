@@ -1,0 +1,4 @@
+snapshot	class	policy	tier	mounted_by	state	start_time_utc	incremental_bytes	total_bytes
+snap-2	other	-	-	-	SUCCESS	2026-08-24T19:50:24Z	575883	642810
+rig-daily-2026.08.24-xev01ty8rawen8yasu9qsw	slm	rig-daily	-	-	SUCCESS	2026-08-24T21:04:40Z	58806	389993
+frozen-base-metrics	frozen-pinned	-	partial	frozen-metrics	SUCCESS	2026-08-24T21:04:44Z	0	288242

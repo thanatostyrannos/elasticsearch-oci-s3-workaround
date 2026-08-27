@@ -1,0 +1,46 @@
+{
+  "snapshots": [
+    {
+      "snapshot": "blast-g-1",
+      "uuid": "tSX3UzOkSQqonKcXpwdKgw",
+      "repository": "blast-b12",
+      "version_id": 9111000,
+      "version": "9.5.2",
+      "indices": [
+        "blast-gstate",
+        ".snapshot-blob-cache",
+        ".security-7"
+      ],
+      "data_streams": [],
+      "include_global_state": true,
+      "state": "SUCCESS",
+      "start_time": "2026-08-26T00:25:31.831Z",
+      "start_time_in_millis": 1787703931831,
+      "end_time": "2026-08-26T00:25:32.431Z",
+      "end_time_in_millis": 1787703932431,
+      "duration_in_millis": 600,
+      "failures": [],
+      "shards": {
+        "total": 3,
+        "failed": 0,
+        "successful": 3
+      },
+      "feature_states": [
+        {
+          "feature_name": "searchable_snapshots",
+          "indices": [
+            ".snapshot-blob-cache"
+          ]
+        },
+        {
+          "feature_name": "security",
+          "indices": [
+            ".security-7"
+          ]
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "remaining": 0
+}

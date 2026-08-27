@@ -1,0 +1,164 @@
+[
+  {
+    "snapshot": "blast-snap-1",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-1",
+        "indices": [
+          "bxrb0-1-share1",
+          "bxrb0-1-share2"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 0.7,
+    "cat_indices": [
+      {
+        "index": "bxrb0-1-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb0-1-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb0-1-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb0-1-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-2",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-2",
+        "indices": [
+          "bxrb0-2-share1",
+          "bxrb0-2-share2"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 1.0,
+    "cat_indices": [
+      {
+        "index": "bxrb0-2-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb0-2-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb0-2-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb0-2-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-3",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-3",
+        "indices": [
+          "bxrb0-3-share2",
+          "bxrb0-3-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 1.3,
+    "cat_indices": [
+      {
+        "index": "bxrb0-3-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb0-3-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2050",
+        "store.size": "501.9kb"
+      }
+    ],
+    "counts": {
+      "bxrb0-3-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb0-3-share1": {
+        "count": 2050,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  }
+]

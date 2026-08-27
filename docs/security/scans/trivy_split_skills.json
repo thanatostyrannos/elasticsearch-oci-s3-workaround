@@ -1,0 +1,10 @@
+{
+ "ArtifactName": "/src/skills",
+ "ArtifactType": "filesystem",
+ "CreatedAt": "2026-08-27T03:49:45.766507907Z",
+ "ReportID": "01a04156-8aa6-77bd-84b8-8a8ca342499e",
+ "SchemaVersion": 2,
+ "Trivy": {
+  "Version": "0.74.0"
+ }
+}

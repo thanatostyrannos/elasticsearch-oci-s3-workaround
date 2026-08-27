@@ -1,0 +1,38 @@
+[
+ {
+  "build_seconds": 0.02,
+  "condemned": 245,
+  "exists": 246,
+  "explained": 1.0,
+  "fetches": 201,
+  "generations": 100,
+  "list_pages": 1,
+  "max_in_flight": 1,
+  "objects": 457,
+  "peak_traced_mb": 0.68,
+  "refused": null,
+  "req_per_gen": 4.48,
+  "requests": 448,
+  "rss_delta_mb": 0.9,
+  "seconds": 18.36,
+  "us_per_request": 40983.0
+ },
+ {
+  "build_seconds": 0.03,
+  "condemned": 495,
+  "exists": 496,
+  "explained": 1.0,
+  "fetches": 401,
+  "generations": 200,
+  "list_pages": 1,
+  "max_in_flight": 1,
+  "objects": 907,
+  "peak_traced_mb": 1.31,
+  "refused": null,
+  "req_per_gen": 4.49,
+  "requests": 898,
+  "rss_delta_mb": 2.0,
+  "seconds": 37.298,
+  "us_per_request": 41534.1
+ }
+]

@@ -1,0 +1,50 @@
+[
+ {
+  "coverage_reported_mean_pct": 100.0,
+  "expected_failures_per_run": 5.2,
+  "fail_rate": 0.0001,
+  "generations_rejected_mean": 0.0,
+  "keys_not_in_baseline": 0,
+  "manifest_recovered_mean_pct": 99.99,
+  "manifest_recovered_min_pct": 99.98,
+  "requests_per_run": 52012,
+  "runs_completed_pct": 100.0,
+  "runs_refused": 0,
+  "shards_dropped_mean": 0.0,
+  "silent_loss_pct_of_completing": 0.0,
+  "silent_loss_runs": 0,
+  "trials": 20
+ },
+ {
+  "coverage_reported_mean_pct": 100.0,
+  "expected_failures_per_run": 52.01,
+  "fail_rate": 0.001,
+  "generations_rejected_mean": 0.0,
+  "keys_not_in_baseline": 0,
+  "manifest_recovered_mean_pct": 99.9,
+  "manifest_recovered_min_pct": 99.86,
+  "requests_per_run": 52012,
+  "runs_completed_pct": 100.0,
+  "runs_refused": 0,
+  "shards_dropped_mean": 0.0,
+  "silent_loss_pct_of_completing": 50.0,
+  "silent_loss_runs": 10,
+  "trials": 20
+ },
+ {
+  "coverage_reported_mean_pct": 100.0,
+  "expected_failures_per_run": 520.12,
+  "fail_rate": 0.01,
+  "generations_rejected_mean": 0.0,
+  "keys_not_in_baseline": 0,
+  "manifest_recovered_mean_pct": 99.0,
+  "manifest_recovered_min_pct": 98.87,
+  "requests_per_run": 52012,
+  "runs_completed_pct": 100.0,
+  "runs_refused": 0,
+  "shards_dropped_mean": 0.0,
+  "silent_loss_pct_of_completing": 100.0,
+  "silent_loss_runs": 20,
+  "trials": 20
+ }
+]

@@ -1,0 +1,24 @@
+{
+  "only_the_undamaged_index": {
+    "status": null,
+    "error": null,
+    "shards": {
+      "total": 1,
+      "failed": 0,
+      "successful": 1
+    },
+    "cat": [
+      {
+        "index": "bxrb7bt-share1",
+        "health": "green",
+        "docs.count": "2000"
+      }
+    ]
+  },
+  "only_the_damaged_index": {
+    "status": 404,
+    "error": "snapshot_missing_exception",
+    "shards": null,
+    "cat": []
+  }
+}

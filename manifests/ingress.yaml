@@ -1,0 +1,85 @@
+# Reaching the rig, without kubectl port-forward.
+#
+# Every service here is ClusterIP, so everything that talked to the rig used
+# `kubectl port-forward`. That is a process on your workstation holding a
+# tunnel open, and it dies with the pod it points at. When Elasticsearch was
+# OOMKilled mid-run the forward went with it, and the harness driving the test
+# failed on a connection refused several minutes later, which reads like a
+# cluster fault rather than a dead tunnel on the client side.
+#
+# Traefik is already the ingress controller in this cluster, so use it. An
+# Ingress is a cluster object: it survives a pod restart, several people can
+# use it at once, and nothing has to be relaunched when a node comes back.
+#
+# Plain HTTP on purpose. `elasticsearch.yaml` sets
+# `http.tls.selfSignedCertificate.disabled: true`, so Elasticsearch serves
+# HTTP on 9200 and the backend needs no TLS handling. This rig is reachable
+# only from the machine running it. To add TLS anyway, follow the pattern of
+# the `boutique` ingress in this cluster: a cert-manager cluster-issuer
+# annotation and a `tls:` block.
+#
+# Map the hosts to wherever Traefik answers from your machine. On Rancher
+# Desktop its LoadBalancer is published on localhost, so that is 127.0.0.1,
+# NOT the address `kubectl get ingress` prints in its ADDRESS column. That
+# column shows the in-VM address, which a client outside the VM cannot reach.
+# Verified by asking both: 192.168.127.2 times out, 127.0.0.1 answers.
+#
+#     echo "127.0.0.1  es-rig.demo minio-rig.demo minio-console.demo" \
+#       | sudo tee -a /etc/hosts
+#
+# Then `http://es-rig.demo` replaces `http://localhost:9200` everywhere and
+# nothing has to hold a forward open. To check the route without editing
+# /etc/hosts, send the Host header yourself:
+#
+#     curl -H "Host: es-rig.demo" -u elastic:$PW http://127.0.0.1/
+#
+# A 401 there is the route working: Elasticsearch was reached and asked for
+# credentials.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rig-es
+  namespace: es-rig
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: es-rig.demo
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rig-es-http
+                port:
+                  number: 9200
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rig-minio
+  namespace: es-rig
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: minio-rig.demo
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000
+    - host: minio-console.demo
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9001

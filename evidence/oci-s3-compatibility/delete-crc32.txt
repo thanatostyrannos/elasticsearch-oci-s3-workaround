@@ -1,0 +1,10 @@
+manifest: <path>
+  2 key(s), sha256 00783a3b4582358f8b02735c54a4f4055eac397aa8897e62f257959bc3d20758
+  1 batch(es) of up to 1000, checksum algorithm crc32
+  target: https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-probe
+deleted: 0
+already absent: 0
+failed: 2
+unconfirmed: 0
+  FAILED  del-crc32-1.txt: TransportError 400 from https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-probe?delete=: <?xml version="1.0" encoding="UTF-8"?><Error><Message>Missing required header for this request: Content-MD5 or x-amz-checksum-sha256 or x-amz-checksum-crc32c</Message><Code>InvalidRequest</Code></Error>
+  FAILED  del-crc32-2.txt: TransportError 400 from https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-probe?delete=: <?xml version="1.0" encoding="UTF-8"?><Error><Message>Missing required header for this request: Content-MD5 or x-amz-checksum-sha256 or x-amz-checksum-crc32c</Message><Code>InvalidRequest</Code></Error>

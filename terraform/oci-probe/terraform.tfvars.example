@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+# Everything here comes from ~/.oci/config after `oci setup config`.
+
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaa"
+user_ocid        = "ocid1.user.oc1..aaaa"
+fingerprint      = "a1:b2:c3:d4:e5:f6:07:18:29:3a:4b:5c:6d:7e:8f:90"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "uk-london-1"
+
+# The tenancy OCID is fine here and puts the buckets in the root compartment.
+compartment_ocid = "ocid1.tenancy.oc1..aaaa"

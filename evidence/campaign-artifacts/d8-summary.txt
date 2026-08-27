@@ -1,0 +1,21 @@
+WARNING --prefix '/' given: treating the whole bucket as the repository root
+INFO parsed 338 lines, 66 unique keys
+INFO manifest: 53 rows written to $WORK/hybrid/d8-log-manifest.tsv
+
+--- sweep summary ------------------------------------------
+lines read           : 338
+lines matched        : 17
+lines skipped        : 321
+eligible keys        : 53
+  index-gen             : 24
+  meta-dat              : 6
+  segment-data          : 10
+  snap-dat              : 13
+skipped [guard: numerically-highest index-N in its directory]: 1
+  - index-8
+skipped [unknown blob-name shape (use --allow-any-key to include)]: 2
+  - indices/-6gHKxGPT_-EZY3_ShXJEg/
+  - indices/GVsRrzdESB-K1azSkyk4fA/
+NOTE: 28 SdkException-path line(s) parsed. ES caps these at 10 keys from the LAST delete batch only (S3BlobStore.java:382). For full coverage enable TRACE on 'logger.org.elasticsearch.repositories.blobstore' for one retention cycle and re-feed the logs; re-runs are idempotent via the state file.
+------------------------------------------------------------
+INFO dry-run complete; pass --execute (with --namespace/--bucket) to delete

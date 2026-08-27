@@ -1,0 +1,10 @@
+{
+ "ArtifactName": "/src/evidence",
+ "ArtifactType": "filesystem",
+ "CreatedAt": "2026-08-27T03:49:45.185856177Z",
+ "ReportID": "01a04156-8861-7d07-953d-41cc613753c7",
+ "SchemaVersion": 2,
+ "Trivy": {
+  "Version": "0.74.0"
+ }
+}

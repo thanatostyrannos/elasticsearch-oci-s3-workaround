@@ -1,0 +1,47 @@
+# Configuration for scripts/run-test-cycle.sh
+#
+#     cp scripts/test-cycle.conf.example my.conf
+#     chmod 600 my.conf
+#     ./scripts/run-test-cycle.sh my.conf
+#
+# It is a config file rather than arguments because two of these are paths to
+# secrets, and an argument is visible in `ps` to every user on the host.
+
+# --- the object store ------------------------------------------------------
+ENDPOINT="https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
+REGION="us-ashburn-1"
+BUCKET="<bucket>"
+
+# The repository's base_path inside the bucket. Keep the trailing slash.
+PREFIX="<base_path>/"
+
+# JSON, mode 600. Needs an "s3" section, and an "elasticsearch" section too if
+# ELASTICSEARCH is set below.
+CREDENTIALS="/path/to/creds.json"
+
+# --- the cluster -----------------------------------------------------------
+# Optional but recommended. Without it the audit cannot see which blobs back a
+# mounted searchable snapshot, and deletes are not re-checked against the
+# cluster at execute time.
+ELASTICSEARCH="http://localhost:9200"
+ES_PASSWORD_FILE="/path/to/espw"
+REPOSITORY="<repository name as Elasticsearch knows it>"
+
+# Needed unless MODE=metadata. The data stream whose shard population the
+# segment-mode wait watches.
+DATA_STREAM="<data stream>"
+
+# --- the run ---------------------------------------------------------------
+OUT="./test-cycle-output"
+CYCLES=100
+
+# mixed alternates the segment-waiting mode and the no-wait mode, and is the
+# only setting that exercises both.
+MODE="mixed"
+
+SLEEP_BETWEEN=5
+SETTLE_TIMEOUT=300
+
+# yes  audit and dry run only. Nothing is deleted. Start here.
+# no   really delete. Read docs/quickstart-read-only.md first.
+DRY_RUN_ONLY="yes"

@@ -1,0 +1,1146 @@
+{
+ "errors": [],
+ "generated_at": "2026-08-27T14:20:05Z",
+ "metrics": {
+  "_totals": {
+   "CONFIDENCE.HIGH": 17,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 4,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 13,
+   "SEVERITY.MEDIUM": 8,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 8524,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 26,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/__main__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 10,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/cli.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 382,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/corroboration.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 212,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/credentials.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 2,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 2,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 224,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 38,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/audit.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 180,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/chain.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 223,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/classification.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 204,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/garbage.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 335,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/identity.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 165,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/keys.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 72,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/derivation/shards.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 679,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/errors.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 62,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 6,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/codec.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 67,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/latest.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 20,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/lucene_segments.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 220,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/repository_data.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 256,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/shard_snapshots.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 264,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/smile.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 236,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/formats/snapshot_document.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 104,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/model.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 147,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 42,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/__main__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 5,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/approval.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 49,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/batch.py": {
+   "CONFIDENCE.HIGH": 2,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 1,
+   "SEVERITY.MEDIUM": 1,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 114,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/checksum.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 84,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/cli.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 315,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/manifest.py": {
+   "CONFIDENCE.HIGH": 1,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 1,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 111,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/recheck.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 93,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reclaim/transport.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 101,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reporting/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 0,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reporting/coverage.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 260,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/reporting/manifest.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 58,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/selftest.py": {
+   "CONFIDENCE.HIGH": 1,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 1,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 2,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 113,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sizes.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 42,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 130,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/budget.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 134,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/http_reads.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 119,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/local.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 57,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/oci.py": {
+   "CONFIDENCE.HIGH": 1,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 1,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 200,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/overlap.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 82,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/readahead.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 130,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/s3.py": {
+   "CONFIDENCE.HIGH": 3,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 2,
+   "SEVERITY.MEDIUM": 1,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 189,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/signing/__init__.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 4,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/signing/oci_signature.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 43,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/signing/rsa.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 116,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/sources/signing/sigv4.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 64,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "generation_chain/supported.py": {
+   "CONFIDENCE.HIGH": 0,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 0,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 118,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "reclaim_test_protocol.py": {
+   "CONFIDENCE.HIGH": 3,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 1,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 3,
+   "SEVERITY.MEDIUM": 1,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 451,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "snapshot_churn_rig.py": {
+   "CONFIDENCE.HIGH": 5,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 1,
+   "SEVERITY.MEDIUM": 4,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 1037,
+   "nosec": 0,
+   "skipped_tests": 0
+  },
+  "verify_restorable.py": {
+   "CONFIDENCE.HIGH": 1,
+   "CONFIDENCE.LOW": 0,
+   "CONFIDENCE.MEDIUM": 0,
+   "CONFIDENCE.UNDEFINED": 0,
+   "SEVERITY.HIGH": 0,
+   "SEVERITY.LOW": 0,
+   "SEVERITY.MEDIUM": 1,
+   "SEVERITY.UNDEFINED": 0,
+   "loc": 131,
+   "nosec": 0,
+   "skipped_tests": 0
+  }
+ },
+ "results": [
+  {
+   "code": "55 S3_ACCESS_ENV = \"AWS_ACCESS_KEY_ID\"\n56 S3_SECRET_ENV = \"AWS_SECRET_ACCESS_KEY\"\n57 ES_USERNAME_ENV = \"GENCHAIN_ES_USERNAME\"\n",
+   "col_offset": 16,
+   "end_col_offset": 39,
+   "filename": "generation_chain/credentials.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 259,
+    "link": "https://cwe.mitre.org/data/definitions/259.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Possible hardcoded password: 'AWS_SECRET_ACCESS_KEY'",
+   "line_number": 56,
+   "line_range": [
+    56
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+   "test_id": "B105",
+   "test_name": "hardcoded_password_string"
+  },
+  {
+   "code": "57 ES_USERNAME_ENV = \"GENCHAIN_ES_USERNAME\"\n58 ES_PASSWORD_ENV = \"GENCHAIN_ES_PASSWORD\"\n59 ES_API_KEY_ENV = \"GENCHAIN_ES_API_KEY\"\n",
+   "col_offset": 18,
+   "end_col_offset": 40,
+   "filename": "generation_chain/credentials.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 259,
+    "link": "https://cwe.mitre.org/data/definitions/259.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Possible hardcoded password: 'GENCHAIN_ES_PASSWORD'",
+   "line_number": 58,
+   "line_range": [
+    58
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+   "test_id": "B105",
+   "test_name": "hardcoded_password_string"
+  },
+  {
+   "code": "21 \n22 import xml.etree.ElementTree as ET\n23 from dataclasses import dataclass, field\n",
+   "col_offset": 0,
+   "end_col_offset": 34,
+   "filename": "generation_chain/reclaim/batch.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.",
+   "line_number": 22,
+   "line_range": [
+    22
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree",
+   "test_id": "B405",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "103     try:\n104         root = ET.fromstring(body)\n105     except ET.ParseError as exc:\n",
+   "col_offset": 15,
+   "end_col_offset": 34,
+   "filename": "generation_chain/reclaim/batch.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called",
+   "line_number": 104,
+   "line_range": [
+    104
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree",
+   "test_id": "B314",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "99     lines = text.split(\"\\n\")\n100     assert lines[-1] == \"\", \"raw ends with \\\\n, so split leaves a trailing empty\"\n101     lines.pop()\n",
+   "col_offset": 4,
+   "end_col_offset": 81,
+   "filename": "generation_chain/reclaim/manifest.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 703,
+    "link": "https://cwe.mitre.org/data/definitions/703.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+   "line_number": 100,
+   "line_range": [
+    100
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
+   "test_id": "B101",
+   "test_name": "assert_used"
+  },
+  {
+   "code": "34     \"access_key\": \"AKIDEXAMPLE\",\n35     \"secret_key\": \"<<<Redacted>>>\",\n36     \"region\": \"us-east-1\",\n37     \"service\": \"service\",\n38     \"amz_date\": \"20150830T123600Z\",\n39     \"host\": \"example.amazonaws.com\",\n40     \"signature\": \"5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31\",\n41 }\n42 OCI_SIGNING_STRING = (\n43     b\"date: Thu, 05 Jan 2014 21:31:40 GMT\\n\"\n44     b\"(request-target): get /n/ns/b/bkt/o/index.latest\\n\"\n",
+   "col_offset": 4,
+   "end_col_offset": 16,
+   "filename": "generation_chain/selftest.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 259,
+    "link": "https://cwe.mitre.org/data/definitions/259.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Possible hardcoded password: '<<<Redacted>>>'",
+   "line_number": 35,
+   "line_range": [
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+   "test_id": "B105",
+   "test_name": "hardcoded_password_string"
+  },
+  {
+   "code": "113         unwrap(b\"\\x00\" * 40)\n114     except Exception:\n115         pass\n116     else:\n",
+   "col_offset": 4,
+   "end_col_offset": 12,
+   "filename": "generation_chain/selftest.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 703,
+    "link": "https://cwe.mitre.org/data/definitions/703.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Try, Except, Pass detected.",
+   "line_number": 114,
+   "line_range": [
+    114,
+    115
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html",
+   "test_id": "B110",
+   "test_name": "try_except_pass"
+  },
+  {
+   "code": "139     def _request(self, method: str, path_and_query: str) -> Response:\n140         assert method in ALLOWED_METHODS, (\n141             f\"{method} is not a method this package may send; version one \"\n142             \"reads and never deletes\")\n143         date_header = email.utils.format_datetime(\n",
+   "col_offset": 8,
+   "end_col_offset": 38,
+   "filename": "generation_chain/sources/oci.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 703,
+    "link": "https://cwe.mitre.org/data/definitions/703.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+   "line_number": 140,
+   "line_range": [
+    140,
+    141,
+    142
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
+   "test_id": "B101",
+   "test_name": "assert_used"
+  },
+  {
+   "code": "12 import urllib.parse\n13 import xml.etree.ElementTree as ET\n14 from dataclasses import dataclass\n",
+   "col_offset": 0,
+   "end_col_offset": 34,
+   "filename": "generation_chain/sources/s3.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.",
+   "line_number": 13,
+   "line_range": [
+    13
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree",
+   "test_id": "B405",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "93     try:\n94         return ET.fromstring(body)\n95     except ET.ParseError as exc:\n",
+   "col_offset": 15,
+   "end_col_offset": 34,
+   "filename": "generation_chain/sources/s3.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called",
+   "line_number": 94,
+   "line_range": [
+    94
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree",
+   "test_id": "B314",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "132                  params: Dict[str, Optional[str]]) -> bytes:\n133         assert method in ALLOWED_METHODS, (\n134             f\"{method} is not a method this package may send; version one \"\n135             \"reads and never deletes\")\n136         now = dt.datetime.now(dt.timezone.utc)\n",
+   "col_offset": 8,
+   "end_col_offset": 38,
+   "filename": "generation_chain/sources/s3.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 703,
+    "link": "https://cwe.mitre.org/data/definitions/703.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.",
+   "line_number": 133,
+   "line_range": [
+    133,
+    134,
+    135
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b101_assert_used.html",
+   "test_id": "B101",
+   "test_name": "assert_used"
+  },
+  {
+   "code": "149 import re\n150 import subprocess\n151 import sys\n",
+   "col_offset": 0,
+   "end_col_offset": 17,
+   "filename": "reclaim_test_protocol.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 78,
+    "link": "https://cwe.mitre.org/data/definitions/78.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Consider possible security implications associated with the subprocess module.",
+   "line_number": 150,
+   "line_range": [
+    150
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess",
+   "test_id": "B404",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "196     req.add_header(\"Authorization\", \"Basic \" + token)\n197     with urllib.request.urlopen(req, timeout=60) as r:\n198         return json.loads(r.read())\n",
+   "col_offset": 9,
+   "end_col_offset": 48,
+   "filename": "reclaim_test_protocol.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 22,
+    "link": "https://cwe.mitre.org/data/definitions/22.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.",
+   "line_number": 197,
+   "line_range": [
+    197
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen",
+   "test_id": "B310",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "277     \"\"\"\n278     completed = subprocess.run(cmd, stdout=subprocess.PIPE,\n279                                stderr=subprocess.PIPE, timeout=timeout,\n280                                text=True, cwd=ROOT)\n281     with open(out_path, \"w\") as fh:\n",
+   "col_offset": 16,
+   "end_col_offset": 51,
+   "filename": "reclaim_test_protocol.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 78,
+    "link": "https://cwe.mitre.org/data/definitions/78.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "subprocess call - check for execution of untrusted input.",
+   "line_number": 278,
+   "line_range": [
+    278,
+    279,
+    280
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b603_subprocess_without_shell_equals_true.html",
+   "test_id": "B603",
+   "test_name": "subprocess_without_shell_equals_true"
+  },
+  {
+   "code": "526         p.error(\"segment mode needs --data-stream to check shard population\")\n527     args.es_password = \"\"\n528     if args.es_password_file:\n",
+   "col_offset": 23,
+   "end_col_offset": 25,
+   "filename": "reclaim_test_protocol.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 259,
+    "link": "https://cwe.mitre.org/data/definitions/259.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Possible hardcoded password: ''",
+   "line_number": 527,
+   "line_range": [
+    527
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+   "test_id": "B105",
+   "test_name": "hardcoded_password_string"
+  },
+  {
+   "code": "86 import urllib.request\n87 import xml.etree.ElementTree as ET\n88 \n",
+   "col_offset": 0,
+   "end_col_offset": 34,
+   "filename": "snapshot_churn_rig.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Using xml.etree.ElementTree to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree with the equivalent defusedxml package, or make sure defusedxml.defuse_stdlib() is called.",
+   "line_number": 87,
+   "line_range": [
+    87
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b405-import-xml-etree",
+   "test_id": "B405",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "141             if insecure:\n142                 self.ctx = ssl._create_unverified_context()\n143             else:\n",
+   "col_offset": 27,
+   "end_col_offset": 59,
+   "filename": "snapshot_churn_rig.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 295,
+    "link": "https://cwe.mitre.org/data/definitions/295.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "By default, Python will create a secure, verified ssl context for use in such classes as HTTPSConnection. However, it still allows using an insecure context via the _create_unverified_context that  reverts to the previous behavior that does not validate certificates or perform hostname checks.",
+   "line_number": 142,
+   "line_range": [
+    142
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b323-unverified-context",
+   "test_id": "B323",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "160         try:\n161             with urllib.request.urlopen(r, timeout=timeout,\n162                                         context=self.ctx) as resp:\n163                 raw = resp.read().decode(\"utf-8\", \"replace\")\n",
+   "col_offset": 17,
+   "end_col_offset": 57,
+   "filename": "snapshot_churn_rig.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 22,
+    "link": "https://cwe.mitre.org/data/definitions/22.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.",
+   "line_number": 161,
+   "line_range": [
+    161,
+    162
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen",
+   "test_id": "B310",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "247         try:\n248             with urllib.request.urlopen(r, timeout=60) as resp:\n249                 return resp.status, resp.read()\n",
+   "col_offset": 17,
+   "end_col_offset": 54,
+   "filename": "snapshot_churn_rig.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 22,
+    "link": "https://cwe.mitre.org/data/definitions/22.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.",
+   "line_number": 248,
+   "line_range": [
+    248
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen",
+   "test_id": "B310",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "264             status, body = self._call(\"GET\", query=q)\n265             root = ET.fromstring(body)\n266             ns = \"\"\n",
+   "col_offset": 19,
+   "end_col_offset": 38,
+   "filename": "snapshot_churn_rig.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 20,
+    "link": "https://cwe.mitre.org/data/definitions/20.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Using xml.etree.ElementTree.fromstring to parse untrusted XML data is known to be vulnerable to XML attacks. Replace xml.etree.ElementTree.fromstring with its defusedxml equivalent function or make sure defusedxml.defuse_stdlib() is called",
+   "line_number": 265,
+   "line_range": [
+    265
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b313-b320-xml-bad-elementtree",
+   "test_id": "B314",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "46     try:\n47         with urllib.request.urlopen(req, timeout=timeout, context=CTX) as r:\n48             raw = r.read()\n",
+   "col_offset": 13,
+   "end_col_offset": 70,
+   "filename": "verify_restorable.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 22,
+    "link": "https://cwe.mitre.org/data/definitions/22.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.",
+   "line_number": 47,
+   "line_range": [
+    47
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b310-urllib-urlopen",
+   "test_id": "B310",
+   "test_name": "blacklist"
+  }
+ ]
+}

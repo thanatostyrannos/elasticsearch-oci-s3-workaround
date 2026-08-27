@@ -1,0 +1,24 @@
+[
+ {
+  "condemned": 7,
+  "exists": 10,
+  "explained": 1.0,
+  "fetches": 13,
+  "fetches_predicted": 13,
+  "generations": 3,
+  "objects": 50,
+  "repository": "real es9.5.2 capture",
+  "shards": 3
+ },
+ {
+  "condemned": 0,
+  "exists": 3,
+  "explained": 1.0,
+  "fetches": 13,
+  "fetches_predicted": 13,
+  "generations": 3,
+  "objects": 49,
+  "repository": "synthetic G=3 I=3 S=1",
+  "shards": 3
+ }
+]

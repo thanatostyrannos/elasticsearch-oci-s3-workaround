@@ -1,0 +1,21 @@
+{
+  "error": {
+    "root_cause": [
+      {
+        "type": "repository_verification_exception",
+        "reason": "[oci-repo] cannot delete test data at [snapshots]"
+      }
+    ],
+    "type": "repository_verification_exception",
+    "reason": "[oci-repo] cannot delete test data at [snapshots]",
+    "caused_by": {
+      "type": "i_o_exception",
+      "reason": "Failed to delete blobs [ObjectIdentifier(Key=snapshots/tests-RD6ehWt2S7eFlEq607n_qw/data-Z4nd2wQQR9ut7jRbysNHZQ.dat), ObjectIdentifier(Key=snapshots/tests-RD6ehWt2S7eFlEq607n_qw/master.dat), ObjectIdentifier(Key=snapshots/tests-RD6ehWt2S7eFlEq607n_qw/)]",
+      "caused_by": {
+        "type": "invalid_request_exception",
+        "reason": "Missing required header for this request: Content-MD5 or x-amz-checksum-sha256 or x-amz-checksum-crc32c (Service: S3, Status Code: 400, Request ID: iad-1:K8hr3tLpMjYZlyLw5_baJJKlS1UzBEyEfQOeqM_AduVseCsRJth04KloBVqs-8MC) (SDK Attempt Count: 1)"
+      }
+    }
+  },
+  "status": 500
+}

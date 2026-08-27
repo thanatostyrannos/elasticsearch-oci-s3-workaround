@@ -1,0 +1,126 @@
+{
+ "ArtifactName": "/src/tests",
+ "ArtifactType": "filesystem",
+ "CreatedAt": "2026-08-27T03:49:46.06526838Z",
+ "ReportID": "01a04156-8bd1-7414-a17e-24f8c3197af2",
+ "Results": [
+  {
+   "Class": "secret",
+   "Secrets": [
+    {
+     "Category": "AsymmetricPrivateKey",
+     "Code": {
+      "Lines": [
+       {
+        "Annotation": "",
+        "Content": " \"signing_string\": \"date: Thu, 05 Jan 2014 21:31:40 GMT\\n(request-target): get /n/ns/b/bucket/o?pref",
+        "FirstCause": false,
+        "Highlighted": " \"signing_string\": \"date: Thu, 05 Jan 2014 21:31:40 GMT\\n(request-target): get /n/ns/b/bucket/o?pref",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 3,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": " \"signature_base64\": \"AHGZcrcSmlRoqY0OpFEn9RdZLFAOK21W2ALBEeq7bP+cTnExR+FM/j+eBOBsqDiNtoP6fnjOGSYl9G",
+        "FirstCause": false,
+        "Highlighted": " \"signature_base64\": \"AHGZcrcSmlRoqY0OpFEn9RdZLFAOK21W2ALBEeq7bP+cTnExR+FM/j+eBOBsqDiNtoP6fnjOGSYl9G",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 4,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": ": \"<<<Redacted: private key detected here>>><<<Redacted: private key detected here>>>",
+        "FirstCause": true,
+        "Highlighted": ": \"<<<Redacted: private key detected here>>><<<Redacted: private key detected here>>>",
+        "IsCause": true,
+        "LastCause": true,
+        "Number": 5,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": " \"private_key_pkcs1\": \"<<<Redacted: private key detected here>>>",
+        "FirstCause": false,
+        "Highlighted": " \"private_key_pkcs1\": \"<<<Redacted: private key detected here>>>",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 6,
+        "Truncated": false
+       }
+      ]
+     },
+     "EndLine": 5,
+     "Match": ": \"<<<Redacted: private key detected here>>><<<Redacted: private key detected here>>>",
+     "Offset": 865,
+     "RuleID": "private-key",
+     "Severity": "HIGH",
+     "StartLine": 5,
+     "Title": "Asymmetric Private Key"
+    },
+    {
+     "Category": "AsymmetricPrivateKey",
+     "Code": {
+      "Lines": [
+       {
+        "Annotation": "",
+        "Content": " \"signature_base64\": \"AHGZcrcSmlRoqY0OpFEn9RdZLFAOK21W2ALBEeq7bP+cTnExR+FM/j+eBOBsqDiNtoP6fnjOGSYl9G",
+        "FirstCause": false,
+        "Highlighted": " \"signature_base64\": \"AHGZcrcSmlRoqY0OpFEn9RdZLFAOK21W2ALBEeq7bP+cTnExR+FM/j+eBOBsqDiNtoP6fnjOGSYl9G",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 4,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": " \"private_key_pkcs8\": \"<<<Redacted: private key detected here>>>",
+        "FirstCause": false,
+        "Highlighted": " \"private_key_pkcs8\": \"<<<Redacted: private key detected here>>>",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 5,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": "<<<Redacted: private key detected here>>>-----END RSA PRIVATE",
+        "FirstCause": true,
+        "Highlighted": "<<<Redacted: private key detected here>>>-----END RSA PRIVATE",
+        "IsCause": true,
+        "LastCause": true,
+        "Number": 6,
+        "Truncated": false
+       },
+       {
+        "Annotation": "",
+        "Content": "}",
+        "FirstCause": false,
+        "Highlighted": "}",
+        "IsCause": false,
+        "LastCause": false,
+        "Number": 7,
+        "Truncated": false
+       }
+      ]
+     },
+     "EndLine": 6,
+     "Match": "<<<Redacted: private key detected here>>>-----END RSA PRIVATE",
+     "Offset": 2627,
+     "RuleID": "private-key",
+     "Severity": "HIGH",
+     "StartLine": 6,
+     "Title": "Asymmetric Private Key"
+    }
+   ],
+   "Target": "fixtures/genchain-oci-signing-vector.json"
+  }
+ ],
+ "SchemaVersion": 2,
+ "Trivy": {
+  "Version": "0.74.0"
+ }
+}

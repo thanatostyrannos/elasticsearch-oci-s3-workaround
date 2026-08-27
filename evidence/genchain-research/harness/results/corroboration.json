@@ -1,0 +1,24 @@
+{
+ "calls": [
+  {
+   "attempts_when_it_fails": 1,
+   "call": "/_snapshot/r/_all",
+   "outcome": "run refused, transient"
+  },
+  {
+   "attempts_when_it_fails": 1,
+   "call": "/_all/_settings/index.store.snapshot.*?expand_wildcards=all&flat_settings=true&ignore_unavailable=true",
+   "outcome": "run refused, transient"
+  },
+  {
+   "attempts_when_it_fails": 1,
+   "call": "/_snapshot/_status",
+   "outcome": "run refused, transient"
+  }
+ ],
+ "summary": {
+  "cluster_calls_per_run": 3,
+  "fatal_calls": 3,
+  "retry_attempts_each": 1
+ }
+}

@@ -1,0 +1,8 @@
+manifest: <path>
+  2 key(s), sha256 7c89a35f55c1b224d1994427228e2738e26f5e12df36fab820b83f0230bb9be8
+  1 batch(es) of up to 1000, checksum algorithm md5
+  target: https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-probe
+deleted: 2
+already absent: 0
+failed: 0
+unconfirmed: 0

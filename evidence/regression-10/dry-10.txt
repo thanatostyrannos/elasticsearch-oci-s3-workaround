@@ -1,0 +1,9 @@
+manifest: $WORK/minio10/manifest-10.tsv
+  220 key(s), sha256 f7780dee3cd0aae8f5c6bae914657b342c83b6312c81159584429af4f0be773e
+  1 batch(es) of up to 1000, checksum algorithm md5
+  target: http://localhost:9000/scalerig-snaps/scalerig
+DRY RUN. Nothing was sent. The first batch's request:
+  POST ...?delete, 22068 byte body, 220 key(s)
+  Content-MD5: 50MO5kl4ZYnKzmLZHQFmuw==
+To execute against this exact manifest:
+  --execute --approve-digest f7780dee3cd0aae8f5c6bae914657b342c83b6312c81159584429af4f0be773e --approve-rows 220

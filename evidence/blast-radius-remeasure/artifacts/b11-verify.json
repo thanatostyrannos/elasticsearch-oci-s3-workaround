@@ -1,0 +1,102 @@
+{
+  "log": [
+    {
+      "timestamp_in_millis": 1787703963655,
+      "snapshot": {
+        "snapshot": "blast-p-1",
+        "uuid": "aM1Fe-UsQpONyWNHJbCl4w",
+        "repository": "blast-b11",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-pointer"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-26T00:25:27.829Z",
+        "start_time_in_millis": 1787703927829,
+        "end_time": "2026-08-26T00:25:27.829Z",
+        "end_time_in_millis": 1787703927829,
+        "duration_in_millis": 0,
+        "failures": [],
+        "shards": {
+          "total": 1,
+          "failed": 0,
+          "successful": 1
+        },
+        "feature_states": []
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703963655,
+      "anomaly": "failed to load shard snapshot",
+      "snapshot": {
+        "snapshot": "blast-p-1",
+        "uuid": "aM1Fe-UsQpONyWNHJbCl4w"
+      },
+      "index": {
+        "name": "blast-pointer",
+        "uuid": "EPrwDCT5T-6VZ6_UzNn-6g",
+        "metadata_blob": "oQJ1O6ABKa75d7VCJJfG",
+        "shards": 1
+      },
+      "shard_id": 0,
+      "exception": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "snapshot_missing_exception",
+              "reason": "[blast-b11:blast-p-1/aM1Fe-UsQpONyWNHJbCl4w] is missing"
+            }
+          ],
+          "type": "snapshot_missing_exception",
+          "reason": "[blast-b11:blast-p-1/aM1Fe-UsQpONyWNHJbCl4w] is missing",
+          "caused_by": {
+            "type": "no_such_file_exception",
+            "reason": "Blob object [exp-b11/indices/EPrwDCT5T-6VZ6_UzNn-6g/0/snap-aM1Fe-UsQpONyWNHJbCl4w.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF334888C967F1, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+          }
+        },
+        "status": "NOT_FOUND"
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703963655,
+      "index": {
+        "name": "blast-pointer",
+        "uuid": "EPrwDCT5T-6VZ6_UzNn-6g"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 1,
+        "restorable_snapshot_count": 0
+      }
+    }
+  ],
+  "results": {
+    "status": {
+      "repository": {
+        "name": "blast-b11",
+        "uuid": "h1Ykooe5TSSsQ3kjb12YAQ",
+        "generation": 0
+      },
+      "snapshots": {
+        "verified": 1,
+        "total": 1
+      },
+      "indices": {
+        "verified": 1,
+        "total": 1
+      },
+      "index_snapshots": {
+        "verified": 1,
+        "total": 1
+      },
+      "blobs": {
+        "verified": 0
+      }
+    },
+    "final_repository_generation": 0,
+    "total_anomalies": 1,
+    "result": "fail"
+  }
+}

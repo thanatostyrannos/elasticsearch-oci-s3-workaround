@@ -1,0 +1,47 @@
+transport: s3, S3 compatibility API at http://localhost:9000, bucket es-snapshots, prefix mtest/, region us-east-1
+repository uuid: opiPTy3YSSe_k27u7kHe2A
+  The uuid is a field whoever wrote the blob controls. It separates tenants sharing a bucket. It is not proof of authorship.
+
+Coverage
+  current root generation: 51
+  generations read and believed: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
+  generations missing from the chain: (none)
+  history this run can explain: 73%
+    delete operations whose file lists it attributed in full: 22 of 30 found in the chain
+    generation transitions it could read both ends of: 51 of 51
+  shard directories read: 10 of 22
+    indices/<index-uuid>/0 was dropped whole: the current document index-p4ZGmWC6SO2Zc6Vza8dcYw could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-mZuQUnfMRgOLL_UKYySrow could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-WyIvEtt_TzSxC1TxUsP59g could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-jcWJL7KuTQu2N0QxtOWNqg could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-mKB0AOBJRmuSPOK02yGXKQ could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-gq9pp_jsRJu9KGJ2jjlPgQ could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-vVI2j0JoQ8uOpD5-pj2bQQ could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-yfNzSoyPT3WxIPbinE0FQw could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index--blyUdH8S4eHr352ocT5Gg could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-7WyRqtUASBKEb9ziUppsmw could not be read
+    indices/<index-uuid>/0 was dropped whole: snapshot 'mtestrun-snap-20260827-021455-qxlgi0e4qo62ud94qjdvzq' declares 12 shard(s) in total and this run read 2
+    indices/<index-uuid>/1 was dropped whole: snapshot 'mtestrun-snap-20260827-021455-qxlgi0e4qo62ud94qjdvzq' declares 12 shard(s) in total and this run read 2
+  Lucene commit cross-check (issue #21): ran on 616 of 616 snapshot file lists
+
+  Blobs orphaned by the operations above do NOT appear in the manifest. A key absent from it is not evidence that the key is live.
+
+Elasticsearch corroboration: NOT CHECKED
+  Nothing in this run established whether a mounted searchable-snapshot index depends on the keys below. That linkage lives in cluster state and repository metadata cannot see it. Pass --elasticsearch and --es-repository to ask.
+
+Dispositions
+  orphaned: 1003, 392.43 MB
+  protected: 0
+  live: 145, 208.93 MB
+  evidence: 283, 1.24 MB
+  unexplained: 172, 65.48 MB
+  outside-model: 4, 88 B
+  Only `orphaned` is a list of things to delete. The sizes beside the others are there because the manifest is not the size of the leak: a run that drops its shard directories condemns no segment blob, and the segments it could not attribute are counted under `unexplained` instead.
+  `unexplained` is not known garbage. It is what this run could not decide either way, and some of it is live.
+  Orphaned keys are a SUBSET of what Elasticsearch's own delete collects. Its rule is the segment blobs in a shard directory that the current BlobStoreIndexShardSnapshots does not reference. This tool computes that set difference and then keeps only the members it can attribute to a delete operation it actually observed.
+  An unexplained key is not a key to delete. Some of them, the partial blob an aborted snapshot leaves behind for one, are named by nothing and Elasticsearch will never reclaim them either.
+  Elasticsearch's own delete also removes the superseded root generations and the superseded shard generation documents. This tool never names either, because its derivation reads them. They are counted as evidence rather than left silently out.
+
+Reclaimable
+  392.43 MB across 1003 orphaned objects (392,433,210 bytes)
+  Stored object size, as the store reported it in the listing. That is what a delete gives back. The `length` recorded in shard metadata is a different number: it is per logical Lucene file and summed per snapshot, so it counts a file shared by two snapshots twice.

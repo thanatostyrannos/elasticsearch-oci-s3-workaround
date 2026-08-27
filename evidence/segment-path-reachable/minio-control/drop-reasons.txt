@@ -1,0 +1,18 @@
+    indices/<index-uuid>/0 was dropped whole: snapshot 'mtestrun-snap-20260827-020555-fspiqsbmtnknfcbanrb9fg' declares 4 shard(s) in total and this run read 2
+    indices/<index-uuid>/0 was dropped whole: snapshot 'mtestrun-snap-20260827-020655-qjj3utb0svu9gro15yhv_w' declares 6 shard(s) in total and this run read 4
+    indices/<index-uuid>/0 was dropped whole: snapshot 'mtestrun-snap-20260827-021455-qxlgi0e4qo62ud94qjdvzq' declares 12 shard(s) in total and this run read 2
+    indices/<index-uuid>/0 was dropped whole: the current document index--blyUdH8S4eHr352ocT5Gg could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-K6Of7LLrS3yMiZQbrbHr4A could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-WyIvEtt_TzSxC1TxUsP59g could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-mKB0AOBJRmuSPOK02yGXKQ could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-p4ZGmWC6SO2Zc6Vza8dcYw could not be read
+    indices/<index-uuid>/0 was dropped whole: the current document index-vVI2j0JoQ8uOpD5-pj2bQQ could not be read
+    indices/<index-uuid>/1 was dropped whole: snapshot 'mtestrun-snap-20260827-020555-fspiqsbmtnknfcbanrb9fg' declares 4 shard(s) in total and this run read 2
+    indices/<index-uuid>/1 was dropped whole: snapshot 'mtestrun-snap-20260827-020655-qjj3utb0svu9gro15yhv_w' declares 6 shard(s) in total and this run read 4
+    indices/<index-uuid>/1 was dropped whole: snapshot 'mtestrun-snap-20260827-021455-qxlgi0e4qo62ud94qjdvzq' declares 12 shard(s) in total and this run read 2
+    indices/<index-uuid>/1 was dropped whole: the current document index-7WyRqtUASBKEb9ziUppsmw could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-eaH_tznETjSdCs3S5b_naw could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-gq9pp_jsRJu9KGJ2jjlPgQ could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-jcWJL7KuTQu2N0QxtOWNqg could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-mZuQUnfMRgOLL_UKYySrow could not be read
+    indices/<index-uuid>/1 was dropped whole: the current document index-yfNzSoyPT3WxIPbinE0FQw could not be read

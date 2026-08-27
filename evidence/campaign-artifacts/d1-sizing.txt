@@ -1,0 +1,93 @@
+
+period       class          snaps  added (incremental)   largest snapshot (total)
+2026-08-24   slm                1             57.4 KiB                  380.9 KiB
+2026-08-24   frozen-pinned      1                0.0 B                  281.5 KiB
+2026-08-24   other              1            562.4 KiB                  627.7 KiB
+SUM          slm                1             57.4 KiB
+SUM          frozen-pinned      1                0.0 B
+SUM          other              1            562.4 KiB
+SUM          (all)              3            619.8 KiB
+
+'added' sums incremental bytes = real repo growth per period.
+'total' is what one snapshot references; totals across snapshots overlap — never sum them.
+
+=== Snapshot classes (--split-frozen) ===
+  slm               1 snapshot(s), incrementals (real repo growth): 57.4 KiB
+  frozen-pinned     1 snapshot(s), frozen footprint (pinned mount snapshots; totals may overlap if mounts share lineage): 281.5 KiB
+                        partial mounts (frozen tier, shared_cache): 1 snapshot(s), 281.5 KiB
+                        full mounts (cold tier, full copy)       : 0 snapshot(s), 0.0 B
+  other             1 snapshot(s), incrementals: 562.4 KiB (manual / ILM-orphaned)
+  note: summed incrementals are only meaningful for the slm class —
+  a regular backup snapshot uploads ZERO bytes for shards already
+  mounted as searchable snapshots, so the frozen tier shows up only
+  as the pinned mount snapshots' totals above (a floor, not growth).
+
+=== Repository sizing recommendation ===
+
+NOTE: --split-frozen is active — baseline and growth below
+come from the slm (regular backup) class ONLY, and the measured
+frozen footprint is added as its own term instead of being an
+unquantified undercount. The reachable-blob manifest byte count
+(oci_repo_sweeper.py --emit reachable) remains the ground truth
+for total repository capacity: the repo floor is the UNION of
+all retained snapshots, which these per-snapshot totals can
+only bound from below.
+
+Measured inputs (from _snapshot/<repo>/_status):
+  largest SLM snapshot total (rig-daily-2026.08.24-xev01ty8rawen8yasu9qsw) : 380.9 KiB
+  frozen footprint (pinned mount snapshots; totals may overlap if mounts share lineage): 281.5 KiB
+    partial mounts (frozen tier) : 1 snapshot(s), 281.5 KiB
+    full mounts (cold tier)      : 0 snapshot(s), 0.0 B
+  note: 2 non-slm snapshot(s) excluded from baseline/growth
+  (frozen-pinned mounts are a footprint floor, not growth;
+  'other' snapshots have no policy and no mount pinning them).
+  growth samples (slm class ONLY): per-calendar-day incremental
+  sums over the last 1 day(s) with data (2026-08-24 .. 2026-08-24):
+    median daily growth : 57.4 KiB
+    mean daily growth   : 57.4 KiB
+    p95 daily growth    : 57.4 KiB
+    note: window includes the repository's FIRST snapshot day,
+    whose incremental == a full upload; growth is overstated.
+
+Formula (retention_days = 7):
+  baseline (largest slm snapshot total)     : 380.9 KiB
+  + retention growth (7 x median daily)     : 402.0 KiB
+  + upgrade-day headroom (1 x baseline)     : 380.9 KiB
+  + frozen footprint (pinned mounts)        : 281.5 KiB
+  = recommended repository capacity         : 1.4 MiB
+  = with +20% operational margin            : 1.7 MiB
+  conservative variant (7 x p95 daily):
+  = recommended repository capacity (p95)   : 1.4 MiB
+  = with +20% operational margin (p95)      : 1.7 MiB
+
+Assumptions:
+  * Snapshots are incremental: each copies only new segments since
+    the previous snapshot; the first is ~full. [Elastic docs]
+  * The true repo floor is the UNION of all retained snapshots'
+    referenced bytes; the largest single snapshot total is a lower
+    bound on that union, used here as the baseline.
+  * Elastic recommends a fresh snapshot before upgrading, and large
+    segment rewrites (e.g. a version upgrade merging/rewriting
+    segments) make the next snapshot re-upload far more than a
+    normal day. Modeling that as 1x baseline full is a heuristic,
+    not an official Elastic figure.
+  * The frozen footprint is MEASURED (sum of pinned mount
+    snapshot totals), not estimated. It is a floor: mounts that
+    share segment lineage double-count, and it excludes any
+    blob the repository retains that no snapshot references.
+  * The +20% margin is applied to the whole figure, frozen term
+    included, so it stays conservative.
+  * The +20% margin is a heuristic, not an official Elastic figure.
+  * Elastic publishes no official repo-capacity formula; sizing here
+    is derived from documented incremental behavior only.
+
+Matching SLM retention for a 7-day window, e.g.:
+  "retention": { "expire_after": "7d", "min_count": 5 }
+  (avoid max_count here: with multiple snapshots per day — SLM
+  dailies plus ILM mount snapshots — a count bound can delete
+  snapshots that are still inside the time window.)
+
+Sources (fetched 2026-08-24):
+  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore
+  https://www.elastic.co/docs/deploy-manage/upgrade/prepare-to-upgrade
+  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/create-snapshots

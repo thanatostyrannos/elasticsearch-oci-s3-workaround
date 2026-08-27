@@ -1,0 +1,12 @@
+kind	objects	share_of_objects_pct	bytes	share_of_bytes_pct
+__ data blob	2	22.22	487510	99.28
+shard snap-<uuid>.dat	1	11.11	910	0.19
+shard index-<gen>	1	11.11	901	0.18
+root index-N	1	11.11	619	0.13
+index meta-<id>.dat	1	11.11	556	0.11
+root snap-<uuid>.dat	1	11.11	313	0.06
+root meta-<uuid>.dat	1	11.11	212	0.04
+index.latest	1	11.11	8	0.0
+TOTAL	9	100.0	491029	100.0
+__ data blobs	2	22.22	487510	99.28
+everything else	7	77.78	3519	0.72

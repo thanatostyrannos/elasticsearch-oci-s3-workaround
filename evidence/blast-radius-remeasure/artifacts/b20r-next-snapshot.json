@@ -1,0 +1,57 @@
+{
+  "id": "b20r",
+  "note": "shard index-<gen> removed, repository re-read, then the next snapshot",
+  "reregistered": true,
+  "victim": "indices/UXdt_l7dRxGjcj2NMCWFbw/0/index-D0D57KZvQDex6BmZ1ASDiA",
+  "victim_bytes": 924,
+  "delete_http_status": 204,
+  "new_snapshot_state": "SUCCESS",
+  "new_snapshot_shards": {
+    "total": 2,
+    "failed": 0,
+    "successful": 2
+  },
+  "objects_written_by_next_snapshot": 7,
+  "bytes_written_by_next_snapshot": 6828,
+  "data_blobs_written_by_next_snapshot": [],
+  "verify_after": {
+    "status": {
+      "repository": {
+        "name": "blast-b20r",
+        "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+        "generation": 3
+      },
+      "snapshots": {
+        "verified": 4,
+        "total": 4
+      },
+      "indices": {
+        "verified": 2,
+        "total": 2
+      },
+      "index_snapshots": {
+        "verified": 8,
+        "total": 8
+      },
+      "blobs": {
+        "verified": 38
+      }
+    },
+    "final_repository_generation": 3,
+    "total_anomalies": 0,
+    "result": "pass"
+  },
+  "restore_shards": {
+    "total": 2,
+    "failed": 0,
+    "successful": 2
+  },
+  "restored": {
+    "bxrb20r-share2": "green",
+    "bxrb20r-share1": "green"
+  },
+  "restored_docs": {
+    "bxrb20r-share2": 2000,
+    "bxrb20r-share1": 2050
+  }
+}

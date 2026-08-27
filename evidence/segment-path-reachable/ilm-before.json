@@ -1,0 +1,48 @@
+{
+    "ocirig-ilm": {
+        "version": 1,
+        "modified_date": "2026-08-26T21:21:50.749Z",
+        "policy": {
+            "phases": {
+                "frozen": {
+                    "min_age": "2m",
+                    "actions": {
+                        "searchable_snapshot": {
+                            "snapshot_repository": "ocirig-repo",
+                            "force_merge_index": true
+                        }
+                    }
+                },
+                "hot": {
+                    "min_age": "0ms",
+                    "actions": {
+                        "rollover": {
+                            "max_age": "10m",
+                            "max_docs": 100000
+                        }
+                    }
+                },
+                "delete": {
+                    "min_age": "10m",
+                    "actions": {
+                        "delete": {
+                            "delete_searchable_snapshot": true
+                        }
+                    }
+                }
+            }
+        },
+        "in_use_by": {
+            "indices": [
+                ".ds-ocirig-stream-2026.08.26-000016",
+                "partial-.ds-ocirig-stream-2026.08.26-000013"
+            ],
+            "data_streams": [
+                "ocirig-stream"
+            ],
+            "composable_templates": [
+                "ocirig-template"
+            ]
+        }
+    }
+}

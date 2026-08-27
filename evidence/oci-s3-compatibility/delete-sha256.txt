@@ -1,0 +1,8 @@
+manifest: <path>
+  2 key(s), sha256 ed2590489c82307681acade691fe393884b3da6dbcc7b609d0f414d1827d1095
+  1 batch(es) of up to 1000, checksum algorithm sha256
+  target: https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-probe
+deleted: 2
+already absent: 0
+failed: 0
+unconfirmed: 0

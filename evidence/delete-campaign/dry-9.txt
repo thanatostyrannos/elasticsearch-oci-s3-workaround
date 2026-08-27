@@ -1,0 +1,9 @@
+manifest: $WORK/execloop/manifest-9.tsv
+  5564 key(s), sha256 68c951c7c9a73a8d801b99149ec14825766b4131d1892523053de3cb95d3583a
+  6 batch(es) of up to 1000, checksum algorithm md5
+  target: http://genchain-s3.lab.dorkomen.us/genchain-scale/churndeep
+DRY RUN. Nothing was sent. The first batch's request:
+  POST ...?delete, 102740 byte body, 1000 key(s)
+  Content-MD5: mug5d5LsX9j0WSW7E0DDuw==
+To execute against this exact manifest:
+  --execute --approve-digest 68c951c7c9a73a8d801b99149ec14825766b4131d1892523053de3cb95d3583a --approve-rows 5564

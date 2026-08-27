@@ -1,0 +1,28 @@
+[
+  {
+    "timestamp_in_millis": 1787696619219,
+    "anomaly": "failed to load index metadata",
+    "index": {
+      "name": "blast-share2",
+      "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+      "metadata_blob": "MgD9OqABiKEMB984_UGL"
+    },
+    "exception": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b7:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b7:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b7/indices/UXdt_l7dRxGjcj2NMCWFbw/meta-MgD9OqABiKEMB984_UGL.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C9A865D6E00, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": "NOT_FOUND"
+    }
+  }
+]

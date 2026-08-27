@@ -1,0 +1,5 @@
+manifest: $WORK/minio10/manifest-4.tsv
+  0 key(s), sha256 7898b0a0ec3d5db2898763f7d93ce193592485ae53ae682c0e56b1643c426306
+  0 batch(es) of up to 1000, checksum algorithm md5
+  target: http://localhost:9000/scalerig-snaps/scalerig
+the manifest names no keys. Nothing would be sent.

@@ -1,0 +1,31 @@
+{
+  "snapshots": [
+    {
+      "snapshot": "blast-p-1",
+      "uuid": "aM1Fe-UsQpONyWNHJbCl4w",
+      "repository": "blast-b11",
+      "version_id": 9111000,
+      "version": "9.5.2",
+      "indices": [
+        "blast-pointer"
+      ],
+      "data_streams": [],
+      "include_global_state": false,
+      "state": "SUCCESS",
+      "start_time": "2026-08-26T00:25:27.829Z",
+      "start_time_in_millis": 1787703927829,
+      "end_time": "2026-08-26T00:25:27.829Z",
+      "end_time_in_millis": 1787703927829,
+      "duration_in_millis": 0,
+      "failures": [],
+      "shards": {
+        "total": 1,
+        "failed": 0,
+        "successful": 1
+      },
+      "feature_states": []
+    }
+  ],
+  "total": 1,
+  "remaining": 0
+}

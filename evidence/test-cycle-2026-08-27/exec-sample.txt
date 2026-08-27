@@ -1,0 +1,8 @@
+manifest: <home>/t2/out/manifest-1.tsv
+  140 key(s), sha256 023705bfae552cbde5e14b21e14f0cb41f9e8137675b90b3795f7d31c3b9c80a
+  1 batch(es) of up to 1000, checksum algorithm md5
+  target: https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com/esprobe-repo/t2rig
+deleted: 140
+already absent: 0
+failed: 0
+unconfirmed: 0

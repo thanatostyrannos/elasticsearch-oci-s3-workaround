@@ -1,0 +1,14 @@
+arm	run	shard_dirs	read	segment_blobs	root_generation
+armA	armA-1	2	2 of 2	120	11
+armA	armA-2	2	2 of 2	120	15
+armA	armA-3	2	2 of 2	120	22
+armB	armB-1	4	4 of 4	120	23
+armB	armB-2	8	0 of 8	0	29
+armB	armB-3	12	0 of 12	0	32
+armB	armB-4	16	0 of 16	0	37
+armB	armB-5	16	0 of 16	0	37
+armC	armC-1	22	4 of 22	408	47
+armC	armC-2	22	10 of 22	816	51
+armC	armC-3	22	10 of 22	816	55
+armC	armC-4	22	10 of 22	816	59
+armC	armC-5	22	10 of 22	816	62

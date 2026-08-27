@@ -1,0 +1,70 @@
+{
+  "log": [
+    {
+      "timestamp_in_millis": 1787703963255,
+      "snapshot": {
+        "snapshot": "blast-p-1",
+        "uuid": "aM1Fe-UsQpONyWNHJbCl4w",
+        "repository": "blast-b11",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-pointer"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-26T00:25:27.829Z",
+        "start_time_in_millis": 1787703927829,
+        "end_time": "2026-08-26T00:25:27.829Z",
+        "end_time_in_millis": 1787703927829,
+        "duration_in_millis": 0,
+        "failures": [],
+        "shards": {
+          "total": 1,
+          "failed": 0,
+          "successful": 1
+        },
+        "feature_states": []
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703963255,
+      "index": {
+        "name": "blast-pointer",
+        "uuid": "EPrwDCT5T-6VZ6_UzNn-6g"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 1,
+        "restorable_snapshot_count": 1
+      }
+    }
+  ],
+  "results": {
+    "status": {
+      "repository": {
+        "name": "blast-b11",
+        "uuid": "h1Ykooe5TSSsQ3kjb12YAQ",
+        "generation": 0
+      },
+      "snapshots": {
+        "verified": 1,
+        "total": 1
+      },
+      "indices": {
+        "verified": 1,
+        "total": 1
+      },
+      "index_snapshots": {
+        "verified": 1,
+        "total": 1
+      },
+      "blobs": {
+        "verified": 4
+      }
+    },
+    "final_repository_generation": 0,
+    "total_anomalies": 0,
+    "result": "pass"
+  }
+}

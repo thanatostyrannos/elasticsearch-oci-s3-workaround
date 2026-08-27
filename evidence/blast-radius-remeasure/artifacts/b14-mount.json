@@ -1,0 +1,226 @@
+{
+  "mode": "full_copy",
+  "steps": [
+    {
+      "step": "clone_base_ms",
+      "elapsed_s": 0.1,
+      "result": 9
+    },
+    {
+      "step": "register",
+      "elapsed_s": 0.7,
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "listing_before",
+      "elapsed_s": 0.0,
+      "result": {
+        "objects": 9,
+        "bytes": 159845
+      }
+    },
+    {
+      "step": "mount",
+      "elapsed_s": 0.9,
+      "result": {
+        "snapshot": {
+          "snapshot": "blast-ms-1",
+          "indices": [
+            "bxmsb14"
+          ],
+          "shards": {
+            "total": 1,
+            "failed": 0,
+            "successful": 1
+          }
+        }
+      }
+    },
+    {
+      "step": "after_mount",
+      "elapsed_s": 1.2,
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb14",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "delete_data_blobs",
+      "elapsed_s": 0.0,
+      "result": {
+        "keys": [
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__9-dZ_AmXS86Rw9661Ji83g",
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__XM5STEWUTFGMtBvG0YiMtA"
+        ],
+        "bytes": 156332,
+        "http": [
+          204,
+          204
+        ]
+      }
+    },
+    {
+      "step": "after_delete",
+      "elapsed_s": 1.1,
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb14",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "clear_shared_cache",
+      "elapsed_s": 0.4,
+      "result": {
+        "_shards": {
+          "total": 10,
+          "successful": 10,
+          "failed": 0
+        }
+      }
+    },
+    {
+      "step": "after_cache_clear",
+      "elapsed_s": 1.1,
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb14",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "verify_integrity",
+      "elapsed_s": 0.4,
+      "result": {
+        "status": {
+          "repository": {
+            "name": "blast-b14",
+            "uuid": "rMZpJqIVQMaOlby1aYPTUA",
+            "generation": 0
+          },
+          "snapshots": {
+            "verified": 1,
+            "total": 1
+          },
+          "indices": {
+            "verified": 1,
+            "total": 1
+          },
+          "index_snapshots": {
+            "verified": 1,
+            "total": 1
+          },
+          "blobs": {
+            "verified": 4
+          }
+        },
+        "final_repository_generation": 0,
+        "total_anomalies": 2,
+        "result": "fail"
+      }
+    },
+    {
+      "step": "close",
+      "elapsed_s": 0.5,
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true,
+        "indices": {
+          "bxmsb14": {
+            "closed": true
+          }
+        }
+      }
+    },
+    {
+      "step": "open",
+      "elapsed_s": 0.4,
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true
+      }
+    },
+    {
+      "step": "after_close_reopen",
+      "elapsed_s": 1.1,
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb14",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "reroute_retry_failed",
+      "elapsed_s": 0.6,
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "after_reroute",
+      "elapsed_s": 1.0,
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb14",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "explain_allocation",
+      "elapsed_s": 0.4,
+      "result": {
+        "index": "bxmsb14",
+        "shard": 0,
+        "current_state": "started"
+      }
+    }
+  ]
+}

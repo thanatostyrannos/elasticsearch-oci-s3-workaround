@@ -1,0 +1,32 @@
+{
+    "policy": {
+        "phases": {
+            "hot": {
+                "min_age": "0ms",
+                "actions": {
+                    "rollover": {
+                        "max_age": "2m",
+                        "max_docs": 5000
+                    }
+                }
+            },
+            "frozen": {
+                "min_age": "2m",
+                "actions": {
+                    "searchable_snapshot": {
+                        "snapshot_repository": "mtestrun-repo",
+                        "force_merge_index": true
+                    }
+                }
+            },
+            "delete": {
+                "min_age": "30m",
+                "actions": {
+                    "delete": {
+                        "delete_searchable_snapshot": true
+                    }
+                }
+            }
+        }
+    }
+}

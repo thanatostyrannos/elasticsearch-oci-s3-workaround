@@ -1,0 +1,4 @@
+cycle	utc	mode	settle	shards_read	segments_condemned	deleted	failed	unconfirmed	reclaimable	exit
+1	2026-08-26T22:53:58Z	segment	timeout/audited-anyway	2/2	252	0	0	0	68.5 MB across 471 orphaned objects (68,504,999 bytes)	0
+2	2026-08-26T23:03:15Z	segment	timeout/audited-anyway	2/2	380	0	0	0	135.16 MB across 639 orphaned objects (135,156,173 bytes)	0
+3	2026-08-26T23:13:51Z	segment	timeout/audited-anyway	2/2	508	0	0	0	197.94 MB across 807 orphaned objects (197,939,921 bytes)	0

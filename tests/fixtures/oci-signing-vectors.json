@@ -1,0 +1,222 @@
+{
+  "_header": {
+    "title": "Known-answer vectors for OCI Object Storage request signing",
+    "extracted_from": "tests/test_oci_stdlib_client.py, deleted in the sweeper retirement",
+    "extracted_at_commit": "b689f669c447c45cc01b2db36ace0542641021b0",
+    "vectors_established_at_commit": "4aeb4e8daeb282e407266d93cbe485a79ac14c66",
+    "described_implementation": "the stdlib OCI Object Storage client that oci_repo_sweeper.py and es_log_driven_sweeper.py each carried a verbatim copy of, at oci_repo_sweeper.py lines 840 to 1345 of commit b689f66",
+    "why_this_file_exists": [
+      "No OCI endpoint is reachable from this project, and none ever was. These vectors are the only offline proof that a signer built here is correct.",
+      "Every value below was established by reading Oracle's documented scheme and then pinning the bytes that a working implementation produced. Oracle answers a signature mismatch with a bare 401 that names nothing, so a signer with no vectors behind it can only be debugged against a live bucket.",
+      "The tools that carried the client are retired. The vectors are not about those tools. They describe the OCI scheme, so the next signer written here can be checked against them before it is pointed at anything."
+    ],
+    "what_they_prove": [
+      "signing_string: the exact bytes fed to the key, including line order and the (request-target) spelling.",
+      "signed_headers: the header list the Authorization line declares, which must describe the bytes above and stay matched to them.",
+      "authorization_header: the five parameters Oracle parses out of the header, and the two keyId forms.",
+      "path_encoding: which characters in an object name are percent-encoded and which are not. Getting this wrong addresses a different object, and the failure looks like the object was already gone.",
+      "query_encoding: a space in a query value is %20, never a plus.",
+      "session_token_profile: what a profile written by `oci session authenticate` carries instead of a user OCID, and what a truncated token must do.",
+      "region_to_host: the realms whose Object Storage host is not under oraclecloud.com."
+    ],
+    "not_carried_across": "The tests themselves. A replacement writes its own, against these numbers."
+  },
+
+  "signing_string": {
+    "description": "Bytes signed for a bodyless request. Line order comes from signed_headers. (request-target) is the lower case method, one space, then the path with its query attached.",
+    "encoding": "ascii",
+    "line_separator": "\n",
+    "trailing_newline": false,
+    "cases": [
+      {
+        "name": "known request against a commercial-realm host",
+        "method": "GET",
+        "path_and_query": "/n/ns/b/bkt/o/index.latest",
+        "host": "objectstorage.us-ashburn-1.oraclecloud.com",
+        "date_header": "Thu, 05 Jan 2014 21:31:40 GMT",
+        "expected": "date: Thu, 05 Jan 2014 21:31:40 GMT\n(request-target): get /n/ns/b/bkt/o/index.latest\nhost: objectstorage.us-ashburn-1.oraclecloud.com"
+      },
+      {
+        "name": "the query string is inside (request-target)",
+        "why": "A signature over the path alone verifies against the same path with a different query. For a paginated listing the page token lives in the query, so that is a replay a buggy proxy performs by accident.",
+        "method": "GET",
+        "path_and_query": "/n/ns/b/bkt/o?prefix=a&limit=1000",
+        "host": "h",
+        "date_header": "Thu, 05 Jan 2014 21:31:40 GMT",
+        "expected": "date: Thu, 05 Jan 2014 21:31:40 GMT\n(request-target): get /n/ns/b/bkt/o?prefix=a&limit=1000\nhost: h",
+        "must_differ_from_signing_of": "/n/ns/b/bkt/o"
+      },
+      {
+        "name": "the path is signed percent-encoded, as sent",
+        "why": "Signing the raw name while sending the encoded one 401s only for keys carrying a space or a percent sign, so a sweep looks healthy until it dies on the odd key part way through.",
+        "method": "GET",
+        "path_and_query": "/n/ns/b/bkt/o/a%20b/c%25d",
+        "host": "h",
+        "date_header": "Thu, 05 Jan 2014 21:31:40 GMT",
+        "expected": "date: Thu, 05 Jan 2014 21:31:40 GMT\n(request-target): get /n/ns/b/bkt/o/a%20b/c%25d\nhost: h",
+        "must_differ_from_signing_of": "/n/ns/b/bkt/o/a b/c%d"
+      }
+    ]
+  },
+
+  "signed_headers": {
+    "description": "The header list, in the order the signing string uses and the order the Authorization line declares. The two are the same list and a check should read the declared list off the header and rebuild from it rather than trusting a constant.",
+    "order": ["date", "(request-target)", "host"],
+    "declared_as": "date (request-target) host"
+  },
+
+  "authorization_header": {
+    "description": "Oracle parses five named parameters out of this header and rejects the request when one is missing or misspelled.",
+    "template": "Signature algorithm=\"rsa-sha256\",headers=\"{headers}\",keyId=\"{key_id}\",signature=\"{signature}\",version=\"1\"",
+    "algorithm": "rsa-sha256",
+    "version": "1",
+    "signature_encoding": "base64 of RSA-SHA256 over the signing string",
+    "key_id_forms": {
+      "api_key": {
+        "format": "{tenancy}/{user}/{fingerprint}",
+        "example_inputs": {
+          "tenancy": "ocid1.tenancy.oc1..bbbb",
+          "user": "ocid1.user.oc1..aaaa",
+          "fingerprint": "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+        },
+        "expected": "ocid1.tenancy.oc1..bbbb/ocid1.user.oc1..aaaa/aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+      },
+      "session_token": {
+        "format": "ST${token}",
+        "example_inputs": {"security_token_file_contents": "abc.def.ghi\n"},
+        "expected": "ST$abc.def.ghi",
+        "note": "The token is stripped of surrounding whitespace before the prefix goes on."
+      }
+    }
+  },
+
+  "path_encoding": {
+    "description": "One object name becomes one path parameter. The slash stays literal, so an ES blob key arrives as several path segments rather than one escaped blob. Everything else is encoded.",
+    "rule": "percent-encode with the slash treated as safe; this matches the OCI SDK default, which is the behaviour operators already have",
+    "rejected_alternative": {
+      "rule": "percent-encode with nothing safe",
+      "why_rejected": "It turns every slash into %2F, which addresses a different object. A sweep then 404s on the whole repository and reports it as already gone.",
+      "example": {"input": "indices/Abc/0", "would_produce": "indices%2FAbc%2F0"}
+    },
+    "cases": [
+      {"input": "es-snapshots/indices/Abc123XyZ/0/__Trace1234567890", "expected": "es-snapshots/indices/Abc123XyZ/0/__Trace1234567890", "note": "the ordinary repository key, unchanged"},
+      {"input": "a b/c", "expected": "a%20b/c"},
+      {"input": "a+b/c", "expected": "a%2Bb/c"},
+      {"input": "50%25/x", "expected": "50%2525/x"},
+      {"input": "snåpshot/é", "expected": "sn%C3%A5pshot/%C3%A9", "note": "UTF-8 first, then percent-encode each byte"},
+      {"input": "a?b/c", "expected": "a%3Fb/c"},
+      {"input": "a#b/c", "expected": "a%23b/c"},
+      {"input": "a&b=c/d", "expected": "a%26b%3Dc/d"}
+    ],
+    "url_assembly": {
+      "description": "The encoder being right does not help if the URL builder puts a raw name back on the wire, so the join point carries its own vector.",
+      "path_template": "/n/{namespace}/b/{bucket}/o/{object_name}",
+      "case": {
+        "host": "objectstorage.us-ashburn-1.oraclecloud.com",
+        "namespace": "ns",
+        "bucket": "bkt",
+        "object_name": "es snap/a+b",
+        "expected_url": "https://objectstorage.us-ashburn-1.oraclecloud.com/n/ns/b/bkt/o/es%20snap/a%2Bb"
+      }
+    }
+  },
+
+  "query_encoding": {
+    "description": "Query values are encoded with a space as %20. The default form-encoding a standard library offers sends a space as a plus, which the service reads back as a literal plus.",
+    "why_it_matters": "A next-page token is an object name. A plus in place of a space resumes the listing from a key that does not exist, the page comes back short, and the sweep under-reports while looking clean.",
+    "cases": [
+      {
+        "params": {"start": "a b/c", "limit": 1000},
+        "expected_query_contains": "start=a%20b%2Fc",
+        "expected_query_must_not_contain": "+"
+      }
+    ]
+  },
+
+  "config_contract": {
+    "description": "Fields demanded from an OCI config profile before anything is signed, so a gap reads as a config error rather than a 401.",
+    "required_for_api_key_profile": ["user", "fingerprint", "tenancy", "region", "key_file"],
+    "required_for_session_token_profile": ["region", "key_file", "security_token_file"],
+    "empty_value_counts_as_absent": true,
+    "all_missing_fields_reported_at_once": true,
+    "path_precedence": ["the explicit path argument", "OCI_CONFIG_FILE", "~/.oci/config"],
+    "path_precedence_note": "This deviates from the OCI SDK on purpose. The SDK reads OCI_CONFIG_FILE only when ~/.oci/config is absent, so an operator who exported the variable on a host that also has a default config authenticates as a different principal without being told.",
+    "expanded_at_load_time": ["key_file", "security_token_file"],
+    "cases": [
+      {
+        "name": "a complete api-key profile",
+        "profile": "PROD",
+        "body": "[PROD]\nuser=ocid1.user.oc1..prod\nfingerprint=11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00\ntenancy=ocid1.tenancy.oc1..prod\nregion=uk-gov-london-1\nkey_file=/etc/oci/prod.pem\npass_phrase=hunter2\n",
+        "expect_loads": true,
+        "expect_fields": {
+          "user": "ocid1.user.oc1..prod",
+          "region": "uk-gov-london-1",
+          "key_file": "/etc/oci/prod.pem",
+          "pass_phrase": "hunter2"
+        }
+      },
+      {
+        "name": "a half-copied profile, with the empty key_file an editor leaves behind",
+        "profile": "DEFAULT",
+        "body": "[DEFAULT]\nuser=ocid1.user.oc1..x\nregion=us-ashburn-1\nkey_file=\n",
+        "expect_loads": false,
+        "error_must_name": ["fingerprint", "key_file", "tenancy"]
+      },
+      {
+        "name": "a session profile has no user, tenancy or fingerprint and is still valid",
+        "profile": "SESSION",
+        "body": "[SESSION]\nregion=us-ashburn-1\nkey_file=/tmp/k.pem\nsecurity_token_file=/tmp/token\n",
+        "expect_loads": true,
+        "expect_fields": {"security_token_file": "/tmp/token"}
+      }
+    ]
+  },
+
+  "session_token_profile": {
+    "description": "A profile written by `oci session authenticate` signs with the same private key and identifies itself by the token instead of a user OCID.",
+    "cases": [
+      {
+        "name": "a populated token becomes the keyId",
+        "security_token_file_contents": "abc.def.ghi\n",
+        "expected_key_id": "ST$abc.def.ghi"
+      },
+      {
+        "name": "an empty token file is refused before the first request",
+        "why": "An expired session leaves the file in place and something truncates it. A keyId of ST$ produces one 401 per key across a whole sweep, and nothing in that failure points at the token file.",
+        "security_token_file_contents": "",
+        "expect_error": true,
+        "error_must_contain": "empty"
+      }
+    ]
+  },
+
+  "region_to_host": {
+    "description": "The Object Storage host is built from the region rather than from a shipped 85-entry region table. Only the realms whose second-level domain is not oraclecloud.com are enumerated.",
+    "host_template": "objectstorage.{region}.{domain}",
+    "default_domain": "oraclecloud.com",
+    "realm_domains": {
+      "us-langley-1": "oraclegovcloud.com",
+      "us-luke-1": "oraclegovcloud.com",
+      "us-gov-ashburn-1": "oraclegovcloud.com",
+      "us-gov-chicago-1": "oraclegovcloud.com",
+      "us-gov-phoenix-1": "oraclegovcloud.com",
+      "uk-gov-london-1": "oraclegovcloud.uk",
+      "uk-gov-cardiff-1": "oraclegovcloud.uk"
+    },
+    "cases": [
+      {"region": "eu-frankfurt-1", "expected_host": "objectstorage.eu-frankfurt-1.oraclecloud.com"},
+      {"region": "us-ashburn-1", "expected_host": "objectstorage.us-ashburn-1.oraclecloud.com"},
+      {"region": "us-gov-ashburn-1", "expected_host": "objectstorage.us-gov-ashburn-1.oraclegovcloud.com"},
+      {"region": "uk-gov-london-1", "expected_host": "objectstorage.uk-gov-london-1.oraclegovcloud.uk"},
+      {"region": "uk-gov-cardiff-1", "expected_host": "objectstorage.uk-gov-cardiff-1.oraclegovcloud.uk"}
+    ],
+    "override": {
+      "description": "The table covers oc1 through oc4 and guesses oraclecloud.com for the rest, which is wrong for a dedicated-region or sovereign-cloud operator. Without an override that operator cannot use the tool at all, so the escape hatch accepts a bare host and a pasted full URL alike.",
+      "precedence": ["the explicit override argument", "OCI_OBJECTSTORAGE_ENDPOINT", "the realm table"],
+      "cases": [
+        {"region": "us-ashburn-1", "override": "https://objectstorage.example.test/", "expected_host": "objectstorage.example.test"},
+        {"region": "us-ashburn-1", "env_OCI_OBJECTSTORAGE_ENDPOINT": "os.internal:8443", "expected_host": "os.internal:8443"}
+      ]
+    }
+  }
+}

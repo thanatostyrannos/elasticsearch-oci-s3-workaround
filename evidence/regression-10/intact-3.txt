@@ -1,0 +1,3 @@
+== cluster ==
+  status=red nodes=1 unassigned=10
+  FAIL: cluster is RED

@@ -1,0 +1,101 @@
+{
+  "id": "b12",
+  "note": "root meta-<uuid>.dat on a snapshot taken with global cluster state",
+  "base": "base-g",
+  "repo": "blast-b12",
+  "clone_objects": 27,
+  "register": {
+    "acknowledged": true
+  },
+  "objects_before": 27,
+  "bytes_before": 602261,
+  "deleted_objects": 1,
+  "deleted_bytes": 39957,
+  "share_of_objects_pct": 3.704,
+  "share_of_bytes_pct": 6.634,
+  "objects_after": 26,
+  "verify_pre_status": {
+    "repository": {
+      "name": "blast-b12",
+      "uuid": "euPV61bHQTStILeNNAJn3w",
+      "generation": 0
+    },
+    "snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "indices": {
+      "verified": 3,
+      "total": 3
+    },
+    "index_snapshots": {
+      "verified": 3,
+      "total": 3
+    },
+    "blobs": {
+      "verified": 22
+    }
+  },
+  "verify_pre_total_anomalies": 0,
+  "verify_pre_result": "pass",
+  "verify_status": {
+    "repository": {
+      "name": "blast-b12",
+      "uuid": "euPV61bHQTStILeNNAJn3w",
+      "generation": 0
+    },
+    "snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "indices": {
+      "verified": 3,
+      "total": 3
+    },
+    "index_snapshots": {
+      "verified": 3,
+      "total": 3
+    },
+    "blobs": {
+      "verified": 22
+    }
+  },
+  "total_anomalies": 1,
+  "result": "fail",
+  "anomaly_classes": [
+    "failed to load global metadata"
+  ],
+  "anomalies_per_snapshot": {
+    "blast-g-1": 1
+  },
+  "damaged_index_snapshot_pairs": [],
+  "damaged_pair_count": 0,
+  "catalog_snapshots": [
+    "blast-g-1"
+  ],
+  "catalog_states": {
+    "blast-g-1": "SUCCESS"
+  },
+  "restores": [
+    {
+      "snapshot": "blast-g-1",
+      "shards": {
+        "total": 1,
+        "failed": 0,
+        "successful": 1
+      },
+      "indices": [
+        "bxrb12-1-gstate"
+      ],
+      "health": {
+        "bxrb12-1-gstate": "green"
+      },
+      "docs": {
+        "bxrb12-1-gstate": 500
+      },
+      "count_errors": {
+        "bxrb12-1-gstate": null
+      }
+    }
+  ]
+}

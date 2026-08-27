@@ -1,0 +1,25 @@
+{
+    "IsTruncated": true,
+    "Contents": [
+        {
+            "Key": "del-crc32-1.txt",
+            "LastModified": "2026-08-26T20:29:41+00:00",
+            "ETag": "\"9ebcb3bbc92692711a1945b2991ece6c\"",
+            "Size": 8,
+            "StorageClass": "STANDARD"
+        },
+        {
+            "Key": "del-crc32-2.txt",
+            "LastModified": "2026-08-26T20:29:42+00:00",
+            "ETag": "\"e17995e495d74a6e569d61fc5942d14c\"",
+            "Size": 8,
+            "StorageClass": "STANDARD"
+        }
+    ],
+    "Name": "esprobe-probe",
+    "Prefix": "",
+    "MaxKeys": 2,
+    "EncodingType": "url",
+    "KeyCount": 2,
+    "NextContinuationToken": "1:P9xPeV2FliBqmSMrvNsYqEhmzlZoMd0eBDT19E2VlVo="
+}

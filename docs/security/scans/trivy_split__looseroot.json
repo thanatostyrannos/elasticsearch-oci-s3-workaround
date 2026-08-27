@@ -1,0 +1,10 @@
+{
+ "ArtifactName": "/src/_looseroot",
+ "ArtifactType": "filesystem",
+ "CreatedAt": "2026-08-27T03:49:46.191081005Z",
+ "ReportID": "01a04156-8c4f-713a-bc57-25c4296edf75",
+ "SchemaVersion": 2,
+ "Trivy": {
+  "Version": "0.74.0"
+ }
+}

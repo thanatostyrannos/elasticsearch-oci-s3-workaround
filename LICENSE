@@ -1,0 +1,84 @@
+# License
+
+Copyright (c) 2026 the contributors to elasticsearch-oci-s3-workaround.
+
+This software is free to use, copy, modify and share, for anyone who is not
+making money from it, and it is permissively licensed for government use. The
+two grants below say what that means precisely.
+
+**This is not legal advice, and this text has not been reviewed by a lawyer.**
+If your use is commercial, or your organisation needs certainty before
+deploying software that deletes data, have counsel read this first. The authors
+would rather you ask than assume.
+
+## 1. Noncommercial grant
+
+You are granted a worldwide, royalty-free, non-exclusive license to use, copy,
+modify, distribute and make derivative works of this software, for any purpose
+that is **not primarily intended for or directed toward commercial advantage or
+monetary compensation**.
+
+Uses that are covered by this grant, stated so you do not have to guess:
+
+- Personal use, study and research.
+- Use inside a nonprofit, charity, school or university.
+- Evaluating whether the software works, including in a company, before any
+  decision to deploy it commercially.
+- Publishing findings, benchmarks or criticism, including with source excerpts.
+
+Uses that are **not** covered and need a separate commercial license:
+
+- Running it as part of, or in support of, a product or service you charge for.
+- Using it in the internal operations of a for-profit organisation beyond
+  evaluation.
+- Selling it, or bundling it with something you sell.
+
+If you are unsure which side of that line you are on, you are on the side that
+should ask.
+
+## 2. Government grant
+
+Any government body, at any level and in any country, and any contractor acting
+on its behalf and under its direction, is granted the rights in section 1
+**without the noncommercial restriction**, on permissive terms: use, copy,
+modify, distribute, sublicense and make derivative works, for any purpose,
+including in support of paid contracts and procurement.
+
+This grant exists because the fault this software works around affects public
+infrastructure, and because a noncommercial clause is an obstacle to the people
+most likely to be stuck with it.
+
+## 3. Conditions on both grants
+
+Keep this license file, and the copyright notice above, with any copy or
+substantial portion you distribute.
+
+If you modify it and pass it on, say so. Do not represent a modified version as
+the original.
+
+Neither grant licenses any trademark, and neither grants rights in Elasticsearch,
+Oracle, or any other third party's software, which have their own terms.
+
+## 4. No warranty, and please read this one
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+That paragraph is standard, and here is what it means in this particular case,
+because the software does something specific and dangerous.
+
+**This software deletes objects from snapshot repositories.** Oracle's Amazon
+S3 Compatibility API exposes no object versioning, so a delete made through it
+has no undo. The safety properties documented in this repository are real and
+tested, and they are not a guarantee about your data, your repository or your
+cluster.
+
+Read `docs/quickstart-read-only.md` before you delete anything. The audit is
+read-only and cannot delete; that is enforced structurally, not by convention.
+Start there, keep the manifest, and satisfy yourself the answer is right before
+acting on it.

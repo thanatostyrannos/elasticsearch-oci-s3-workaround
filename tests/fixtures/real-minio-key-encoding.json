@@ -1,0 +1,397 @@
+{
+ "_captured_from": "MinIO on the es-rig cluster, bucket es-snapshots, over the S3 API",
+ "_captured_on": "2026-08-25",
+ "_what_this_is": "One entry per object key. request_target is the path the store accepted, listing_plain is the key as a default ListObjectsV2 reports it after XML entity decoding, listing_url_encoded is the key as an encoding-type=url listing reports it. Captured rather than derived, then every s3test- key was deleted from the bucket. Keys c01 through c1f carry one C0 control byte each. A default listing containing one of 0x01 to 0x07 is not well-formed XML at all, and the rest come back with the byte replaced by U+FFFD, so a run that does not ask for encoding-type=url either fails to parse the bucket or reads a key that is not the key that is there.",
+ "keys": {
+  "s3test-k00/plain": {
+   "request_target": "/es-snapshots/s3test-k00/plain",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k00/plain",
+   "listing_url_encoded": "s3test-k00/plain"
+  },
+  "s3test-k01/a b": {
+   "request_target": "/es-snapshots/s3test-k01/a%20b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k01/a b",
+   "listing_url_encoded": "s3test-k01/a+b"
+  },
+  "s3test-k02/a+b": {
+   "request_target": "/es-snapshots/s3test-k02/a%2Bb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k02/a+b",
+   "listing_url_encoded": "s3test-k02/a%2Bb"
+  },
+  "s3test-k03/a%b": {
+   "request_target": "/es-snapshots/s3test-k03/a%25b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k03/a%b",
+   "listing_url_encoded": "s3test-k03/a%25b"
+  },
+  "s3test-k04/a=b": {
+   "request_target": "/es-snapshots/s3test-k04/a%3Db",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k04/a=b",
+   "listing_url_encoded": "s3test-k04/a%3Db"
+  },
+  "s3test-k05/a&b": {
+   "request_target": "/es-snapshots/s3test-k05/a%26b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k05/a&b",
+   "listing_url_encoded": "s3test-k05/a%26b"
+  },
+  "s3test-k06/a?b": {
+   "request_target": "/es-snapshots/s3test-k06/a%3Fb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k06/a?b",
+   "listing_url_encoded": "s3test-k06/a%3Fb"
+  },
+  "s3test-k07/a#b": {
+   "request_target": "/es-snapshots/s3test-k07/a%23b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k07/a#b",
+   "listing_url_encoded": "s3test-k07/a%23b"
+  },
+  "s3test-k08/a~b": {
+   "request_target": "/es-snapshots/s3test-k08/a~b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k08/a~b",
+   "listing_url_encoded": "s3test-k08/a%7Eb"
+  },
+  "s3test-k09/a*b": {
+   "request_target": "/es-snapshots/s3test-k09/a%2Ab",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k09/a*b",
+   "listing_url_encoded": "s3test-k09/a*b"
+  },
+  "s3test-k10/a(b)c": {
+   "request_target": "/es-snapshots/s3test-k10/a%28b%29c",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k10/a(b)c",
+   "listing_url_encoded": "s3test-k10/a%28b%29c"
+  },
+  "s3test-k11/ünïcødé": {
+   "request_target": "/es-snapshots/s3test-k11/%C3%BCn%C3%AFc%C3%B8d%C3%A9",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k11/ünïcødé",
+   "listing_url_encoded": "s3test-k11/%C3%BCn%C3%AFc%C3%B8d%C3%A9"
+  },
+  "s3test-k12/a:b": {
+   "request_target": "/es-snapshots/s3test-k12/a%3Ab",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k12/a:b",
+   "listing_url_encoded": "s3test-k12/a%3Ab"
+  },
+  "s3test-k13/a@b": {
+   "request_target": "/es-snapshots/s3test-k13/a%40b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k13/a@b",
+   "listing_url_encoded": "s3test-k13/a%40b"
+  },
+  "s3test-k14/a,b": {
+   "request_target": "/es-snapshots/s3test-k14/a%2Cb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k14/a,b",
+   "listing_url_encoded": "s3test-k14/a%2Cb"
+  },
+  "s3test-k15/a;b": {
+   "request_target": "/es-snapshots/s3test-k15/a%3Bb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k15/a;b",
+   "listing_url_encoded": "s3test-k15/a%3Bb"
+  },
+  "s3test-k16/a'b": {
+   "request_target": "/es-snapshots/s3test-k16/a%27b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k16/a'b",
+   "listing_url_encoded": "s3test-k16/a%27b"
+  },
+  "s3test-k17/a\"b": {
+   "request_target": "/es-snapshots/s3test-k17/a%22b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k17/a\"b",
+   "listing_url_encoded": "s3test-k17/a%22b"
+  },
+  "s3test-k18/a\\b": {
+   "request_target": "/es-snapshots/s3test-k18/a%5Cb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k18/a\\b",
+   "listing_url_encoded": "s3test-k18/a%5Cb"
+  },
+  "s3test-k19/x/y/z/w": {
+   "request_target": "/es-snapshots/s3test-k19/x/y/z/w",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k19/x/y/z/w",
+   "listing_url_encoded": "s3test-k19/x/y/z/w"
+  },
+  "s3test-k20/a%2Fb": {
+   "request_target": "/es-snapshots/s3test-k20/a%252Fb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k20/a%2Fb",
+   "listing_url_encoded": "s3test-k20/a%252Fb"
+  },
+  "s3test-k21/tab\tb": {
+   "request_target": "/es-snapshots/s3test-k21/tab%09b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k21/tab\tb",
+   "listing_url_encoded": "s3test-k21/tab%09b"
+  },
+  "s3test-k22/a[b]c": {
+   "request_target": "/es-snapshots/s3test-k22/a%5Bb%5Dc",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k22/a[b]c",
+   "listing_url_encoded": "s3test-k22/a%5Bb%5Dc"
+  },
+  "s3test-k23/a|b": {
+   "request_target": "/es-snapshots/s3test-k23/a%7Cb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k23/a|b",
+   "listing_url_encoded": "s3test-k23/a%7Cb"
+  },
+  "s3test-k24/a^b": {
+   "request_target": "/es-snapshots/s3test-k24/a%5Eb",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k24/a^b",
+   "listing_url_encoded": "s3test-k24/a%5Eb"
+  },
+  "s3test-k25/a`b": {
+   "request_target": "/es-snapshots/s3test-k25/a%60b",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k25/a`b",
+   "listing_url_encoded": "s3test-k25/a%60b"
+  },
+  "s3test-k26/a<b>c": {
+   "request_target": "/es-snapshots/s3test-k26/a%3Cb%3Ec",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k26/a<b>c",
+   "listing_url_encoded": "s3test-k26/a%3Cb%3Ec"
+  },
+  "s3test-k27/100%25": {
+   "request_target": "/es-snapshots/s3test-k27/100%2525",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k27/100%25",
+   "listing_url_encoded": "s3test-k27/100%2525"
+  },
+  "s3test-k28/a/./b": {
+   "store_refused": 400
+  },
+  "s3test-k29/a/../b": {
+   "store_refused": 400
+  },
+  "s3test-k30/trailingdir/": {
+   "request_target": "/es-snapshots/s3test-k30/trailingdir/",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k30/trailingdir/",
+   "listing_url_encoded": "s3test-k30/trailingdir/"
+  },
+  "s3test-k31/  leading-and-trailing  ": {
+   "request_target": "/es-snapshots/s3test-k31/%20%20leading-and-trailing%20%20",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k31/  leading-and-trailing  ",
+   "listing_url_encoded": "s3test-k31/++leading-and-trailing++"
+  },
+  "s3test-k32/dot.dot..dot": {
+   "request_target": "/es-snapshots/s3test-k32/dot.dot..dot",
+   "get_status": 200,
+   "body_round_tripped": true,
+   "listing_plain": "s3test-k32/dot.dot..dot",
+   "listing_url_encoded": "s3test-k32/dot.dot..dot"
+  },
+  "s3test-c01/seg\u0001ment.dat": {
+   "request_target": "/es-snapshots/s3test-c01/seg%01ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c01/seg%01ment.dat"
+  },
+  "s3test-c02/seg\u0002ment.dat": {
+   "request_target": "/es-snapshots/s3test-c02/seg%02ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c02/seg%02ment.dat"
+  },
+  "s3test-c03/seg\u0003ment.dat": {
+   "request_target": "/es-snapshots/s3test-c03/seg%03ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c03/seg%03ment.dat"
+  },
+  "s3test-c04/seg\u0004ment.dat": {
+   "request_target": "/es-snapshots/s3test-c04/seg%04ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c04/seg%04ment.dat"
+  },
+  "s3test-c05/seg\u0005ment.dat": {
+   "request_target": "/es-snapshots/s3test-c05/seg%05ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c05/seg%05ment.dat"
+  },
+  "s3test-c06/seg\u0006ment.dat": {
+   "request_target": "/es-snapshots/s3test-c06/seg%06ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c06/seg%06ment.dat"
+  },
+  "s3test-c07/seg\u0007ment.dat": {
+   "request_target": "/es-snapshots/s3test-c07/seg%07ment.dat",
+   "listing_plain": null,
+   "listing_plain_unparseable": "reference to invalid character number: line 2, column 225",
+   "listing_url_encoded": "s3test-c07/seg%07ment.dat"
+  },
+  "s3test-c08/seg\bment.dat": {
+   "request_target": "/es-snapshots/s3test-c08/seg%08ment.dat",
+   "listing_plain": "s3test-c08/seg�ment.dat",
+   "listing_url_encoded": "s3test-c08/seg%08ment.dat"
+  },
+  "s3test-c09/seg\tment.dat": {
+   "request_target": "/es-snapshots/s3test-c09/seg%09ment.dat",
+   "listing_plain": "s3test-c09/seg\tment.dat",
+   "listing_url_encoded": "s3test-c09/seg%09ment.dat"
+  },
+  "s3test-c0a/seg\nment.dat": {
+   "request_target": "/es-snapshots/s3test-c0a/seg%0Ament.dat",
+   "listing_plain": "s3test-c0a/seg\nment.dat",
+   "listing_url_encoded": "s3test-c0a/seg%0Ament.dat"
+  },
+  "s3test-c0b/seg\u000bment.dat": {
+   "request_target": "/es-snapshots/s3test-c0b/seg%0Bment.dat",
+   "listing_plain": "s3test-c0b/seg�ment.dat",
+   "listing_url_encoded": "s3test-c0b/seg%0Bment.dat"
+  },
+  "s3test-c0c/seg\fment.dat": {
+   "request_target": "/es-snapshots/s3test-c0c/seg%0Cment.dat",
+   "listing_plain": "s3test-c0c/seg�ment.dat",
+   "listing_url_encoded": "s3test-c0c/seg%0Cment.dat"
+  },
+  "s3test-c0d/seg\rment.dat": {
+   "request_target": "/es-snapshots/s3test-c0d/seg%0Dment.dat",
+   "listing_plain": "s3test-c0d/seg\rment.dat",
+   "listing_url_encoded": "s3test-c0d/seg%0Dment.dat"
+  },
+  "s3test-c0e/seg\u000ement.dat": {
+   "request_target": "/es-snapshots/s3test-c0e/seg%0Ement.dat",
+   "listing_plain": "s3test-c0e/seg�ment.dat",
+   "listing_url_encoded": "s3test-c0e/seg%0Ement.dat"
+  },
+  "s3test-c0f/seg\u000fment.dat": {
+   "request_target": "/es-snapshots/s3test-c0f/seg%0Fment.dat",
+   "listing_plain": "s3test-c0f/seg�ment.dat",
+   "listing_url_encoded": "s3test-c0f/seg%0Fment.dat"
+  },
+  "s3test-c10/seg\u0010ment.dat": {
+   "request_target": "/es-snapshots/s3test-c10/seg%10ment.dat",
+   "listing_plain": "s3test-c10/seg�ment.dat",
+   "listing_url_encoded": "s3test-c10/seg%10ment.dat"
+  },
+  "s3test-c11/seg\u0011ment.dat": {
+   "request_target": "/es-snapshots/s3test-c11/seg%11ment.dat",
+   "listing_plain": "s3test-c11/seg�ment.dat",
+   "listing_url_encoded": "s3test-c11/seg%11ment.dat"
+  },
+  "s3test-c12/seg\u0012ment.dat": {
+   "request_target": "/es-snapshots/s3test-c12/seg%12ment.dat",
+   "listing_plain": "s3test-c12/seg�ment.dat",
+   "listing_url_encoded": "s3test-c12/seg%12ment.dat"
+  },
+  "s3test-c13/seg\u0013ment.dat": {
+   "request_target": "/es-snapshots/s3test-c13/seg%13ment.dat",
+   "listing_plain": "s3test-c13/seg�ment.dat",
+   "listing_url_encoded": "s3test-c13/seg%13ment.dat"
+  },
+  "s3test-c14/seg\u0014ment.dat": {
+   "request_target": "/es-snapshots/s3test-c14/seg%14ment.dat",
+   "listing_plain": "s3test-c14/seg�ment.dat",
+   "listing_url_encoded": "s3test-c14/seg%14ment.dat"
+  },
+  "s3test-c15/seg\u0015ment.dat": {
+   "request_target": "/es-snapshots/s3test-c15/seg%15ment.dat",
+   "listing_plain": "s3test-c15/seg�ment.dat",
+   "listing_url_encoded": "s3test-c15/seg%15ment.dat"
+  },
+  "s3test-c16/seg\u0016ment.dat": {
+   "request_target": "/es-snapshots/s3test-c16/seg%16ment.dat",
+   "listing_plain": "s3test-c16/seg�ment.dat",
+   "listing_url_encoded": "s3test-c16/seg%16ment.dat"
+  },
+  "s3test-c17/seg\u0017ment.dat": {
+   "request_target": "/es-snapshots/s3test-c17/seg%17ment.dat",
+   "listing_plain": "s3test-c17/seg�ment.dat",
+   "listing_url_encoded": "s3test-c17/seg%17ment.dat"
+  },
+  "s3test-c18/seg\u0018ment.dat": {
+   "request_target": "/es-snapshots/s3test-c18/seg%18ment.dat",
+   "listing_plain": "s3test-c18/seg�ment.dat",
+   "listing_url_encoded": "s3test-c18/seg%18ment.dat"
+  },
+  "s3test-c19/seg\u0019ment.dat": {
+   "request_target": "/es-snapshots/s3test-c19/seg%19ment.dat",
+   "listing_plain": "s3test-c19/seg�ment.dat",
+   "listing_url_encoded": "s3test-c19/seg%19ment.dat"
+  },
+  "s3test-c1a/seg\u001ament.dat": {
+   "request_target": "/es-snapshots/s3test-c1a/seg%1Ament.dat",
+   "listing_plain": "s3test-c1a/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1a/seg%1Ament.dat"
+  },
+  "s3test-c1b/seg\u001bment.dat": {
+   "request_target": "/es-snapshots/s3test-c1b/seg%1Bment.dat",
+   "listing_plain": "s3test-c1b/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1b/seg%1Bment.dat"
+  },
+  "s3test-c1c/seg\u001cment.dat": {
+   "request_target": "/es-snapshots/s3test-c1c/seg%1Cment.dat",
+   "listing_plain": "s3test-c1c/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1c/seg%1Cment.dat"
+  },
+  "s3test-c1d/seg\u001dment.dat": {
+   "request_target": "/es-snapshots/s3test-c1d/seg%1Dment.dat",
+   "listing_plain": "s3test-c1d/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1d/seg%1Dment.dat"
+  },
+  "s3test-c1e/seg\u001ement.dat": {
+   "request_target": "/es-snapshots/s3test-c1e/seg%1Ement.dat",
+   "listing_plain": "s3test-c1e/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1e/seg%1Ement.dat"
+  },
+  "s3test-c1f/seg\u001fment.dat": {
+   "request_target": "/es-snapshots/s3test-c1f/seg%1Fment.dat",
+   "listing_plain": "s3test-c1f/seg�ment.dat",
+   "listing_url_encoded": "s3test-c1f/seg%1Fment.dat"
+  },
+  "s3test-c7f/segment.dat": {
+   "request_target": "/es-snapshots/s3test-c7f/seg%7Fment.dat",
+   "listing_plain": "s3test-c7f/segment.dat",
+   "listing_url_encoded": "s3test-c7f/seg%7Fment.dat"
+  }
+ }
+}

@@ -1,0 +1,132 @@
+{
+  "log": [
+    {
+      "timestamp_in_millis": 1787703973462,
+      "snapshot": {
+        "snapshot": "blast-g-1",
+        "uuid": "tSX3UzOkSQqonKcXpwdKgw",
+        "repository": "blast-b12",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-gstate",
+          ".snapshot-blob-cache",
+          ".security-7"
+        ],
+        "data_streams": [],
+        "include_global_state": true,
+        "state": "SUCCESS",
+        "start_time": "2026-08-26T00:25:31.831Z",
+        "start_time_in_millis": 1787703931831,
+        "end_time": "2026-08-26T00:25:32.431Z",
+        "end_time_in_millis": 1787703932431,
+        "duration_in_millis": 600,
+        "failures": [],
+        "shards": {
+          "total": 3,
+          "failed": 0,
+          "successful": 3
+        },
+        "feature_states": [
+          {
+            "feature_name": "searchable_snapshots",
+            "indices": [
+              ".snapshot-blob-cache"
+            ]
+          },
+          {
+            "feature_name": "security",
+            "indices": [
+              ".security-7"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703973462,
+      "anomaly": "failed to load global metadata",
+      "snapshot": {
+        "snapshot": "blast-g-1",
+        "uuid": "tSX3UzOkSQqonKcXpwdKgw"
+      },
+      "exception": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "snapshot_missing_exception",
+              "reason": "[blast-b12:blast-g-1/tSX3UzOkSQqonKcXpwdKgw] is missing"
+            }
+          ],
+          "type": "snapshot_missing_exception",
+          "reason": "[blast-b12:blast-g-1/tSX3UzOkSQqonKcXpwdKgw] is missing",
+          "caused_by": {
+            "type": "no_such_file_exception",
+            "reason": "Blob object [exp-b12/meta-tSX3UzOkSQqonKcXpwdKgw.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF334AD5D0E171, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+          }
+        },
+        "status": "NOT_FOUND"
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703973462,
+      "index": {
+        "name": "blast-gstate",
+        "uuid": "JW6gXUxTS62-MfjlG2g7GA"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 1,
+        "restorable_snapshot_count": 1
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703973462,
+      "index": {
+        "name": ".snapshot-blob-cache",
+        "uuid": "r4HAhVoHT7KUPr8KJd5kNQ"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 1,
+        "restorable_snapshot_count": 1
+      }
+    },
+    {
+      "timestamp_in_millis": 1787703973462,
+      "index": {
+        "name": ".security-7",
+        "uuid": "Ed8shA60TW2e7IJLEAYhug"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 1,
+        "restorable_snapshot_count": 1
+      }
+    }
+  ],
+  "results": {
+    "status": {
+      "repository": {
+        "name": "blast-b12",
+        "uuid": "euPV61bHQTStILeNNAJn3w",
+        "generation": 0
+      },
+      "snapshots": {
+        "verified": 1,
+        "total": 1
+      },
+      "indices": {
+        "verified": 3,
+        "total": 3
+      },
+      "index_snapshots": {
+        "verified": 3,
+        "total": 3
+      },
+      "blobs": {
+        "verified": 22
+      }
+    },
+    "final_repository_generation": 0,
+    "total_anomalies": 1,
+    "result": "fail"
+  }
+}

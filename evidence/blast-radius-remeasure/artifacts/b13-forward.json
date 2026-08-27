@@ -1,0 +1,535 @@
+{
+  "cloned_objects": 30,
+  "objects_before": 30,
+  "bytes_before": 1018287,
+  "victim": "indices/UXdt_l7dRxGjcj2NMCWFbw/0/__6HfSS9VGSUy_86kMSv-_Kw",
+  "victim_bytes": 486768,
+  "verify_before_delete": {
+    "status": {
+      "repository": {
+        "name": "blast-b13",
+        "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+        "generation": 2
+      },
+      "snapshots": {
+        "verified": 3,
+        "total": 3
+      },
+      "indices": {
+        "verified": 2,
+        "total": 2
+      },
+      "index_snapshots": {
+        "verified": 6,
+        "total": 6
+      },
+      "blobs": {
+        "verified": 27
+      }
+    },
+    "final_repository_generation": 2,
+    "total_anomalies": 0,
+    "result": "pass"
+  },
+  "delete_http_status": 204,
+  "new_snapshot_response": {
+    "snapshot": {
+      "snapshot": "blast-snap-4",
+      "uuid": "0aPUG_QzSkOQfhbGOf0vXQ",
+      "repository": "blast-b13",
+      "version_id": 9111000,
+      "version": "9.5.2",
+      "indices": [
+        "blast-share2",
+        "blast-share1"
+      ],
+      "data_streams": [],
+      "include_global_state": false,
+      "state": "SUCCESS",
+      "start_time": "2026-08-26T00:27:22.299Z",
+      "start_time_in_millis": 1787704042299,
+      "end_time": "2026-08-26T00:27:22.499Z",
+      "end_time_in_millis": 1787704042499,
+      "duration_in_millis": 200,
+      "failures": [],
+      "shards": {
+        "total": 2,
+        "failed": 0,
+        "successful": 2
+      },
+      "feature_states": []
+    }
+  },
+  "new_snapshot_get": {
+    "snapshots": [
+      {
+        "snapshot": "blast-snap-4",
+        "uuid": "0aPUG_QzSkOQfhbGOf0vXQ",
+        "repository": "blast-b13",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-share2",
+          "blast-share1"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-26T00:27:22.299Z",
+        "start_time_in_millis": 1787704042299,
+        "end_time": "2026-08-26T00:27:22.499Z",
+        "end_time_in_millis": 1787704042499,
+        "duration_in_millis": 200,
+        "failures": [],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        },
+        "feature_states": []
+      }
+    ],
+    "total": 1,
+    "remaining": 0
+  },
+  "new_snapshot_status": {
+    "snapshots": [
+      {
+        "snapshot": "blast-snap-4",
+        "repository": "blast-b13",
+        "uuid": "0aPUG_QzSkOQfhbGOf0vXQ",
+        "state": "SUCCESS",
+        "include_global_state": false,
+        "shards_stats": {
+          "initializing": 0,
+          "started": 0,
+          "finalizing": 0,
+          "done": 2,
+          "failed": 0,
+          "total": 2
+        },
+        "stats": {
+          "incremental": {
+            "file_count": 0,
+            "size_in_bytes": 0
+          },
+          "total": {
+            "file_count": 11,
+            "size_in_bytes": 1002200
+          },
+          "start_time_in_millis": 1787704042299,
+          "time_in_millis": 200
+        },
+        "indices": {
+          "blast-share1": {
+            "shards_stats": {
+              "initializing": 0,
+              "started": 0,
+              "finalizing": 0,
+              "done": 1,
+              "failed": 0,
+              "total": 1
+            },
+            "stats": {
+              "incremental": {
+                "file_count": 0,
+                "size_in_bytes": 0
+              },
+              "total": {
+                "file_count": 7,
+                "size_in_bytes": 513960
+              },
+              "start_time_in_millis": 1787704042499,
+              "time_in_millis": 0
+            },
+            "shards": {
+              "0": {
+                "stage": "DONE",
+                "stats": {
+                  "incremental": {
+                    "file_count": 0,
+                    "size_in_bytes": 0
+                  },
+                  "total": {
+                    "file_count": 7,
+                    "size_in_bytes": 513960
+                  },
+                  "start_time_in_millis": 1787704042499,
+                  "time_in_millis": 0
+                }
+              }
+            }
+          },
+          "blast-share2": {
+            "shards_stats": {
+              "initializing": 0,
+              "started": 0,
+              "finalizing": 0,
+              "done": 1,
+              "failed": 0,
+              "total": 1
+            },
+            "stats": {
+              "incremental": {
+                "file_count": 0,
+                "size_in_bytes": 0
+              },
+              "total": {
+                "file_count": 4,
+                "size_in_bytes": 488240
+              },
+              "start_time_in_millis": 1787704042499,
+              "time_in_millis": 0
+            },
+            "shards": {
+              "0": {
+                "stage": "DONE",
+                "stats": {
+                  "incremental": {
+                    "file_count": 0,
+                    "size_in_bytes": 0
+                  },
+                  "total": {
+                    "file_count": 4,
+                    "size_in_bytes": 488240
+                  },
+                  "start_time_in_millis": 1787704042499,
+                  "time_in_millis": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "objects_after": 36,
+  "new_objects": [
+    "exp-b13/index-3",
+    "exp-b13/indices/23PewvPeSIipJ0w0z-3ypQ/0/index-h0Iwv9MDStODfxlL0jOXRQ",
+    "exp-b13/indices/23PewvPeSIipJ0w0z-3ypQ/0/snap-0aPUG_QzSkOQfhbGOf0vXQ.dat",
+    "exp-b13/indices/UXdt_l7dRxGjcj2NMCWFbw/0/index-m2O-773fSE20GjB1_jUIlg",
+    "exp-b13/indices/UXdt_l7dRxGjcj2NMCWFbw/0/snap-0aPUG_QzSkOQfhbGOf0vXQ.dat",
+    "exp-b13/meta-0aPUG_QzSkOQfhbGOf0vXQ.dat",
+    "exp-b13/snap-0aPUG_QzSkOQfhbGOf0vXQ.dat"
+  ],
+  "victim_still_absent": true,
+  "verify_after": {
+    "log": [
+      {
+        "timestamp_in_millis": 1787704046301,
+        "snapshot": {
+          "snapshot": "blast-snap-2",
+          "uuid": "xb4MFxb7SRu6ltyR_5mk_Q",
+          "repository": "blast-b13",
+          "version_id": 9111000,
+          "version": "9.5.2",
+          "indices": [
+            "blast-share2",
+            "blast-share1"
+          ],
+          "data_streams": [],
+          "include_global_state": false,
+          "state": "SUCCESS",
+          "start_time": "2026-08-25T22:15:19.666Z",
+          "start_time_in_millis": 1787696119666,
+          "end_time": "2026-08-25T22:15:19.866Z",
+          "end_time_in_millis": 1787696119866,
+          "duration_in_millis": 200,
+          "failures": [],
+          "shards": {
+            "total": 2,
+            "failed": 0,
+            "successful": 2
+          },
+          "feature_states": []
+        }
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "snapshot": {
+          "snapshot": "blast-snap-1",
+          "uuid": "UIF8pAV-QPyCLMnHvHtzYA",
+          "repository": "blast-b13",
+          "version_id": 9111000,
+          "version": "9.5.2",
+          "indices": [
+            "blast-share2",
+            "blast-share1"
+          ],
+          "data_streams": [],
+          "include_global_state": false,
+          "state": "SUCCESS",
+          "start_time": "2026-08-25T22:15:18.865Z",
+          "start_time_in_millis": 1787696118865,
+          "end_time": "2026-08-25T22:15:19.065Z",
+          "end_time_in_millis": 1787696119065,
+          "duration_in_millis": 200,
+          "failures": [],
+          "shards": {
+            "total": 2,
+            "failed": 0,
+            "successful": 2
+          },
+          "feature_states": []
+        }
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "snapshot": {
+          "snapshot": "blast-snap-4",
+          "uuid": "0aPUG_QzSkOQfhbGOf0vXQ",
+          "repository": "blast-b13",
+          "version_id": 9111000,
+          "version": "9.5.2",
+          "indices": [
+            "blast-share2",
+            "blast-share1"
+          ],
+          "data_streams": [],
+          "include_global_state": false,
+          "state": "SUCCESS",
+          "start_time": "2026-08-26T00:27:22.299Z",
+          "start_time_in_millis": 1787704042299,
+          "end_time": "2026-08-26T00:27:22.499Z",
+          "end_time_in_millis": 1787704042499,
+          "duration_in_millis": 200,
+          "failures": [],
+          "shards": {
+            "total": 2,
+            "failed": 0,
+            "successful": 2
+          },
+          "feature_states": []
+        }
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "snapshot": {
+          "snapshot": "blast-snap-3",
+          "uuid": "tJyJxYawQwiWDGV4EvJYlg",
+          "repository": "blast-b13",
+          "version_id": 9111000,
+          "version": "9.5.2",
+          "indices": [
+            "blast-share2",
+            "blast-share1"
+          ],
+          "data_streams": [],
+          "include_global_state": false,
+          "state": "SUCCESS",
+          "start_time": "2026-08-25T22:15:21.668Z",
+          "start_time_in_millis": 1787696121668,
+          "end_time": "2026-08-25T22:15:21.668Z",
+          "end_time_in_millis": 1787696121668,
+          "duration_in_millis": 0,
+          "failures": [],
+          "shards": {
+            "total": 2,
+            "failed": 0,
+            "successful": 2
+          },
+          "feature_states": []
+        }
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "anomaly": "missing blob",
+        "snapshot": {
+          "snapshot": "blast-snap-1",
+          "uuid": "UIF8pAV-QPyCLMnHvHtzYA"
+        },
+        "index": {
+          "name": "blast-share2",
+          "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+          "metadata_blob": "MgD9OqABiKEMB984_UGL",
+          "shards": 1
+        },
+        "shard_id": 0,
+        "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+        "physical_file_name": "_0.cfs",
+        "part_index": 0,
+        "part_count": 1,
+        "file_length_in_bytes": 486768,
+        "part_length_in_bytes": 486768
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "anomaly": "missing blob",
+        "snapshot": {
+          "snapshot": "blast-snap-2",
+          "uuid": "xb4MFxb7SRu6ltyR_5mk_Q"
+        },
+        "index": {
+          "name": "blast-share2",
+          "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+          "metadata_blob": "MgD9OqABiKEMB984_UGL",
+          "shards": 1
+        },
+        "shard_id": 0,
+        "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+        "physical_file_name": "_0.cfs",
+        "part_index": 0,
+        "part_count": 1,
+        "file_length_in_bytes": 486768,
+        "part_length_in_bytes": 486768
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "anomaly": "missing blob",
+        "snapshot": {
+          "snapshot": "blast-snap-3",
+          "uuid": "tJyJxYawQwiWDGV4EvJYlg"
+        },
+        "index": {
+          "name": "blast-share2",
+          "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+          "metadata_blob": "MgD9OqABiKEMB984_UGL",
+          "shards": 1
+        },
+        "shard_id": 0,
+        "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+        "physical_file_name": "_0.cfs",
+        "part_index": 0,
+        "part_count": 1,
+        "file_length_in_bytes": 486768,
+        "part_length_in_bytes": 486768
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "index": {
+          "name": "blast-share1",
+          "uuid": "23PewvPeSIipJ0w0z-3ypQ"
+        },
+        "snapshot_restorability": {
+          "total_snapshot_count": 4,
+          "restorable_snapshot_count": 4
+        }
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "anomaly": "missing blob",
+        "snapshot": {
+          "snapshot": "blast-snap-4",
+          "uuid": "0aPUG_QzSkOQfhbGOf0vXQ"
+        },
+        "index": {
+          "name": "blast-share2",
+          "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+          "metadata_blob": "MgD9OqABiKEMB984_UGL",
+          "shards": 1
+        },
+        "shard_id": 0,
+        "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+        "physical_file_name": "_0.cfs",
+        "part_index": 0,
+        "part_count": 1,
+        "file_length_in_bytes": 486768,
+        "part_length_in_bytes": 486768
+      },
+      {
+        "timestamp_in_millis": 1787704046301,
+        "index": {
+          "name": "blast-share2",
+          "uuid": "UXdt_l7dRxGjcj2NMCWFbw"
+        },
+        "snapshot_restorability": {
+          "total_snapshot_count": 4,
+          "restorable_snapshot_count": 0
+        }
+      }
+    ],
+    "results": {
+      "status": {
+        "repository": {
+          "name": "blast-b13",
+          "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+          "generation": 3
+        },
+        "snapshots": {
+          "verified": 4,
+          "total": 4
+        },
+        "indices": {
+          "verified": 2,
+          "total": 2
+        },
+        "index_snapshots": {
+          "verified": 8,
+          "total": 8
+        },
+        "blobs": {
+          "verified": 38
+        }
+      },
+      "final_repository_generation": 3,
+      "total_anomalies": 4,
+      "result": "fail"
+    }
+  },
+  "restore_response": {
+    "snapshot": {
+      "snapshot": "blast-snap-4",
+      "indices": [
+        "bxrb13-share1",
+        "bxrb13-share2"
+      ],
+      "shards": {
+        "total": 2,
+        "failed": 1,
+        "successful": 1
+      }
+    }
+  },
+  "restored_cat": [
+    {
+      "index": "bxrb13-share2",
+      "health": "red",
+      "status": "open",
+      "docs.count": null
+    },
+    {
+      "index": "bxrb13-share1",
+      "health": "green",
+      "status": "open",
+      "docs.count": "2050"
+    }
+  ],
+  "restored_counts": {
+    "bxrb13-share2": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "no_shard_available_action_exception",
+            "reason": null
+          }
+        ],
+        "type": "search_phase_execution_exception",
+        "reason": "all shards failed",
+        "phase": "query",
+        "grouped": true,
+        "failed_shards": [
+          {
+            "shard": 0,
+            "index": "bxrb13-share2",
+            "node": null,
+            "reason": {
+              "type": "no_shard_available_action_exception",
+              "reason": null
+            }
+          }
+        ]
+      },
+      "status": 503
+    },
+    "bxrb13-share1": {
+      "count": 2050,
+      "_shards": {
+        "total": 1,
+        "successful": 1,
+        "skipped": 0,
+        "failed": 0
+      }
+    }
+  }
+}

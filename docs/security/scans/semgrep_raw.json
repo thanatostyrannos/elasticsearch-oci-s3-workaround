@@ -1,0 +1,1275 @@
+{
+ "engine_requested": "OSS",
+ "errors": [],
+ "paths": {
+  "scanned": [
+   "/src/.gitignore",
+   "/src/CONTRIBUTING.md",
+   "/src/FACTS.md",
+   "/src/README.md",
+   "/src/bandit_raw.json",
+   "/src/docs/blast-radius.md",
+   "/src/docs/churn-rig-methodology.md",
+   "/src/docs/generating-load.md",
+   "/src/docs/repository-layout-and-reachability.md",
+   "/src/evidence/README.md",
+   "/src/evidence/blast-radius-remeasure/README.md",
+   "/src/evidence/blast-radius-remeasure/REPORT.md",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-g-listing.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-ms-listing.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-p-composition.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-p-listing.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-s-blobrefs.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-s-composition.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-s-listing.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b-base-s-virtual-blobs.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b0-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b1-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b10-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b11-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b12-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b13-forward.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b14-mount.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b15-mount.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b16-mount-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b17-mount-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b18-mount-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b19-mount-nodeloss.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b2-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b20-next-snapshot.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b20r-next-snapshot.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b21-next-snapshot.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-anomaly-table.txt",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b3-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b4-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b5-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b6r-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b7b-selective-restore.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b8r-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-after.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-anomalies.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-before.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-catalog.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-deleted.tsv",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-restores.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-summary.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-verify-pre.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/b9r-verify.json",
+   "/src/evidence/blast-radius-remeasure/artifacts/blast-radius-table.tsv",
+   "/src/evidence/blast-radius-remeasure/harness/blobrefs.py",
+   "/src/evidence/blast-radius-remeasure/harness/build_base_g.sh",
+   "/src/evidence/blast-radius-remeasure/harness/build_base_ms.sh",
+   "/src/evidence/blast-radius-remeasure/harness/build_base_p.sh",
+   "/src/evidence/blast-radius-remeasure/harness/build_base_s.sh",
+   "/src/evidence/blast-radius-remeasure/harness/bulk.py",
+   "/src/evidence/blast-radius-remeasure/harness/cleanup.sh",
+   "/src/evidence/blast-radius-remeasure/harness/composition.py",
+   "/src/evidence/blast-radius-remeasure/harness/creds.sh",
+   "/src/evidence/blast-radius-remeasure/harness/es.sh",
+   "/src/evidence/blast-radius-remeasure/harness/esapi.py",
+   "/src/evidence/blast-radius-remeasure/harness/esbulk.sh",
+   "/src/evidence/blast-radius-remeasure/harness/experiment.py",
+   "/src/evidence/blast-radius-remeasure/harness/forward.py",
+   "/src/evidence/blast-radius-remeasure/harness/mount.py",
+   "/src/evidence/blast-radius-remeasure/harness/mount_catalog.py",
+   "/src/evidence/blast-radius-remeasure/harness/mount_catalog_sweep.py",
+   "/src/evidence/blast-radius-remeasure/harness/mount_full_sweep.py",
+   "/src/evidence/blast-radius-remeasure/harness/mount_nodeloss.py",
+   "/src/evidence/blast-radius-remeasure/harness/next_snapshot.py",
+   "/src/evidence/blast-radius-remeasure/harness/pick.py",
+   "/src/evidence/blast-radius-remeasure/harness/portforward.sh",
+   "/src/evidence/blast-radius-remeasure/harness/rec.sh",
+   "/src/evidence/blast-radius-remeasure/harness/run_all.sh",
+   "/src/evidence/blast-radius-remeasure/harness/s3lib.py",
+   "/src/evidence/blast-radius-remeasure/harness/show.py",
+   "/src/evidence/blast-radius-remeasure/harness/table.py",
+   "/src/evidence/blast-radius-remeasure/harness/virtual_blobs.py",
+   "/src/evidence/campaign-artifacts/README.md",
+   "/src/evidence/campaign-artifacts/campaign1-orphans.tsv",
+   "/src/evidence/campaign-artifacts/d1-classified.tsv",
+   "/src/evidence/campaign-artifacts/d1-sizing.txt",
+   "/src/evidence/campaign-artifacts/d10-count.txt",
+   "/src/evidence/campaign-artifacts/d10-restore.txt",
+   "/src/evidence/campaign-artifacts/d3-snap1.txt",
+   "/src/evidence/campaign-artifacts/d3b-unlink-proof.txt",
+   "/src/evidence/campaign-artifacts/d3c-standing.txt",
+   "/src/evidence/campaign-artifacts/d7-mounted.txt",
+   "/src/evidence/campaign-artifacts/d8-log-manifest.tsv",
+   "/src/evidence/campaign-artifacts/d8-summary.txt",
+   "/src/evidence/campaign-artifacts/d8b-applied.txt",
+   "/src/evidence/campaign-artifacts/d9-catalog.txt",
+   "/src/evidence/campaign-artifacts/d9-residual-orphans.tsv",
+   "/src/evidence/campaign-data.md",
+   "/src/evidence/capture-harness.sh",
+   "/src/evidence/delete-campaign/README.md",
+   "/src/evidence/delete-campaign/cycles.tsv",
+   "/src/evidence/delete-campaign/dry-1.txt",
+   "/src/evidence/delete-campaign/dry-10.txt",
+   "/src/evidence/delete-campaign/dry-11.txt",
+   "/src/evidence/delete-campaign/dry-12.txt",
+   "/src/evidence/delete-campaign/dry-2.txt",
+   "/src/evidence/delete-campaign/dry-3.txt",
+   "/src/evidence/delete-campaign/dry-4.txt",
+   "/src/evidence/delete-campaign/dry-5.txt",
+   "/src/evidence/delete-campaign/dry-6.txt",
+   "/src/evidence/delete-campaign/dry-7.txt",
+   "/src/evidence/delete-campaign/dry-8.txt",
+   "/src/evidence/delete-campaign/dry-9.txt",
+   "/src/evidence/delete-campaign/exec-1.txt",
+   "/src/evidence/delete-campaign/exec-10.txt",
+   "/src/evidence/delete-campaign/exec-11.txt",
+   "/src/evidence/delete-campaign/exec-12.txt",
+   "/src/evidence/delete-campaign/exec-2.txt",
+   "/src/evidence/delete-campaign/exec-3.txt",
+   "/src/evidence/delete-campaign/exec-4.txt",
+   "/src/evidence/delete-campaign/exec-5.txt",
+   "/src/evidence/delete-campaign/exec-6.txt",
+   "/src/evidence/delete-campaign/exec-7.txt",
+   "/src/evidence/delete-campaign/exec-8.txt",
+   "/src/evidence/delete-campaign/exec-9.txt",
+   "/src/evidence/delete-campaign/intact-12.txt",
+   "/src/evidence/delete-campaign/intact-3.txt",
+   "/src/evidence/delete-campaign/intact-6.txt",
+   "/src/evidence/delete-campaign/intact-9.txt",
+   "/src/evidence/genchain-research/FACTS.md",
+   "/src/evidence/genchain-research/README.md",
+   "/src/evidence/genchain-research/ground-truth/GROUND-TRUTH.md",
+   "/src/evidence/genchain-research/ground-truth/abort-final.txt",
+   "/src/evidence/genchain-research/ground-truth/final-chain-keys.txt",
+   "/src/evidence/genchain-research/ground-truth/gap-after4.txt",
+   "/src/evidence/genchain-research/ground-truth/gap-final.txt",
+   "/src/evidence/genchain-research/ground-truth/hole-final.txt",
+   "/src/evidence/genchain-research/ground-truth/live-final.txt",
+   "/src/evidence/genchain-research/ground-truth/name-final.txt",
+   "/src/evidence/genchain-research/ground-truth/name2-final.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-abort-cleanup.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-gap-del-g1.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-gap-del-g2.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-gap-del-g3.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-gap-union.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-name-del-reuse.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-name2-del-dup.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-op-gen3to4-del-snap2.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-op-gen4to5-del-snap4.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-op-gen6to7-del-snap1-3.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-part-del-p1.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-realfix-cleanup.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-realfix-corrected.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-realfix-del-snap1.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-share-del-shb.txt",
+   "/src/evidence/genchain-research/ground-truth/oracle-union.txt",
+   "/src/evidence/genchain-research/ground-truth/part-final.txt",
+   "/src/evidence/genchain-research/ground-truth/sha-blobs.txt",
+   "/src/evidence/genchain-research/ground-truth/share-final.txt",
+   "/src/evidence/genchain-research/ground-truth/share-must-not-name.txt",
+   "/src/evidence/genchain-research/ground-truth/share-pre.txt",
+   "/src/evidence/genchain-research/ground-truth/shb-blobs.txt",
+   "/src/evidence/genchain-research/harness/README.md",
+   "/src/evidence/genchain-research/harness/REPORT.md",
+   "/src/evidence/genchain-research/harness/bench_breadth.py",
+   "/src/evidence/genchain-research/harness/bench_corroboration.py",
+   "/src/evidence/genchain-research/harness/bench_critical.py",
+   "/src/evidence/genchain-research/harness/bench_depth.py",
+   "/src/evidence/genchain-research/harness/bench_endtoend_s3.py",
+   "/src/evidence/genchain-research/harness/bench_failures.py",
+   "/src/evidence/genchain-research/harness/bench_http_faults.py",
+   "/src/evidence/genchain-research/harness/bench_listing.py",
+   "/src/evidence/genchain-research/harness/bench_memory.py",
+   "/src/evidence/genchain-research/harness/bench_refusal.py",
+   "/src/evidence/genchain-research/harness/bench_signing.py",
+   "/src/evidence/genchain-research/harness/common.py",
+   "/src/evidence/genchain-research/harness/instrument.py",
+   "/src/evidence/genchain-research/harness/miniofill.py",
+   "/src/evidence/genchain-research/harness/ocistub.py",
+   "/src/evidence/genchain-research/harness/realcheck.py",
+   "/src/evidence/genchain-research/harness/results/breadth.json",
+   "/src/evidence/genchain-research/harness/results/corroboration.json",
+   "/src/evidence/genchain-research/harness/results/critical-live-worktree.json",
+   "/src/evidence/genchain-research/harness/results/critical.json",
+   "/src/evidence/genchain-research/harness/results/depth-894-at-40ms.json",
+   "/src/evidence/genchain-research/harness/results/depth-latency-40ms.json",
+   "/src/evidence/genchain-research/harness/results/depth-live-worktree.json",
+   "/src/evidence/genchain-research/harness/results/depth.json",
+   "/src/evidence/genchain-research/harness/results/endtoend-s3.json",
+   "/src/evidence/genchain-research/harness/results/failures-large-headonly.json",
+   "/src/evidence/genchain-research/harness/results/failures-large.json",
+   "/src/evidence/genchain-research/harness/results/failures-op-exists.json",
+   "/src/evidence/genchain-research/harness/results/failures-op-fetch.json",
+   "/src/evidence/genchain-research/harness/results/failures-op-list.json",
+   "/src/evidence/genchain-research/harness/results/failures-probe.json",
+   "/src/evidence/genchain-research/harness/results/http-faults.json",
+   "/src/evidence/genchain-research/harness/results/listing.json",
+   "/src/evidence/genchain-research/harness/results/memory.json",
+   "/src/evidence/genchain-research/harness/results/minio-uploads.json",
+   "/src/evidence/genchain-research/harness/results/refusal.json",
+   "/src/evidence/genchain-research/harness/results/signing.json",
+   "/src/evidence/genchain-research/harness/results/validate-generator.json",
+   "/src/evidence/genchain-research/harness/run_all.sh",
+   "/src/evidence/genchain-research/harness/smoke.py",
+   "/src/evidence/genchain-research/harness/synthrepo.py",
+   "/src/evidence/genchain-research/harness/upload_repos.py",
+   "/src/evidence/genchain-research/harness/validate_generator.py",
+   "/src/evidence/genchain-research/reproducers/REPRO.py",
+   "/src/evidence/genchain-research/reproducers/REPRO2.py",
+   "/src/evidence/genchain-research/reproducers/REPRO3.py",
+   "/src/evidence/methodology.md",
+   "/src/evidence/oci-s3-compatibility/README.md",
+   "/src/evidence/oci-s3-compatibility/aws-cli-default.txt",
+   "/src/evidence/oci-s3-compatibility/delete-crc32.txt",
+   "/src/evidence/oci-s3-compatibility/delete-crc32c.txt",
+   "/src/evidence/oci-s3-compatibility/delete-md5.txt",
+   "/src/evidence/oci-s3-compatibility/delete-sha256.txt",
+   "/src/evidence/oci-s3-compatibility/listv2-maxkeys2.json",
+   "/src/evidence/oci-s3-compatibility/native-transport.txt",
+   "/src/evidence/oci-s3-compatibility/register-with-verify.json",
+   "/src/evidence/regression-10/README.md",
+   "/src/evidence/regression-10/cycles.tsv",
+   "/src/evidence/regression-10/derive-1.txt",
+   "/src/evidence/regression-10/derive-10.txt",
+   "/src/evidence/regression-10/derive-2.txt",
+   "/src/evidence/regression-10/derive-3.txt",
+   "/src/evidence/regression-10/derive-4.txt",
+   "/src/evidence/regression-10/derive-5.txt",
+   "/src/evidence/regression-10/derive-6.txt",
+   "/src/evidence/regression-10/derive-7.txt",
+   "/src/evidence/regression-10/derive-8.txt",
+   "/src/evidence/regression-10/derive-9.txt",
+   "/src/evidence/regression-10/dry-1.txt",
+   "/src/evidence/regression-10/dry-10.txt",
+   "/src/evidence/regression-10/dry-2.txt",
+   "/src/evidence/regression-10/dry-3.txt",
+   "/src/evidence/regression-10/dry-4.txt",
+   "/src/evidence/regression-10/dry-5.txt",
+   "/src/evidence/regression-10/dry-6.txt",
+   "/src/evidence/regression-10/dry-7.txt",
+   "/src/evidence/regression-10/dry-8.txt",
+   "/src/evidence/regression-10/dry-9.txt",
+   "/src/evidence/regression-10/dry-stdout-1.txt",
+   "/src/evidence/regression-10/dry-stdout-10.txt",
+   "/src/evidence/regression-10/dry-stdout-2.txt",
+   "/src/evidence/regression-10/dry-stdout-3.txt",
+   "/src/evidence/regression-10/dry-stdout-4.txt",
+   "/src/evidence/regression-10/dry-stdout-5.txt",
+   "/src/evidence/regression-10/dry-stdout-6.txt",
+   "/src/evidence/regression-10/dry-stdout-7.txt",
+   "/src/evidence/regression-10/dry-stdout-8.txt",
+   "/src/evidence/regression-10/dry-stdout-9.txt",
+   "/src/evidence/regression-10/exec-1.txt",
+   "/src/evidence/regression-10/exec-10.txt",
+   "/src/evidence/regression-10/exec-2.txt",
+   "/src/evidence/regression-10/exec-3.txt",
+   "/src/evidence/regression-10/exec-4.txt",
+   "/src/evidence/regression-10/exec-5.txt",
+   "/src/evidence/regression-10/exec-6.txt",
+   "/src/evidence/regression-10/exec-7.txt",
+   "/src/evidence/regression-10/exec-8.txt",
+   "/src/evidence/regression-10/exec-9.txt",
+   "/src/evidence/regression-10/intact-3.txt",
+   "/src/evidence/regression-10/intact-6.txt",
+   "/src/evidence/regression-10/intact-9.txt",
+   "/src/evidence/runbook-transcript-migrate-backups.md",
+   "/src/evidence/segment-path-reachable/README.md",
+   "/src/evidence/segment-path-reachable/cycles.tsv",
+   "/src/evidence/segment-path-reachable/derive-cycle1.txt",
+   "/src/evidence/segment-path-reachable/derive-cycle2.txt",
+   "/src/evidence/segment-path-reachable/derive-cycle3.txt",
+   "/src/evidence/segment-path-reachable/derive-standalone.txt",
+   "/src/evidence/segment-path-reachable/ilm-after.json",
+   "/src/evidence/segment-path-reachable/ilm-before.json",
+   "/src/evidence/segment-path-reachable/minio-control/derive-armB-4.txt",
+   "/src/evidence/segment-path-reachable/minio-control/derive-armC-2.txt",
+   "/src/evidence/segment-path-reachable/minio-control/drop-reasons.txt",
+   "/src/evidence/segment-path-reachable/minio-control/ilm-armA.json",
+   "/src/evidence/segment-path-reachable/minio-control/ilm-armB.json",
+   "/src/evidence/segment-path-reachable/minio-control/ilm-armC.json",
+   "/src/evidence/segment-path-reachable/minio-control/protocol-cycles.tsv",
+   "/src/evidence/segment-path-reachable/minio-control/runs.tsv",
+   "/src/evidence/segment-path-reachable/minio-control/snapshot-count-samples.txt",
+   "/src/evidence/segment-path-reachable/protocol-run.log",
+   "/src/evidence/segment-path-reachable/snapshot-count-samples.txt",
+   "/src/generation_chain/README.md",
+   "/src/generation_chain/__init__.py",
+   "/src/generation_chain/__main__.py",
+   "/src/generation_chain/cli.py",
+   "/src/generation_chain/corroboration.py",
+   "/src/generation_chain/credentials.py",
+   "/src/generation_chain/derivation/__init__.py",
+   "/src/generation_chain/derivation/audit.py",
+   "/src/generation_chain/derivation/chain.py",
+   "/src/generation_chain/derivation/classification.py",
+   "/src/generation_chain/derivation/garbage.py",
+   "/src/generation_chain/derivation/identity.py",
+   "/src/generation_chain/derivation/keys.py",
+   "/src/generation_chain/derivation/shards.py",
+   "/src/generation_chain/errors.py",
+   "/src/generation_chain/formats/__init__.py",
+   "/src/generation_chain/formats/codec.py",
+   "/src/generation_chain/formats/latest.py",
+   "/src/generation_chain/formats/lucene_segments.py",
+   "/src/generation_chain/formats/repository_data.py",
+   "/src/generation_chain/formats/shard_snapshots.py",
+   "/src/generation_chain/formats/smile.py",
+   "/src/generation_chain/formats/snapshot_document.py",
+   "/src/generation_chain/model.py",
+   "/src/generation_chain/reclaim/__init__.py",
+   "/src/generation_chain/reclaim/__main__.py",
+   "/src/generation_chain/reclaim/approval.py",
+   "/src/generation_chain/reclaim/batch.py",
+   "/src/generation_chain/reclaim/checksum.py",
+   "/src/generation_chain/reclaim/cli.py",
+   "/src/generation_chain/reclaim/manifest.py",
+   "/src/generation_chain/reclaim/transport.py",
+   "/src/generation_chain/reporting/__init__.py",
+   "/src/generation_chain/reporting/coverage.py",
+   "/src/generation_chain/reporting/manifest.py",
+   "/src/generation_chain/selftest.py",
+   "/src/generation_chain/sizes.py",
+   "/src/generation_chain/sources/__init__.py",
+   "/src/generation_chain/sources/budget.py",
+   "/src/generation_chain/sources/http_reads.py",
+   "/src/generation_chain/sources/local.py",
+   "/src/generation_chain/sources/oci.py",
+   "/src/generation_chain/sources/overlap.py",
+   "/src/generation_chain/sources/readahead.py",
+   "/src/generation_chain/sources/s3.py",
+   "/src/generation_chain/sources/signing/__init__.py",
+   "/src/generation_chain/sources/signing/oci_signature.py",
+   "/src/generation_chain/sources/signing/rsa.py",
+   "/src/generation_chain/sources/signing/sigv4.py",
+   "/src/generation_chain/supported.py",
+   "/src/manifests/README.md",
+   "/src/manifests/elasticsearch.yaml",
+   "/src/manifests/minio-bucket-job.yaml",
+   "/src/manifests/minio.yaml",
+   "/src/manifests/namespace.yaml",
+   "/src/manifests/s3-credentials-secret.yaml",
+   "/src/reclaim_test_protocol.py",
+   "/src/skills/README.md",
+   "/src/skills/es-hybrid-migration/SKILL.md",
+   "/src/skills/es-snapshot-audit/SKILL.md",
+   "/src/skills/test-rig-tuning/README.md",
+   "/src/skills/test-rig-tuning/SKILL.md",
+   "/src/snapshot_churn_rig.py",
+   "/src/snapshot_sizes.py",
+   "/src/terraform/oci-probe/.gitignore",
+   "/src/terraform/oci-probe/README.md",
+   "/src/terraform/oci-probe/main.tf",
+   "/src/terraform/oci-probe/outputs.tf",
+   "/src/terraform/oci-probe/terraform.tfvars.example",
+   "/src/terraform/oci-probe/variables.tf",
+   "/src/terraform/oci-probe/versions.tf",
+   "/src/verify_restorable.py"
+  ]
+ },
+ "profiling_results": [],
+ "results": [
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 41,
+    "line": 78,
+    "offset": 2666
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/evidence/blast-radius-remeasure/harness/s3lib.py",
+   "start": {
+    "col": 14,
+    "line": 78,
+    "offset": 2639
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 53,
+    "line": 44,
+    "offset": 1739
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/evidence/genchain-research/harness/miniofill.py",
+   "start": {
+    "col": 10,
+    "line": 44,
+    "offset": 1696
+   }
+  },
+  {
+   "check_id": "yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+   "end": {
+    "col": 13,
+    "line": 23,
+    "offset": 536
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "spec:\n          securityContext:\n            runAsNonRoot: true #",
+    "lines": "requires login",
+    "message": "When running containers in Kubernetes, it's important to ensure that they  are properly secured to prevent privilege escalation attacks.  One potential vulnerability is when a container is allowed to run  applications as the root user, which could allow an attacker to gain  access to sensitive resources. To mitigate this risk, it's recommended to  add a `securityContext` to the container, with the parameter `runAsNonRoot`  set to `true`. This will ensure that the container runs as a non-root user,  limiting the damage that could be caused by any potential attacks. By  adding a `securityContext` to the container in your Kubernetes pod, you can  help to ensure that your containerized applications are more secure and  less vulnerable to privilege escalation attacks.",
+    "metadata": {
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-250: Execution with Unnecessary Privileges"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": [
+      "A05:2021 - Security Misconfiguration",
+      "A06:2017 - Security Misconfiguration",
+      "A02:2025 - Security Misconfiguration"
+     ],
+     "references": [
+      "https://kubernetes.io/blog/2016/08/security-best-practices-kubernetes-deployment/",
+      "https://kubernetes.io/docs/concepts/policy/pod-security-policy/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-2-set-a-user"
+     ],
+     "shortlink": "https://sg.run/dgP5",
+     "source": "https://semgrep.dev/r/yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "kubernetes"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "INFO",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/manifests/elasticsearch.yaml",
+   "start": {
+    "col": 9,
+    "line": 23,
+    "offset": 532
+   }
+  },
+  {
+   "check_id": "yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+   "end": {
+    "col": 9,
+    "line": 12,
+    "offset": 190
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "spec:\n      securityContext:\n        runAsNonRoot: true #",
+    "lines": "requires login",
+    "message": "When running containers in Kubernetes, it's important to ensure that they  are properly secured to prevent privilege escalation attacks.  One potential vulnerability is when a container is allowed to run  applications as the root user, which could allow an attacker to gain  access to sensitive resources. To mitigate this risk, it's recommended to  add a `securityContext` to the container, with the parameter `runAsNonRoot`  set to `true`. This will ensure that the container runs as a non-root user,  limiting the damage that could be caused by any potential attacks. By  adding a `securityContext` to the container in your Kubernetes pod, you can  help to ensure that your containerized applications are more secure and  less vulnerable to privilege escalation attacks.",
+    "metadata": {
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-250: Execution with Unnecessary Privileges"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": [
+      "A05:2021 - Security Misconfiguration",
+      "A06:2017 - Security Misconfiguration",
+      "A02:2025 - Security Misconfiguration"
+     ],
+     "references": [
+      "https://kubernetes.io/blog/2016/08/security-best-practices-kubernetes-deployment/",
+      "https://kubernetes.io/docs/concepts/policy/pod-security-policy/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-2-set-a-user"
+     ],
+     "shortlink": "https://sg.run/dgP5",
+     "source": "https://semgrep.dev/r/yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "kubernetes"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "INFO",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/manifests/minio-bucket-job.yaml",
+   "start": {
+    "col": 5,
+    "line": 12,
+    "offset": 186
+   }
+  },
+  {
+   "check_id": "yaml.kubernetes.security.allow-privilege-escalation-no-securitycontext.allow-privilege-escalation-no-securitycontext",
+   "end": {
+    "col": 15,
+    "line": 15,
+    "offset": 255
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "securityContext:\n            allowPrivilegeEscalation: false\n          name",
+    "lines": "requires login",
+    "message": "In Kubernetes, each pod runs in its own isolated environment with its own set of security policies. However, certain container images may contain `setuid` or `setgid` binaries that could allow an attacker to perform privilege escalation and gain access to sensitive resources. To mitigate this risk, it's recommended to add a `securityContext` to the container in the pod, with the parameter `allowPrivilegeEscalation` set to `false`. This will prevent the container from running any privileged processes and limit the impact of any potential attacks. By adding a `securityContext` to your Kubernetes pod, you can help to ensure that your containerized applications are more secure and less vulnerable to privilege escalation attacks.",
+    "metadata": {
+     "category": "security",
+     "confidence": "MEDIUM",
+     "cwe": [
+      "CWE-732: Incorrect Permission Assignment for Critical Resource"
+     ],
+     "cwe2021-top25": true,
+     "impact": "MEDIUM",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "MEDIUM",
+     "owasp": [
+      "A05:2021 - Security Misconfiguration",
+      "A06:2017 - Security Misconfiguration",
+      "A02:2025 - Security Misconfiguration"
+     ],
+     "references": [
+      "https://kubernetes.io/docs/concepts/policy/pod-security-policy/#privilege-escalation",
+      "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
+      "https://www.kernel.org/doc/Documentation/prctl/no_new_privs.txt",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-4-add-no-new-privileges-flag"
+     ],
+     "shortlink": "https://sg.run/eleR",
+     "source": "https://semgrep.dev/r/yaml.kubernetes.security.allow-privilege-escalation-no-securitycontext.allow-privilege-escalation-no-securitycontext",
+     "subcategory": [
+      "vuln"
+     ],
+     "technology": [
+      "kubernetes"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/manifests/minio-bucket-job.yaml",
+   "start": {
+    "col": 11,
+    "line": 15,
+    "offset": 251
+   }
+  },
+  {
+   "check_id": "yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+   "end": {
+    "col": 9,
+    "line": 34,
+    "offset": 660
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "spec:\n      securityContext:\n        runAsNonRoot: true #",
+    "lines": "requires login",
+    "message": "When running containers in Kubernetes, it's important to ensure that they  are properly secured to prevent privilege escalation attacks.  One potential vulnerability is when a container is allowed to run  applications as the root user, which could allow an attacker to gain  access to sensitive resources. To mitigate this risk, it's recommended to  add a `securityContext` to the container, with the parameter `runAsNonRoot`  set to `true`. This will ensure that the container runs as a non-root user,  limiting the damage that could be caused by any potential attacks. By  adding a `securityContext` to the container in your Kubernetes pod, you can  help to ensure that your containerized applications are more secure and  less vulnerable to privilege escalation attacks.",
+    "metadata": {
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-250: Execution with Unnecessary Privileges"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": [
+      "A05:2021 - Security Misconfiguration",
+      "A06:2017 - Security Misconfiguration",
+      "A02:2025 - Security Misconfiguration"
+     ],
+     "references": [
+      "https://kubernetes.io/blog/2016/08/security-best-practices-kubernetes-deployment/",
+      "https://kubernetes.io/docs/concepts/policy/pod-security-policy/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-2-set-a-user"
+     ],
+     "shortlink": "https://sg.run/dgP5",
+     "source": "https://semgrep.dev/r/yaml.kubernetes.security.run-as-non-root.run-as-non-root",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "kubernetes"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "INFO",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/manifests/minio.yaml",
+   "start": {
+    "col": 5,
+    "line": 34,
+    "offset": 656
+   }
+  },
+  {
+   "check_id": "yaml.kubernetes.security.allow-privilege-escalation-no-securitycontext.allow-privilege-escalation-no-securitycontext",
+   "end": {
+    "col": 15,
+    "line": 36,
+    "offset": 694
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "securityContext:\n            allowPrivilegeEscalation: false\n          name",
+    "lines": "requires login",
+    "message": "In Kubernetes, each pod runs in its own isolated environment with its own set of security policies. However, certain container images may contain `setuid` or `setgid` binaries that could allow an attacker to perform privilege escalation and gain access to sensitive resources. To mitigate this risk, it's recommended to add a `securityContext` to the container in the pod, with the parameter `allowPrivilegeEscalation` set to `false`. This will prevent the container from running any privileged processes and limit the impact of any potential attacks. By adding a `securityContext` to your Kubernetes pod, you can help to ensure that your containerized applications are more secure and less vulnerable to privilege escalation attacks.",
+    "metadata": {
+     "category": "security",
+     "confidence": "MEDIUM",
+     "cwe": [
+      "CWE-732: Incorrect Permission Assignment for Critical Resource"
+     ],
+     "cwe2021-top25": true,
+     "impact": "MEDIUM",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "MEDIUM",
+     "owasp": [
+      "A05:2021 - Security Misconfiguration",
+      "A06:2017 - Security Misconfiguration",
+      "A02:2025 - Security Misconfiguration"
+     ],
+     "references": [
+      "https://kubernetes.io/docs/concepts/policy/pod-security-policy/#privilege-escalation",
+      "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
+      "https://www.kernel.org/doc/Documentation/prctl/no_new_privs.txt",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html#rule-4-add-no-new-privileges-flag"
+     ],
+     "shortlink": "https://sg.run/eleR",
+     "source": "https://semgrep.dev/r/yaml.kubernetes.security.allow-privilege-escalation-no-securitycontext.allow-privilege-escalation-no-securitycontext",
+     "subcategory": [
+      "vuln"
+     ],
+     "technology": [
+      "kubernetes"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/manifests/minio.yaml",
+   "start": {
+    "col": 11,
+    "line": 36,
+    "offset": 690
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 49,
+    "line": 197,
+    "offset": 8882
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/reclaim_test_protocol.py",
+   "start": {
+    "col": 10,
+    "line": 197,
+    "offset": 8843
+   }
+  },
+  {
+   "check_id": "python.lang.security.unverified-ssl-context.unverified-ssl-context",
+   "end": {
+    "col": 60,
+    "line": 142,
+    "offset": 5708
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "fix": "ssl.create_default_context()",
+    "lines": "requires login",
+    "message": "Unverified SSL context detected. This will permit insecure connections without verifying SSL certificates. Use 'ssl.create_default_context' instead.",
+    "metadata": {
+     "category": "security",
+     "confidence": "MEDIUM",
+     "cwe": [
+      "CWE-295: Improper Certificate Validation"
+     ],
+     "impact": "MEDIUM",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": [
+      "A03:2017 - Sensitive Data Exposure",
+      "A07:2021 - Identification and Authentication Failures",
+      "A07:2025 - Authentication Failures"
+     ],
+     "references": [
+      "https://docs.python.org/3/library/ssl.html#ssl-security",
+      "https://docs.python.org/3/library/http.client.html#http.client.HTTPSConnection"
+     ],
+     "shortlink": "https://sg.run/N4lp",
+     "source": "https://semgrep.dev/r/python.lang.security.unverified-ssl-context.unverified-ssl-context",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authentication"
+     ]
+    },
+    "severity": "ERROR",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/snapshot_churn_rig.py",
+   "start": {
+    "col": 28,
+    "line": 142,
+    "offset": 5676
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 58,
+    "line": 162,
+    "offset": 6475
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/snapshot_churn_rig.py",
+   "start": {
+    "col": 18,
+    "line": 161,
+    "offset": 6375
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 55,
+    "line": 248,
+    "offset": 10258
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/snapshot_churn_rig.py",
+   "start": {
+    "col": 18,
+    "line": 248,
+    "offset": 10221
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 63,
+    "line": 147,
+    "offset": 7353
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/snapshot_sizes.py",
+   "start": {
+    "col": 10,
+    "line": 147,
+    "offset": 7300
+   }
+  },
+  {
+   "check_id": "python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+   "end": {
+    "col": 71,
+    "line": 47,
+    "offset": 2108
+   },
+   "extra": {
+    "engine_kind": "OSS",
+    "fingerprint": "requires login",
+    "lines": "requires login",
+    "message": "Detected a dynamic value being used with urllib. urllib supports 'file://' schemes, so a dynamic value controlled by a malicious actor may allow them to read arbitrary files. Audit uses of urllib calls to ensure user data cannot control the URLs, or consider using the 'requests' library instead.",
+    "metadata": {
+     "asvs": {
+      "control_id": "5.2.4 Dynamic Code Execution Features",
+      "control_url": "https://github.com/OWASP/ASVS/blob/master/4.0/en/0x13-V5-Validation-Sanitization-Encoding.md#v52-sanitization-and-sandboxing-requirements",
+      "section": "V5: Validation, Sanitization and Encoding Verification Requirements",
+      "version": "4"
+     },
+     "bandit-code": "B310",
+     "category": "security",
+     "confidence": "LOW",
+     "cwe": [
+      "CWE-939: Improper Authorization in Handler for Custom URL Scheme"
+     ],
+     "impact": "LOW",
+     "license": "Semgrep Rules License v1.0. For more details, visit semgrep.dev/legal/rules-license",
+     "likelihood": "LOW",
+     "owasp": "A01:2017 - Injection",
+     "references": [
+      "https://cwe.mitre.org/data/definitions/939.html"
+     ],
+     "shortlink": "https://sg.run/dKZZ",
+     "source": "https://semgrep.dev/r/python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected",
+     "source-rule-url": "https://github.com/PyCQA/bandit/blob/b1411bfb43795d3ffd268bef17a839dee954c2b1/bandit/blacklists/calls.py#L163",
+     "subcategory": [
+      "audit"
+     ],
+     "technology": [
+      "python"
+     ],
+     "vulnerability_class": [
+      "Improper Authorization"
+     ]
+    },
+    "severity": "WARNING",
+    "validation_state": "NO_VALIDATOR"
+   },
+   "path": "/src/verify_restorable.py",
+   "start": {
+    "col": 14,
+    "line": 47,
+    "offset": 2051
+   }
+  }
+ ],
+ "skipped_rules": [],
+ "time": {
+  "fixpoint_timeouts": [],
+  "matching_time": {
+   "per_file_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "total_time": 0.0,
+   "very_slow_rules_on_files": [],
+   "very_slow_stats": {
+    "count_ratio": 0.0,
+    "time_ratio": 0.0
+   }
+  },
+  "max_memory_bytes": 948683904,
+  "parsing_time": {
+   "per_file_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "total_time": 0.0,
+   "very_slow_files": [],
+   "very_slow_stats": {
+    "count_ratio": 0.0,
+    "time_ratio": 0.0
+   }
+  },
+  "prefiltering": {
+   "file_level_time": 0.0,
+   "project_level_time": 0.0,
+   "rules_matched_ratio": 0.040916742198627475,
+   "rules_selected_ratio": 0.040916742198627475,
+   "rules_with_file_prefilters_ratio": 0.981095429237343,
+   "rules_with_project_prefilters_ratio": 0.0
+  },
+  "profiling_times": {
+   "config_time": 1.247908115386963,
+   "core_time": 7.0456016063690186,
+   "ignores_time": 0.0015511512756347656,
+   "total_time": 8.31219220161438
+  },
+  "rules": [],
+  "rules_parse_time": 0.5547890663146973,
+  "scanning_time": {
+   "per_file_time": {
+    "mean": 0.004325972531888351,
+    "std_dev": 0.0009088340607709786
+   },
+   "total_time": 5.243078708648682,
+   "very_slow_files": [],
+   "very_slow_stats": {
+    "count_ratio": 0.0,
+    "time_ratio": 0.0
+   }
+  },
+  "tainting_time": {
+   "per_def_and_rule_time": {
+    "mean": 0.0,
+    "std_dev": 0.0
+   },
+   "total_time": 0.0,
+   "very_slow_rules_on_defs": [],
+   "very_slow_stats": {
+    "count_ratio": 0.0,
+    "time_ratio": 0.0
+   }
+  },
+  "targets": [],
+  "total_bytes": 0
+ },
+ "version": "1.174.0"
+}

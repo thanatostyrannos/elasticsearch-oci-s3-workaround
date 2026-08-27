@@ -1,0 +1,72 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: rig
+  namespace: es-rig
+spec:
+  version: 9.5.2
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  secureSettings:
+    - secretName: s3-credentials
+  nodeSets:
+    - name: default
+      count: 1
+      config:
+        node.store.allow_mmap: false
+
+        # Required, and static: it cannot be set with PUT _cluster/settings.
+        # Without it a data_frozen node refuses to mount a partial searchable
+        # snapshot, and the churn rig refuses to start at all. It was set
+        # out-of-band on an earlier rig and never captured here, so a rebuild
+        # from this file could not reproduce the environment the measurements
+        # were taken in.
+        #
+        # This is OFF-HEAP and counts against the container memory limit
+        # alongside the heap, which is how the pod came to be OOMKilled: the
+        # cache fills gradually as mounts accumulate, so the kill lands hours
+        # into a run rather than at startup. Budget for it. At 16Gi with an 8g
+        # heap, 2gb here leaves comfortable room for JVM overhead.
+        xpack.searchable.snapshot.shared_cache.size: 2gb
+
+        s3.client.default.endpoint: "http://minio.es-rig.svc:9000"
+        s3.client.default.protocol: http
+        s3.client.default.path_style_access: true
+
+        # The Oracle S3 compatibility client. Without these, a repository
+        # registered with `--s3-client oci` silently talks to real AWS S3 and
+        # fails with "The AWS Access Key Id you provided does not exist in our
+        # records", which reads like a credential problem rather than a
+        # missing endpoint.
+        #
+        # Replace CHANGEME-namespace and CHANGEME-region. The namespace
+        # identifies your tenancy, so it is a placeholder here rather than a
+        # value: this repository is public.
+        #
+        # disable_chunked_encoding is not optional. Oracle answers 501 on
+        # chunked-encoding uploads; see evidence/oci-s3-compatibility/.
+        s3.client.oci.endpoint: "https://CHANGEME-namespace.compat.objectstorage.CHANGEME-region.oraclecloud.com"
+        s3.client.oci.protocol: https
+        s3.client.oci.path_style_access: true
+        s3.client.oci.disable_chunked_encoding: true
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              env:
+                # Half the container, which is the ratio Elasticsearch
+                # expects. The rest is not slack: the JVM needs metaspace,
+                # thread stacks, direct buffers and GC structures, and this
+                # rig also runs an off-heap searchable-snapshot cache that
+                # counts against the same container limit. At 2Gi with a 1g
+                # heap the pod was OOMKilled after about seven hours, once
+                # the frozen cache had filled.
+                - name: ES_JAVA_OPTS
+                  value: "-Xms8g -Xmx8g"
+              resources:
+                requests:
+                  memory: 16Gi
+                limits:
+                  memory: 16Gi

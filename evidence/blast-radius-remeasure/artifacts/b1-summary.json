@@ -1,0 +1,163 @@
+{
+  "id": "b1",
+  "note": "one shared data blob: blast-share2 _0.cfs, named by all three snapshots",
+  "base": "base-s",
+  "repo": "blast-b1",
+  "clone_objects": 30,
+  "register": {
+    "acknowledged": true
+  },
+  "objects_before": 30,
+  "bytes_before": 1018287,
+  "deleted_objects": 1,
+  "deleted_bytes": 486768,
+  "share_of_objects_pct": 3.333,
+  "share_of_bytes_pct": 47.803,
+  "objects_after": 29,
+  "verify_pre_status": {
+    "repository": {
+      "name": "blast-b1",
+      "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+      "generation": 2
+    },
+    "snapshots": {
+      "verified": 3,
+      "total": 3
+    },
+    "indices": {
+      "verified": 2,
+      "total": 2
+    },
+    "index_snapshots": {
+      "verified": 6,
+      "total": 6
+    },
+    "blobs": {
+      "verified": 27
+    }
+  },
+  "verify_pre_total_anomalies": 0,
+  "verify_pre_result": "pass",
+  "verify_status": {
+    "repository": {
+      "name": "blast-b1",
+      "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+      "generation": 2
+    },
+    "snapshots": {
+      "verified": 3,
+      "total": 3
+    },
+    "indices": {
+      "verified": 2,
+      "total": 2
+    },
+    "index_snapshots": {
+      "verified": 6,
+      "total": 6
+    },
+    "blobs": {
+      "verified": 27
+    }
+  },
+  "total_anomalies": 3,
+  "result": "fail",
+  "anomaly_classes": [
+    "missing blob"
+  ],
+  "anomalies_per_snapshot": {
+    "blast-snap-1": 1,
+    "blast-snap-2": 1,
+    "blast-snap-3": 1
+  },
+  "damaged_index_snapshot_pairs": [
+    "blast-share2/blast-snap-1",
+    "blast-share2/blast-snap-2",
+    "blast-share2/blast-snap-3"
+  ],
+  "damaged_pair_count": 3,
+  "catalog_snapshots": [
+    "blast-snap-1",
+    "blast-snap-2",
+    "blast-snap-3"
+  ],
+  "catalog_states": {
+    "blast-snap-1": "SUCCESS",
+    "blast-snap-2": "SUCCESS",
+    "blast-snap-3": "SUCCESS"
+  },
+  "restores": [
+    {
+      "snapshot": "blast-snap-1",
+      "shards": {
+        "total": 2,
+        "failed": 1,
+        "successful": 1
+      },
+      "indices": [
+        "bxrb1-1-share2",
+        "bxrb1-1-share1"
+      ],
+      "health": {
+        "bxrb1-1-share2": "red",
+        "bxrb1-1-share1": "green"
+      },
+      "docs": {
+        "bxrb1-1-share2": null,
+        "bxrb1-1-share1": 2000
+      },
+      "count_errors": {
+        "bxrb1-1-share2": "search_phase_execution_exception",
+        "bxrb1-1-share1": null
+      }
+    },
+    {
+      "snapshot": "blast-snap-2",
+      "shards": {
+        "total": 2,
+        "failed": 1,
+        "successful": 1
+      },
+      "indices": [
+        "bxrb1-2-share2",
+        "bxrb1-2-share1"
+      ],
+      "health": {
+        "bxrb1-2-share2": "red",
+        "bxrb1-2-share1": "green"
+      },
+      "docs": {
+        "bxrb1-2-share2": null,
+        "bxrb1-2-share1": 2000
+      },
+      "count_errors": {
+        "bxrb1-2-share2": "search_phase_execution_exception",
+        "bxrb1-2-share1": null
+      }
+    },
+    {
+      "snapshot": "blast-snap-3",
+      "shards": {
+        "total": 2,
+        "failed": 1,
+        "successful": 1
+      },
+      "indices": [
+        "bxrb1-3-share2",
+        "bxrb1-3-share1"
+      ],
+      "health": {
+        "bxrb1-3-share2": "red",
+        "bxrb1-3-share1": "green"
+      },
+      "docs": {
+        "bxrb1-3-share2": null,
+        "bxrb1-3-share1": 2050
+      },
+      "count_errors": {
+        "bxrb1-3-share2": "search_phase_execution_exception",
+        "bxrb1-3-share1": null
+      }
+    }
+  ]
+}

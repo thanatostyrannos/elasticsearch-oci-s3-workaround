@@ -1,0 +1,172 @@
+{
+  "log": [
+    {
+      "timestamp_in_millis": 1787696699136,
+      "snapshot": {
+        "snapshot": "blast-snap-1",
+        "uuid": "UIF8pAV-QPyCLMnHvHtzYA",
+        "repository": "blast-b10",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-share2",
+          "blast-share1"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-25T22:15:18.865Z",
+        "start_time_in_millis": 1787696118865,
+        "end_time": "2026-08-25T22:15:19.065Z",
+        "end_time_in_millis": 1787696119065,
+        "duration_in_millis": 200,
+        "failures": [],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        },
+        "feature_states": []
+      }
+    },
+    {
+      "timestamp_in_millis": 1787696699136,
+      "snapshot": {
+        "snapshot": "blast-snap-2",
+        "uuid": "xb4MFxb7SRu6ltyR_5mk_Q",
+        "repository": "blast-b10",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-share2",
+          "blast-share1"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-25T22:15:19.666Z",
+        "start_time_in_millis": 1787696119666,
+        "end_time": "2026-08-25T22:15:19.866Z",
+        "end_time_in_millis": 1787696119866,
+        "duration_in_millis": 200,
+        "failures": [],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        },
+        "feature_states": []
+      }
+    },
+    {
+      "timestamp_in_millis": 1787696699136,
+      "snapshot": {
+        "snapshot": "blast-snap-3",
+        "uuid": "tJyJxYawQwiWDGV4EvJYlg",
+        "repository": "blast-b10",
+        "version_id": 9111000,
+        "version": "9.5.2",
+        "indices": [
+          "blast-share2",
+          "blast-share1"
+        ],
+        "data_streams": [],
+        "include_global_state": false,
+        "state": "SUCCESS",
+        "start_time": "2026-08-25T22:15:21.668Z",
+        "start_time_in_millis": 1787696121668,
+        "end_time": "2026-08-25T22:15:21.668Z",
+        "end_time_in_millis": 1787696121668,
+        "duration_in_millis": 0,
+        "failures": [],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        },
+        "feature_states": []
+      }
+    },
+    {
+      "timestamp_in_millis": 1787696699336,
+      "anomaly": "failed to load shard snapshot",
+      "snapshot": {
+        "snapshot": "blast-snap-1",
+        "uuid": "UIF8pAV-QPyCLMnHvHtzYA"
+      },
+      "index": {
+        "name": "blast-share2",
+        "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+        "metadata_blob": "MgD9OqABiKEMB984_UGL",
+        "shards": 1
+      },
+      "shard_id": 0,
+      "exception": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "snapshot_missing_exception",
+              "reason": "[blast-b10:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing"
+            }
+          ],
+          "type": "snapshot_missing_exception",
+          "reason": "[blast-b10:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing",
+          "caused_by": {
+            "type": "no_such_file_exception",
+            "reason": "Blob object [exp-b10/indices/UXdt_l7dRxGjcj2NMCWFbw/0/snap-UIF8pAV-QPyCLMnHvHtzYA.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2CAD2A561840, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+          }
+        },
+        "status": "NOT_FOUND"
+      }
+    },
+    {
+      "timestamp_in_millis": 1787696699336,
+      "index": {
+        "name": "blast-share1",
+        "uuid": "23PewvPeSIipJ0w0z-3ypQ"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 3,
+        "restorable_snapshot_count": 3
+      }
+    },
+    {
+      "timestamp_in_millis": 1787696699336,
+      "index": {
+        "name": "blast-share2",
+        "uuid": "UXdt_l7dRxGjcj2NMCWFbw"
+      },
+      "snapshot_restorability": {
+        "total_snapshot_count": 3,
+        "restorable_snapshot_count": 2
+      }
+    }
+  ],
+  "results": {
+    "status": {
+      "repository": {
+        "name": "blast-b10",
+        "uuid": "huGC1aLfTnKvDT9hIg9KDA",
+        "generation": 2
+      },
+      "snapshots": {
+        "verified": 3,
+        "total": 3
+      },
+      "indices": {
+        "verified": 2,
+        "total": 2
+      },
+      "index_snapshots": {
+        "verified": 6,
+        "total": 6
+      },
+      "blobs": {
+        "verified": 23
+      }
+    },
+    "final_repository_generation": 2,
+    "total_anomalies": 1,
+    "result": "fail"
+  }
+}

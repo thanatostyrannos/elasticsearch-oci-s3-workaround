@@ -1,0 +1,5 @@
+== cluster ==
+  status=green nodes=1 unassigned=0
+== snapshots ==
+  32 snapshot(s): {'SUCCESS': 28, 'IN_PROGRESS': 4}
+  FAIL: snapshot(s) in an unexpected state: ['churndeep-snap-20260826-143845-oyo-ldxmt1ep-m6nayileg', 'churndeep-snap-20260826-143858-gzufqndwqxmti8ef8lzkow', 'churndeep-snap-20260826-143915-atlixn2vthuv88vymf4kva']

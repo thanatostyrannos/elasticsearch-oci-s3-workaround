@@ -1,0 +1,20 @@
+[
+ {
+  "build_seconds": 0.17,
+  "condemned": 2230,
+  "exists": 2231,
+  "explained": 1.0,
+  "fetches": 1789,
+  "generations": 894,
+  "list_pages": 5,
+  "max_in_flight": 1,
+  "objects": 4030,
+  "peak_traced_mb": 5.86,
+  "refused": null,
+  "req_per_gen": 4.5,
+  "requests": 4025,
+  "rss_delta_mb": 12.0,
+  "seconds": 163.517,
+  "us_per_request": 40625.2
+ }
+]

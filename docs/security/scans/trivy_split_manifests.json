@@ -1,0 +1,10 @@
+{
+ "ArtifactName": "/src/manifests",
+ "ArtifactType": "filesystem",
+ "CreatedAt": "2026-08-27T03:49:45.593930158Z",
+ "ReportID": "01a04156-89f9-7e2f-9b49-61e904896b0c",
+ "SchemaVersion": 2,
+ "Trivy": {
+  "Version": "0.74.0"
+ }
+}

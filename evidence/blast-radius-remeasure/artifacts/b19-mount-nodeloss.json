@@ -1,0 +1,181 @@
+{
+  "steps": [
+    {
+      "step": "clone",
+      "result": 9
+    },
+    {
+      "step": "register",
+      "result": {
+        "acknowledged": true
+      }
+    },
+    {
+      "step": "mount",
+      "result": {
+        "snapshot": {
+          "snapshot": "blast-ms-1",
+          "indices": [
+            "bxmsb19"
+          ],
+          "shards": {
+            "total": 1,
+            "failed": 0,
+            "successful": 1
+          }
+        }
+      }
+    },
+    {
+      "step": "after_mount",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb19",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "153.3kb"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "index_uuid",
+      "result": "Ou4_FEJ5Qtaxu1-iK1I6Nw"
+    },
+    {
+      "step": "delete_data_blobs",
+      "result": {
+        "keys": [
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__9-dZ_AmXS86Rw9661Ji83g",
+          "indices/VKuXbsgxTMu2SB0phIMDaA/0/__XM5STEWUTFGMtBvG0YiMtA"
+        ],
+        "http": [
+          204,
+          204
+        ]
+      }
+    },
+    {
+      "step": "after_delete",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb19",
+            "health": "green",
+            "status": "open",
+            "docs.count": "600",
+            "store.size": "153.3kb"
+          }
+        ],
+        "count": 600,
+        "count_error": null,
+        "search_hits": 600,
+        "search_error": null
+      }
+    },
+    {
+      "step": "close",
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true,
+        "indices": {
+          "bxmsb19": {
+            "closed": true
+          }
+        }
+      }
+    },
+    {
+      "step": "local_copy_before",
+      "result": "192K\t/usr/share/elasticsearch/data/indices/Ou4_FEJ5Qtaxu1-iK1I6Nw"
+    },
+    {
+      "step": "remove_local_copy",
+      "result": 0
+    },
+    {
+      "step": "local_copy_after",
+      "result": "ls: cannot access '/usr/share/elasticsearch/data/indices/Ou4_FEJ5Qtaxu1-iK1I6Nw': No such file or directory\ncommand terminated with exit code 2"
+    },
+    {
+      "step": "open",
+      "result": {
+        "acknowledged": true,
+        "shards_acknowledged": true
+      }
+    },
+    {
+      "step": "after_reopen_t15",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb19",
+            "health": "red",
+            "status": "open",
+            "docs.count": null,
+            "store.size": null
+          }
+        ],
+        "count": null,
+        "count_error": "search_phase_execution_exception",
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception"
+      }
+    },
+    {
+      "step": "after_reopen_t30",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb19",
+            "health": "red",
+            "status": "open",
+            "docs.count": null,
+            "store.size": null
+          }
+        ],
+        "count": null,
+        "count_error": "search_phase_execution_exception",
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception"
+      }
+    },
+    {
+      "step": "after_reopen_t60",
+      "result": {
+        "cat": [
+          {
+            "index": "bxmsb19",
+            "health": "red",
+            "status": "open",
+            "docs.count": null,
+            "store.size": null
+          }
+        ],
+        "count": null,
+        "count_error": "search_phase_execution_exception",
+        "search_hits": null,
+        "search_error": "search_phase_execution_exception"
+      }
+    },
+    {
+      "step": "explain",
+      "result": {
+        "index": "bxmsb19",
+        "shard": 0,
+        "current_state": "unassigned",
+        "unassigned_info": {
+          "reason": "ALLOCATION_FAILED",
+          "failed_allocation_attempts": 5,
+          "details": "failed shard on node [Z4nd2wQQR9ut7jRbysNHZQ]: failed recovery, failure org.elasticsearch.indices.recovery.RecoveryFailedException: [bxmsb19][0]: Recovery failed on {rig-es-default-0}{Z4nd2wQQR9ut7jRbysNHZQ}{0XETKXmlQ_iUPhNYoRuKYA}{rig-es-default-0}{10.42.0.235}{10.42.0.235:9300}{cdfhilmrstw}{9.5.2}{8000099-9111000}{ml.allocated_processors_double=32.0, k8s_node_name=nemodesktop, transform.config_version=10.0.0, xpack.installed=true, ml.allocated_processors=32, ml.max_jvm_size=1073741824, ml.config_version=12.0.0, ml.machine_memory=2147483648}\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.IndexShard.lambda$executeRecovery$55(IndexShard.java:3872)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeAcceptException(ActionListenerImplementations.java:78)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListener$2.onFailure(ActionListener.java:288)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.StoreRecovery.lambda$recoveryListener$9(StoreRecovery.java:413)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeAcceptException(ActionListenerImplementations.java:78)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListener$2.onFailure(ActionListener.java:288)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeAcceptException(ActionListenerImplementations.java:78)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeOnFailure(ActionListenerImplementations.java:89)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.DelegatingActionListener.onFailure(DelegatingActionListener.java:32)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.StoreRecovery.lambda$recoverFromRepository$19(StoreRecovery.java:619)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$DelegatingResponseActionListener.acceptException(ActionListenerImplementations.java:202)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeAcceptException(ActionListenerImplementations.java:78)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$DelegatingResponseActionListener.onFailure(ActionListenerImplementations.java:207)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener$FailureResult.complete(SubscribableListener.java:448)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.tryComplete(SubscribableListener.java:351)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.setResult(SubscribableListener.java:376)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.onFailure(SubscribableListener.java:288)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeAcceptException(ActionListenerImplementations.java:78)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations.safeOnFailure(ActionListenerImplementations.java:89)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.DelegatingActionListener.onFailure(DelegatingActionListener.java:32)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener$FailureResult.complete(SubscribableListener.java:448)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.tryComplete(SubscribableListener.java:351)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.setResult(SubscribableListener.java:376)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.onFailure(SubscribableListener.java:288)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.IndexShard.openEngineAndRecoverFromTranslog(IndexShard.java:2389)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.StoreRecovery.lambda$recoverFromRepository$17(StoreRecovery.java:605)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$ResponseDroppingActionListener.onResponse(ActionListenerImplementations.java:288)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener$SuccessResult.complete(SubscribableListener.java:436)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.tryComplete(SubscribableListener.java:347)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.setResult(SubscribableListener.java:376)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.support.SubscribableListener.onResponse(SubscribableListener.java:283)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$DelegatingResponseActionListener.onResponse(ActionListenerImplementations.java:198)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$RunBeforeActionListener.onResponse(ActionListenerImplementations.java:350)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.repositories.blobstore.FileRestoreContext.lambda$restore$1(FileRestoreContext.java:167)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionListenerImplementations$ResponseWrappingActionListener.onResponse(ActionListenerImplementations.java:261)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.repositories.blobstore.BlobStoreRepository$11.restoreFiles(BlobStoreRepository.java:3849)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.repositories.blobstore.FileRestoreContext.restore(FileRestoreContext.java:163)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.repositories.blobstore.BlobStoreRepository.lambda$restoreShard$67(BlobStoreRepository.java:3954)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.action.ActionRunnable$4.doRun(ActionRunnable.java:101)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.common.util.concurrent.ThreadContext$ContextPreservingAbstractRunnable.doRun(ThreadContext.java:1114)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.common.util.concurrent.AbstractRunnable.run(AbstractRunnable.java:27)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)\n\tat java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)\n\tat java.base/java.lang.Thread.run(Thread.java:1516)\nCaused by: [bxmsb19/Ou4_FEJ5Qtaxu1-iK1I6Nw][[bxmsb19][0]] org.elasticsearch.index.shard.IndexShardRecoveryException: failed recovery\n\t... 41 more\nCaused by: [bxmsb19/Ou4_FEJ5Qtaxu1-iK1I6Nw][[bxmsb19][0]] org.elasticsearch.index.snapshots.IndexShardRestoreFailedException: restore failed\n\t... 35 more\nCaused by: java.io.UncheckedIOException: org.apache.lucene.index.CorruptIndexException: codec footer mismatch (file truncated?): actual footer=0 vs expected footer=-1071082520 (resource=BufferedChecksumIndexInput(_0.cfe[length=742, file pointer=0, offset=0][cache file=null]))\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.engine.ReadOnlyEngine.<init>(ReadOnlyEngine.java:149)\n\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.SearchableSnapshots.lambda$getEngineFactory$7(SearchableSnapshots.java:483)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.IndexShard.createEngine(IndexShard.java:2452)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.IndexShard.innerOpenEngineAndTranslog(IndexShard.java:2426)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.shard.IndexShard.openEngineAndRecoverFromTranslog(IndexShard.java:2386)\n\t... 19 more\nCaused by: org.apache.lucene.index.CorruptIndexException: codec footer mismatch (file truncated?): actual footer=0 vs expected footer=-1071082520 (resource=BufferedChecksumIndexInput(_0.cfe[length=742, file pointer=0, offset=0][cache file=null]))\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.validateFooter(CodecUtil.java:585)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.checkFooter(CodecUtil.java:433)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.checkFooter(CodecUtil.java:493)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.lucene90.Lucene90CompoundReader.readEntries(Lucene90CompoundReader.java:125)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.lucene90.Lucene90CompoundReader.<init>(Lucene90CompoundReader.java:66)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.lucene90.Lucene90CompoundFormat.getCompoundReader(Lucene90CompoundFormat.java:89)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.SegmentCoreReaders.<init>(SegmentCoreReaders.java:83)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.SegmentReader.<init>(SegmentReader.java:95)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.StandardDirectoryReader.createOrReuseSegmentReader(StandardDirectoryReader.java:297)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.StandardDirectoryReader.createSegmentReaders(StandardDirectoryReader.java:240)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.StandardDirectoryReader$1.doBody(StandardDirectoryReader.java:96)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.StandardDirectoryReader$1.doBody(StandardDirectoryReader.java:84)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.SegmentInfos$FindSegmentsFile.run(SegmentInfos.java:791)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.StandardDirectoryReader.open(StandardDirectoryReader.java:108)\n\tat org.apache.lucene.core@10.5.1/org.apache.lucene.index.DirectoryReader.open(DirectoryReader.java:190)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.engine.ReadOnlyEngine.open(ReadOnlyEngine.java:224)\n\tat org.elasticsearch.server@9.5.2/org.elasticsearch.index.engine.ReadOnlyEngine.<init>(ReadOnlyEngine.java:132)\n\t... 23 more\n\tSuppressed: java.io.IOException: failed to read data from cache for [CacheFileReference{cacheKey='CacheKey[snapshotUUID=yrBlcR7kQOC3eoqBuuaEFA, snapshotIndexName=blast-mount, shardId=[bxmsb19][0], fileName=_0.cfe]', fileLength=742, acquired=false}]\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.store.input.MetadataCachingIndexInput.readDirectlyIfAlreadyClosed(MetadataCachingIndexInput.java:513)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.store.input.MetadataCachingIndexInput.readInternal(MetadataCachingIndexInput.java:619)\n\t\tat org.elasticsearch.blobcache@9.5.2/org.elasticsearch.blobcache.common.BlobCacheBufferedIndexInput.refill(BlobCacheBufferedIndexInput.java:304)\n\t\tat org.elasticsearch.blobcache@9.5.2/org.elasticsearch.blobcache.common.BlobCacheBufferedIndexInput.readByte(BlobCacheBufferedIndexInput.java:57)\n\t\tat org.apache.lucene.core@10.5.1/org.apache.lucene.store.BufferedChecksumIndexInput.readByte(BufferedChecksumIndexInput.java:38)\n\t\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.readBEInt(CodecUtil.java:668)\n\t\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.checkHeader(CodecUtil.java:185)\n\t\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.CodecUtil.checkIndexHeader(CodecUtil.java:254)\n\t\tat org.apache.lucene.core@10.5.1/org.apache.lucene.codecs.lucene90.Lucene90CompoundReader.readEntries(Lucene90CompoundReader.java:112)\n\t\t... 36 more\n\tCaused by: java.nio.file.NoSuchFileException: /usr/share/elasticsearch/data/indices/Ou4_FEJ5Qtaxu1-iK1I6Nw/0/snapshot_cache/yrBlcR7kQOC3eoqBuuaEFA/CJ0yYIWCS8-6oEIRBIPrqQ\n\t\tat java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:92)\n\t\tat java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:108)\n\t\tat java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:113)\n\t\tat java.base/sun.nio.fs.UnixFileSystemProvider.newFileChannel(UnixFileSystemProvider.java:214)\n\t\tat java.base/java.nio.channels.FileChannel.open(FileChannel.java:301)\n\t\tat java.base/java.nio.channels.FileChannel.open(FileChannel.java:353)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.cache.common.CacheFile$FileChannelReference.<init>(CacheFile.java:108)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.cache.common.CacheFile.acquire(CacheFile.java:196)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.store.input.MetadataCachingIndexInput$CacheFileReference.get(MetadataCachingIndexInput.java:748)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.store.input.MetadataCachingIndexInput.readWithBlobCache(MetadataCachingIndexInput.java:264)\n\t\tat org.elasticsearch.searchablesnapshots@9.5.2/org.elasticsearch.xpack.searchablesnapshots.store.input.MetadataCachingIndexInput.readInternal(MetadataCachingIndexInput.java:614)\n\t\t... 43 more\n"
+        }
+      }
+    }
+  ]
+}

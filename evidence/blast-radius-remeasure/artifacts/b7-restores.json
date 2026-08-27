@@ -1,0 +1,71 @@
+[
+  {
+    "snapshot": "blast-snap-1",
+    "restore_response": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b7:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b7:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b7/indices/UXdt_l7dRxGjcj2NMCWFbw/meta-MgD9OqABiKEMB984_UGL.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C9AB43226E9, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": 404
+    },
+    "elapsed_s": -1.5,
+    "cat_indices": [],
+    "counts": {}
+  },
+  {
+    "snapshot": "blast-snap-2",
+    "restore_response": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b7:blast-snap-2/xb4MFxb7SRu6ltyR_5mk_Q] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b7:blast-snap-2/xb4MFxb7SRu6ltyR_5mk_Q] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b7/indices/UXdt_l7dRxGjcj2NMCWFbw/meta-MgD9OqABiKEMB984_UGL.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C9B9125B566, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": 404
+    },
+    "elapsed_s": 0.4,
+    "cat_indices": [],
+    "counts": {}
+  },
+  {
+    "snapshot": "blast-snap-3",
+    "restore_response": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b7:blast-snap-3/tJyJxYawQwiWDGV4EvJYlg] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b7:blast-snap-3/tJyJxYawQwiWDGV4EvJYlg] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b7/indices/UXdt_l7dRxGjcj2NMCWFbw/meta-MgD9OqABiKEMB984_UGL.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C9CCAF612F0, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": 404
+    },
+    "elapsed_s": 0.4,
+    "cat_indices": [],
+    "counts": {}
+  }
+]

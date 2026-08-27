@@ -1,0 +1,34 @@
+[
+  {
+    "timestamp_in_millis": 1787703963655,
+    "anomaly": "failed to load shard snapshot",
+    "snapshot": {
+      "snapshot": "blast-p-1",
+      "uuid": "aM1Fe-UsQpONyWNHJbCl4w"
+    },
+    "index": {
+      "name": "blast-pointer",
+      "uuid": "EPrwDCT5T-6VZ6_UzNn-6g",
+      "metadata_blob": "oQJ1O6ABKa75d7VCJJfG",
+      "shards": 1
+    },
+    "shard_id": 0,
+    "exception": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b11:blast-p-1/aM1Fe-UsQpONyWNHJbCl4w] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b11:blast-p-1/aM1Fe-UsQpONyWNHJbCl4w] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b11/indices/EPrwDCT5T-6VZ6_UzNn-6g/0/snap-aM1Fe-UsQpONyWNHJbCl4w.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF334888C967F1, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": "NOT_FOUND"
+    }
+  }
+]

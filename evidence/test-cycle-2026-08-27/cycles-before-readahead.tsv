@@ -1,0 +1,81 @@
+cycle	utc	mode	settle	shards_read	segments_condemned	deleted	failed	unconfirmed	reclaimable	exit
+1	2026-08-27T08:06:36Z	segment	ready/docs=37342/fresh=2	2/2	120	160	0	0	4.26 MB across 160 orphaned objects (4,262,809 bytes)	0
+2	2026-08-27T08:09:23Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+3	2026-08-27T08:10:01Z	segment	ready/docs=45326/fresh=2	2/2	0	20	0	0	52.4 KB across 20 orphaned objects (52,403 bytes)	0
+4	2026-08-27T08:12:39Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+5	2026-08-27T08:13:16Z	segment	ready/docs=51212/fresh=2	2/2	128	148	0	0	71.15 MB across 148 orphaned objects (71,146,260 bytes)	0
+6	2026-08-27T08:16:32Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+7	2026-08-27T08:17:14Z	segment	ready/docs=58741/fresh=2	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+8	2026-08-27T08:19:47Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+9	2026-08-27T08:20:34Z	segment	ready/docs=64166/fresh=2	2/2	0	24	0	0	43.68 KB across 24 orphaned objects (43,679 bytes)	0
+10	2026-08-27T08:23:06Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+11	2026-08-27T08:23:57Z	segment	ready/docs=71502/fresh=2	2/2	0	20	0	0	53.54 KB across 20 orphaned objects (53,537 bytes)	0
+12	2026-08-27T08:27:06Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+13	2026-08-27T08:28:03Z	segment	ready/docs=78905/fresh=2	2/2	128	148	0	0	66.01 MB across 148 orphaned objects (66,008,058 bytes)	0
+14	2026-08-27T08:31:59Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+15	2026-08-27T08:32:57Z	segment	ready/docs=87905/fresh=2	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+16	2026-08-27T08:36:10Z	metadata	not waited	2/2	0	20	0	0	31.2 KB across 20 orphaned objects (31,195 bytes)	0
+17	2026-08-27T08:37:23Z	segment	ready/docs=95151/fresh=2	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+18	2026-08-27T08:40:02Z	metadata	not waited	2/2	0	4	0	0	8.96 KB across 4 orphaned objects (8,963 bytes)	0
+19	2026-08-27T08:41:19Z	segment	ready/docs=102281/fresh=2	2/2	0	16	0	0	32.54 KB across 16 orphaned objects (32,542 bytes)	0
+20	2026-08-27T08:44:32Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+21	2026-08-27T08:45:46Z	segment	ready/docs=109477/fresh=2	2/2	0	20	0	0	49.56 KB across 20 orphaned objects (49,565 bytes)	0
+22	2026-08-27T08:48:26Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+23	2026-08-27T08:49:44Z	segment	ready/docs=117661/fresh=2	2/2	0	20	0	0	57.41 KB across 20 orphaned objects (57,406 bytes)	0
+24	2026-08-27T08:53:06Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+25	2026-08-27T08:54:32Z	segment	ready/docs=125782/fresh=2	2/2	128	148	0	0	104.21 MB across 148 orphaned objects (104,210,459 bytes)	0
+26	2026-08-27T08:58:29Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+27	2026-08-27T08:59:59Z	segment	ready/docs=136568/fresh=2	2/2	0	20	0	0	25.22 KB across 20 orphaned objects (25,216 bytes)	0
+28	2026-08-27T09:03:46Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+29	2026-08-27T09:05:21Z	segment	ready/docs=145541/fresh=2	2/2	0	20	0	0	33.51 KB across 20 orphaned objects (33,506 bytes)	0
+30	2026-08-27T09:08:45Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+31	2026-08-27T09:10:31Z	segment	ready/docs=154741/fresh=2	2/2	0	20	0	0	44.9 KB across 20 orphaned objects (44,904 bytes)	0
+32	2026-08-27T09:13:54Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+33	2026-08-27T09:15:44Z	segment	ready/docs=163563/fresh=2	2/2	124	144	0	0	80.45 MB across 144 orphaned objects (80,448,447 bytes)	0
+34	2026-08-27T09:19:50Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+35	2026-08-27T09:21:42Z	segment	ready/docs=174378/fresh=2	2/2	0	20	0	0	25.18 KB across 20 orphaned objects (25,185 bytes)	0
+36	2026-08-27T09:25:13Z	metadata	not waited	2/2	0	20	0	0	33.54 KB across 20 orphaned objects (33,541 bytes)	0
+37	2026-08-27T09:27:21Z	segment	ready/docs=185073/fresh=2	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+38	2026-08-27T09:30:56Z	metadata	not waited	2/2	0	20	0	0	41.53 KB across 20 orphaned objects (41,529 bytes)	0
+39	2026-08-27T09:33:18Z	segment	ready/docs=195858/fresh=2	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+40	2026-08-27T09:37:01Z	metadata	not waited	2/2	0	20	0	0	49.51 KB across 20 orphaned objects (49,512 bytes)	0
+41	2026-08-27T09:39:18Z	segment	ready/docs=206683/fresh=2	2/2	0	20	0	0	57.51 KB across 20 orphaned objects (57,512 bytes)	0
+42	2026-08-27T09:44:06Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+43	2026-08-27T09:46:25Z	segment	ready/docs=219172/fresh=2	2/2	0	20	0	0	65.17 KB across 20 orphaned objects (65,174 bytes)	0
+44	2026-08-27T09:50:48Z	metadata	not waited	2/2	128	148	0	0	118.55 MB across 148 orphaned objects (118,547,553 bytes)	0
+45	2026-08-27T09:54:24Z	segment	ready/docs=233584/fresh=2	2/2	0	20	0	0	33.6 KB across 20 orphaned objects (33,602 bytes)	0
+46	2026-08-27T09:58:39Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+47	2026-08-27T10:01:23Z	segment	ready/docs=246056/fresh=2	2/2	0	20	0	0	41.84 KB across 20 orphaned objects (41,840 bytes)	0
+48	2026-08-27T10:05:47Z	metadata	not waited	2/2	0	20	0	0	49.63 KB across 20 orphaned objects (49,632 bytes)	0
+49	2026-08-27T10:08:44Z	segment	ready/docs=258618/fresh=2	2/2	0	4	0	0	12.2 KB across 4 orphaned objects (12,196 bytes)	0
+50	2026-08-27T10:12:53Z	metadata	not waited	2/2	0	16	0	0	45.49 KB across 16 orphaned objects (45,492 bytes)	0
+51	2026-08-27T10:16:06Z	segment	ready/docs=273073/fresh=2	2/2	0	20	0	0	65.53 KB across 20 orphaned objects (65,529 bytes)	0
+52	2026-08-27T10:20:59Z	metadata	not waited	2/2	128	148	0	0	118.62 MB across 148 orphaned objects (118,623,933 bytes)	0
+53	2026-08-27T10:25:04Z	segment	ready/docs=289141/fresh=2	2/2	0	20	0	0	33.64 KB across 20 orphaned objects (33,638 bytes)	0
+54	2026-08-27T10:30:26Z	metadata	not waited	2/2	0	20	0	0	41.69 KB across 20 orphaned objects (41,694 bytes)	0
+55	2026-08-27T10:34:00Z	segment	ready/docs=305173/fresh=2	2/2	0	20	0	0	49.65 KB across 20 orphaned objects (49,647 bytes)	0
+56	2026-08-27T10:39:37Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+57	2026-08-27T10:43:09Z	segment	ready/docs=322170/fresh=2	2/2	0	40	0	0	123.11 KB across 40 orphaned objects (123,106 bytes)	0
+58	2026-08-27T10:49:24Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+59	2026-08-27T10:52:56Z	segment	ready/docs=339177/fresh=2	2/2	128	148	0	0	118.63 MB across 148 orphaned objects (118,633,304 bytes)	0
+60	2026-08-27T10:59:51Z	metadata	not waited	2/2	0	20	0	0	34.01 KB across 20 orphaned objects (34,014 bytes)	0
+61	2026-08-27T11:03:50Z	segment	ready/docs=357197/fresh=2	2/2	0	40	0	0	95.02 KB across 40 orphaned objects (95,015 bytes)	0
+62	2026-08-27T11:09:20Z	metadata	not waited	2/2	0	0	0	0	0 B across 0 orphaned objects (0 bytes)	0
+63	2026-08-27T11:13:23Z	segment	ready/docs=377252/fresh=2	2/2	0	40	0	0	126.65 KB across 40 orphaned objects (126,654 bytes)	0
+64	2026-08-27T11:20:13Z	metadata	not waited	2/2	128	148	0	0	114.76 MB across 148 orphaned objects (114,758,623 bytes)	0
+65	2026-08-27T11:25:36Z	segment	ready/docs=397210/fresh=2	2/2	0	20	0	0	35.35 KB across 20 orphaned objects (35,350 bytes)	0
+66	2026-08-27T11:31:33Z	metadata	not waited	2/2	0	20	0	0	43.43 KB across 20 orphaned objects (43,427 bytes)	0
+67	2026-08-27T11:36:08Z	segment	ready/docs=416955/fresh=2	2/2	0	20	0	0	51.41 KB across 20 orphaned objects (51,411 bytes)	0
+68	2026-08-27T11:42:53Z	metadata	not waited	2/2	0	20	0	0	59.51 KB across 20 orphaned objects (59,506 bytes)	0
+69	2026-08-27T11:47:55Z	segment	ready/docs=438741/fresh=2	2/2	0	20	0	0	67.39 KB across 20 orphaned objects (67,394 bytes)	0
+70	2026-08-27T11:54:53Z	metadata	not waited	2/2	128	148	0	0	118.71 MB across 148 orphaned objects (118,707,260 bytes)	0
+71	2026-08-27T12:00:47Z	segment	ready/docs=460540/fresh=2	2/2	0	40	0	0	78.98 KB across 40 orphaned objects (78,980 bytes)	0
+72	2026-08-27T12:07:38Z	metadata	not waited	2/2	0	20	0	0	51.7 KB across 20 orphaned objects (51,700 bytes)	0
+73	2026-08-27T12:13:11Z	segment	ready/docs=484215/fresh=2	2/2	0	24	0	0	76.59 KB across 24 orphaned objects (76,592 bytes)	0
+74	2026-08-27T12:21:14Z	metadata	not waited	2/2	128	164	0	0	102.33 MB across 164 orphaned objects (102,326,249 bytes)	0
+75	2026-08-27T12:27:57Z	segment	ready/docs=511552/fresh=2	2/2	0	40	0	0	106.37 KB across 40 orphaned objects (106,371 bytes)	0
+76	2026-08-27T12:36:04Z	metadata	not waited	2/2	0	20	0	0	71.74 KB across 20 orphaned objects (71,740 bytes)	0
+77	2026-08-27T12:42:07Z	segment	ready/docs=537367/fresh=2	2/2	128	148	0	0	83.74 MB across 148 orphaned objects (83,739,993 bytes)	0
+78	2026-08-27T12:51:05Z	metadata	not waited	2/2	0	40	0	0	102.39 KB across 40 orphaned objects (102,386 bytes)	0
+79	2026-08-27T12:57:41Z	segment	ready/docs=564954/fresh=2	2/2	0	20	0	0	69.16 KB across 20 orphaned objects (69,160 bytes)	0
+80	2026-08-27T13:05:20Z	metadata	not waited	2/2	128	168	0	0	82.15 MB across 168 orphaned objects (82,153,262 bytes)	0

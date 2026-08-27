@@ -1,0 +1,2 @@
+
+aws: [ERROR]: An error occurred (NotImplemented) when calling the PutObject operation: AWS chunked encoding not supported.

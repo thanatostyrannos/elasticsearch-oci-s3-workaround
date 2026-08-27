@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-make-bucket
+  namespace: es-rig
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: minio-make-bucket
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc
+          command:
+            - /bin/sh
+            - -c
+            - >
+              mc alias set rig http://minio:9000 CHANGEME-access CHANGEME-secret &&
+              mc mb -p rig/es-snapshots

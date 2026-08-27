@@ -1,0 +1,47 @@
+{
+    "mtestrun-ilm": {
+        "version": 1,
+        "modified_date": "2026-08-27T01:44:01.093Z",
+        "policy": {
+            "phases": {
+                "frozen": {
+                    "min_age": "1m",
+                    "actions": {
+                        "searchable_snapshot": {
+                            "snapshot_repository": "mtestrun-repo",
+                            "force_merge_index": true
+                        }
+                    }
+                },
+                "hot": {
+                    "min_age": "0ms",
+                    "actions": {
+                        "rollover": {
+                            "max_age": "24h",
+                            "max_docs": 100000000
+                        }
+                    }
+                },
+                "delete": {
+                    "min_age": "2m",
+                    "actions": {
+                        "delete": {
+                            "delete_searchable_snapshot": true
+                        }
+                    }
+                }
+            }
+        },
+        "in_use_by": {
+            "indices": [
+                ".ds-mtestrun-stream-2026.08.27-000001"
+            ],
+            "data_streams": [
+                "mtestrun-stream"
+            ],
+            "composable_templates": [
+                "mtestrun-template"
+            ]
+        }
+    }
+}

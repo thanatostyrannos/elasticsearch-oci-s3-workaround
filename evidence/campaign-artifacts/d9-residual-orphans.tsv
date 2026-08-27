@@ -1,0 +1,5 @@
+key	size_bytes	created	last_modified	last_accessed	reason
+indices/BtIUzj_XSz-Ygq0AfcOMIg/0/snap-Akwm7mJyTw-vZoEtd13mRw.dat	936	2026-08-24T21:34:46.826247+00:00	2026-08-24T21:34:46.826247+00:00	2026-08-24T21:34:46.826247+00:00	shard snap-<uuid> vs live snapshots
+indices/uWYEV8XgTRq9NPAtuedM9Q/0/index-TY7jRihSR_Ka1K9TUde0oQ	924	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	shard index-<gen> vs current gen
+indices/uWYEV8XgTRq9NPAtuedM9Q/0/snap-Akwm7mJyTw-vZoEtd13mRw.dat	872	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	shard snap-<uuid> vs live snapshots
+indices/uWYEV8XgTRq9NPAtuedM9Q/0/snap-fkvwBzpBR_2TNCwiHHkWWA.dat	879	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	2026-08-24T21:34:46.830467+00:00	shard snap-<uuid> vs live snapshots

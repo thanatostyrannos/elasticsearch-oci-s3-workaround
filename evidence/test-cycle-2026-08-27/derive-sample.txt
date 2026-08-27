@@ -1,0 +1,41 @@
+[06:48:05] listed 301 objects
+[06:48:07] read the generation chain: 15 generation(s) believed, current 14
+[06:48:07] reading 2 shard directories in 1 group(s). This is the slow part, and it is quiet: one shard document per directory per generation, and nothing ever removes a generation
+[06:48:11]   shard directories read: 2
+transport: s3, S3 compatibility API at https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com, bucket esprobe-repo, prefix t2rig/, region us-ashburn-1
+repository uuid: NhBwPvdFT-uNIwF6lW9yEA
+  The uuid is a field whoever wrote the blob controls. It separates tenants sharing a bucket. It is not proof of authorship.
+
+Coverage
+  current root generation: 14
+  generations read and believed: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+  generations missing from the chain: (none)
+  history this run can explain: 100%
+    delete operations whose file lists it attributed in full: 5 of 5 found in the chain
+    generation transitions it could read both ends of: 14 of 14
+  shard directories read: 2 of 2
+  Lucene commit cross-check (issue #21): ran on 196 of 196 snapshot file lists
+
+Elasticsearch corroboration: CHECKED against http://localhost:9200
+  Everything it reported was removed from the manifest. What it did not report was not thereby condemned.
+  It protects by snapshot identity, so it cannot catch a key this tool attributed to the wrong snapshot. Corroboration is not a check on the derivation.
+
+Dispositions
+  orphaned: 140, 4.22 MB
+  protected: 0
+  live: 117, 50.9 MB
+  evidence: 42, 239.36 KB
+  unexplained: 0
+  outside-model: 2, 44 B
+  Only `orphaned` is a list of things to delete. The sizes beside the others are there because the manifest is not the size of the leak: a run that drops its shard directories condemns no segment blob, and the segments it could not attribute are counted under `unexplained` instead.
+  `unexplained` is not known garbage. It is what this run could not decide either way, and some of it is live.
+  Orphaned keys are a SUBSET of what Elasticsearch's own delete collects. Its rule is the segment blobs in a shard directory that the current BlobStoreIndexShardSnapshots does not reference. This tool computes that set difference and then keeps only the members it can attribute to a delete operation it actually observed.
+  An unexplained key is not a key to delete. Some of them, the partial blob an aborted snapshot leaves behind for one, are named by nothing and Elasticsearch will never reclaim them either.
+  Elasticsearch's own delete also removes the superseded root generations and the superseded shard generation documents. This tool never names either, because its derivation reads them. They are counted as evidence rather than left silently out.
+
+Reclaimable
+  4.22 MB across 140 orphaned objects (4,224,054 bytes)
+  Stored object size, as the store reported it in the listing. That is what a delete gives back. The `length` recorded in shard metadata is a different number: it is per logical Lucene file and summed per snapshot, so it counts a file shared by two snapshots twice.
+
+Notes
+  Elasticsearch at http://localhost:9200 reported 8 snapshot(s) and 0 mounted searchable-snapshot index(es); 0 key(s) left the manifest because it protects them

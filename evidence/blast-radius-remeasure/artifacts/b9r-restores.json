@@ -1,0 +1,129 @@
+[
+  {
+    "snapshot": "blast-snap-1",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-1",
+        "indices": [
+          "bxrb9r-1-share2",
+          "bxrb9r-1-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 0.8,
+    "cat_indices": [
+      {
+        "index": "bxrb9r-1-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb9r-1-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb9r-1-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb9r-1-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-2",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-2",
+        "indices": [
+          "bxrb9r-2-share2",
+          "bxrb9r-2-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 0.9,
+    "cat_indices": [
+      {
+        "index": "bxrb9r-2-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb9r-2-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb9r-2-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb9r-2-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-3",
+    "restore_response": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_restore_exception",
+            "reason": "[blast-b9r:blast-snap-3] snapshot does not exist"
+          }
+        ],
+        "type": "snapshot_restore_exception",
+        "reason": "[blast-b9r:blast-snap-3] snapshot does not exist"
+      },
+      "status": 500
+    },
+    "elapsed_s": 0.4,
+    "cat_indices": [],
+    "counts": {}
+  }
+]

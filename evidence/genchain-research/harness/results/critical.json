@@ -1,0 +1,72 @@
+[
+ {
+  "coverage_said_so": 0,
+  "keys_lost_per_trial": 0.0,
+  "keys_lost_total": 0,
+  "lost_keys_silently": 0,
+  "manifest_grew": 0,
+  "read_that_failed": "index.latest",
+  "refused_the_run": 1,
+  "trials": 1
+ },
+ {
+  "coverage_said_so": 0,
+  "keys_lost_per_trial": 0.0,
+  "keys_lost_total": 0,
+  "lost_keys_silently": 0,
+  "manifest_grew": 0,
+  "read_that_failed": "listing",
+  "refused_the_run": 1,
+  "trials": 1
+ },
+ {
+  "coverage_said_so": 0,
+  "keys_lost_per_trial": 1.0,
+  "keys_lost_total": 9,
+  "lost_keys_silently": 9,
+  "manifest_grew": 0,
+  "read_that_failed": "metadata blob (HEAD)",
+  "refused_the_run": 0,
+  "trials": 9
+ },
+ {
+  "coverage_said_so": 19,
+  "keys_lost_per_trial": 11.9,
+  "keys_lost_total": 238,
+  "lost_keys_silently": 0,
+  "manifest_grew": 0,
+  "read_that_failed": "root generation blob",
+  "refused_the_run": 1,
+  "trials": 20
+ },
+ {
+  "coverage_said_so": 0,
+  "keys_lost_per_trial": 0.95,
+  "keys_lost_total": 72,
+  "lost_keys_silently": 72,
+  "manifest_grew": 0,
+  "read_that_failed": "segment blob (HEAD)",
+  "refused_the_run": 0,
+  "trials": 76
+ },
+ {
+  "coverage_said_so": 40,
+  "keys_lost_per_trial": 1.8,
+  "keys_lost_total": 144,
+  "lost_keys_silently": 0,
+  "manifest_grew": 0,
+  "read_that_failed": "shard generation document",
+  "refused_the_run": 0,
+  "trials": 80
+ },
+ {
+  "coverage_said_so": 0,
+  "keys_lost_per_trial": 1.0,
+  "keys_lost_total": 45,
+  "lost_keys_silently": 45,
+  "manifest_grew": 0,
+  "read_that_failed": "snapshot document (HEAD)",
+  "refused_the_run": 0,
+  "trials": 45
+ }
+]

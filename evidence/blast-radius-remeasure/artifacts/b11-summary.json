@@ -1,0 +1,103 @@
+{
+  "id": "b11",
+  "note": "shard-level snap-<uuid>.dat on a one-index one-snapshot repository, the document's 906-byte pointer case",
+  "base": "base-p",
+  "repo": "blast-b11",
+  "clone_objects": 9,
+  "register": {
+    "acknowledged": true
+  },
+  "objects_before": 9,
+  "bytes_before": 491029,
+  "deleted_objects": 1,
+  "deleted_bytes": 910,
+  "share_of_objects_pct": 11.111,
+  "share_of_bytes_pct": 0.185,
+  "objects_after": 8,
+  "verify_pre_status": {
+    "repository": {
+      "name": "blast-b11",
+      "uuid": "h1Ykooe5TSSsQ3kjb12YAQ",
+      "generation": 0
+    },
+    "snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "indices": {
+      "verified": 1,
+      "total": 1
+    },
+    "index_snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "blobs": {
+      "verified": 4
+    }
+  },
+  "verify_pre_total_anomalies": 0,
+  "verify_pre_result": "pass",
+  "verify_status": {
+    "repository": {
+      "name": "blast-b11",
+      "uuid": "h1Ykooe5TSSsQ3kjb12YAQ",
+      "generation": 0
+    },
+    "snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "indices": {
+      "verified": 1,
+      "total": 1
+    },
+    "index_snapshots": {
+      "verified": 1,
+      "total": 1
+    },
+    "blobs": {
+      "verified": 0
+    }
+  },
+  "total_anomalies": 1,
+  "result": "fail",
+  "anomaly_classes": [
+    "failed to load shard snapshot"
+  ],
+  "anomalies_per_snapshot": {
+    "blast-p-1": 1
+  },
+  "damaged_index_snapshot_pairs": [
+    "blast-pointer/blast-p-1"
+  ],
+  "damaged_pair_count": 1,
+  "catalog_snapshots": [
+    "blast-p-1"
+  ],
+  "catalog_states": {
+    "blast-p-1": "SUCCESS"
+  },
+  "restores": [
+    {
+      "snapshot": "blast-p-1",
+      "shards": {
+        "total": 1,
+        "failed": 1,
+        "successful": 0
+      },
+      "indices": [
+        "bxrb11-1-pointer"
+      ],
+      "health": {
+        "bxrb11-1-pointer": "red"
+      },
+      "docs": {
+        "bxrb11-1-pointer": null
+      },
+      "count_errors": {
+        "bxrb11-1-pointer": "search_phase_execution_exception"
+      }
+    }
+  ]
+}

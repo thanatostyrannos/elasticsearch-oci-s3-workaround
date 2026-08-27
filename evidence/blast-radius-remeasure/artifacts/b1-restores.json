@@ -1,0 +1,215 @@
+[
+  {
+    "snapshot": "blast-snap-1",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-1",
+        "indices": [
+          "bxrb1-1-share2",
+          "bxrb1-1-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 1,
+          "successful": 1
+        }
+      }
+    },
+    "elapsed_s": 2.1,
+    "cat_indices": [
+      {
+        "index": "bxrb1-1-share2",
+        "health": "red",
+        "status": "open",
+        "docs.count": null,
+        "store.size": null
+      },
+      {
+        "index": "bxrb1-1-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb1-1-share2": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "no_shard_available_action_exception",
+              "reason": null
+            }
+          ],
+          "type": "search_phase_execution_exception",
+          "reason": "all shards failed",
+          "phase": "query",
+          "grouped": true,
+          "failed_shards": [
+            {
+              "shard": 0,
+              "index": "bxrb1-1-share2",
+              "node": null,
+              "reason": {
+                "type": "no_shard_available_action_exception",
+                "reason": null
+              }
+            }
+          ]
+        },
+        "status": 503
+      },
+      "bxrb1-1-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-2",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-2",
+        "indices": [
+          "bxrb1-2-share1",
+          "bxrb1-2-share2"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 1,
+          "successful": 1
+        }
+      }
+    },
+    "elapsed_s": 3.4,
+    "cat_indices": [
+      {
+        "index": "bxrb1-2-share2",
+        "health": "red",
+        "status": "open",
+        "docs.count": null,
+        "store.size": null
+      },
+      {
+        "index": "bxrb1-2-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb1-2-share2": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "no_shard_available_action_exception",
+              "reason": null
+            }
+          ],
+          "type": "search_phase_execution_exception",
+          "reason": "all shards failed",
+          "phase": "query",
+          "grouped": true,
+          "failed_shards": [
+            {
+              "shard": 0,
+              "index": "bxrb1-2-share2",
+              "node": null,
+              "reason": {
+                "type": "no_shard_available_action_exception",
+                "reason": null
+              }
+            }
+          ]
+        },
+        "status": 503
+      },
+      "bxrb1-2-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-3",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-3",
+        "indices": [
+          "bxrb1-3-share2",
+          "bxrb1-3-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 1,
+          "successful": 1
+        }
+      }
+    },
+    "elapsed_s": 3.4,
+    "cat_indices": [
+      {
+        "index": "bxrb1-3-share2",
+        "health": "red",
+        "status": "open",
+        "docs.count": null,
+        "store.size": null
+      },
+      {
+        "index": "bxrb1-3-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2050",
+        "store.size": "501.9kb"
+      }
+    ],
+    "counts": {
+      "bxrb1-3-share2": {
+        "error": {
+          "root_cause": [
+            {
+              "type": "no_shard_available_action_exception",
+              "reason": null
+            }
+          ],
+          "type": "search_phase_execution_exception",
+          "reason": "all shards failed",
+          "phase": "query",
+          "grouped": true,
+          "failed_shards": [
+            {
+              "shard": 0,
+              "index": "bxrb1-3-share2",
+              "node": null,
+              "reason": {
+                "type": "no_shard_available_action_exception",
+                "reason": null
+              }
+            }
+          ]
+        },
+        "status": 503
+      },
+      "bxrb1-3-share1": {
+        "count": 2050,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  }
+]

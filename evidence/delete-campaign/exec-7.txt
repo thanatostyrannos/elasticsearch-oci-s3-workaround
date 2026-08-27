@@ -1,0 +1,8 @@
+manifest: $WORK/execloop/manifest-7.tsv
+  2956 key(s), sha256 f55975988fba28334311833a4b1afc1907d65f09f333e929a316c6fb806a82ae
+  3 batch(es) of up to 1000, checksum algorithm md5
+  target: http://genchain-s3.lab.dorkomen.us/genchain-scale/churndeep
+deleted: 2956
+already absent: 0
+failed: 0
+unconfirmed: 0

@@ -1,0 +1,47 @@
+[
+ {
+  "generations": 20,
+  "indices": 2,
+  "objects": 575,
+  "objects_per_second": 975,
+  "prefix": "r00500",
+  "shards": 5,
+  "upload_seconds": 0.6
+ },
+ {
+  "generations": 20,
+  "indices": 5,
+  "objects": 2698,
+  "objects_per_second": 968,
+  "prefix": "r02700",
+  "shards": 10,
+  "upload_seconds": 2.8
+ },
+ {
+  "generations": 20,
+  "indices": 10,
+  "objects": 10653,
+  "objects_per_second": 986,
+  "prefix": "r10600",
+  "shards": 20,
+  "upload_seconds": 10.8
+ },
+ {
+  "generations": 20,
+  "indices": 20,
+  "objects": 53063,
+  "objects_per_second": 836,
+  "prefix": "r53000",
+  "shards": 50,
+  "upload_seconds": 63.4
+ },
+ {
+  "generations": 20,
+  "indices": 50,
+  "objects": 132593,
+  "objects_per_second": 887,
+  "prefix": "r132000",
+  "shards": 50,
+  "upload_seconds": 149.5
+ }
+]

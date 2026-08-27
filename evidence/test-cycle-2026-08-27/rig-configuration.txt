@@ -1,0 +1,5 @@
+[2026-08-27T13:34:46Z] preflight passed: version 9.5, frozen shared cache 2gb
+[2026-08-27T13:34:47Z] store rejected the batch delete inside repository verification, the first evidence this store leaks deletes; registering t2rig-repo with verify=false and continuing
+[2026-08-27T13:34:47Z] ilm policy t2rig-ilm: rollover(max_age=24h, max_docs=100000000) -> frozen(2m) -> delete(10m)
+[2026-08-27T13:34:47Z] data stream t2rig-stream created (2 shard(s) per backing index)
+[2026-08-27T13:34:47Z] slm policy t2rig-slm: schedule=60s retention=5m (checked on cron 0 0/5 * * * ?)

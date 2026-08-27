@@ -1,0 +1,14 @@
+exp	objs_deleted	bytes_deleted	pct_bytes	pct_objects	total_anomalies	result	anomaly_class	damaged_pairs	restores	indices_with_no_docs	artifact
+b0	0	0	0.0	0.0	0	pass	-	0	3 clean / 0 partial / 0 refused	0	b0-summary.json
+b1	1	486768	47.803	3.333	3	fail	missing blob	3	0 clean / 3 partial / 0 refused	3	b1-summary.json
+b2	1	24544	2.41	3.333	1	fail	missing blob	1	2 clean / 1 partial / 0 refused	1	b2-summary.json
+b3	6	1000306	98.234	20.0	14	fail	missing blob	6	0 clean / 3 partial / 0 refused	6	b3-summary.json
+b4	1	334	0.033	3.333	1	fail	failed to load snapshot info	0	2 clean / 0 partial / 1 refused	0	b4-summary.json
+b5	1	212	0.021	3.333	0	pass	-	0	3 clean / 0 partial / 0 refused	0	b5-summary.json
+b6r	1	924	0.091	3.333	0	pass	-	0	3 clean / 0 partial / 0 refused	0	b6r-summary.json
+b7	1	558	0.055	3.333	1	fail	failed to load index metadata	1	0 clean / 0 partial / 3 refused	0	b7-summary.json
+b8r	1	8	0.001	3.333	0	pass	-	0	3 clean / 0 partial / 0 refused	0	b8r-summary.json
+b9r	1	1652	0.162	3.333	0	pass	-	0	2 clean / 0 partial / 1 refused	0	b9r-summary.json
+b10	1	916	0.09	3.333	1	fail	failed to load shard snapshot	1	2 clean / 1 partial / 0 refused	1	b10-summary.json
+b11	1	910	0.185	11.111	1	fail	failed to load shard snapshot	1	0 clean / 1 partial / 0 refused	1	b11-summary.json
+b12	1	39957	6.634	3.704	1	fail	failed to load global metadata	0	1 clean / 0 partial / 0 refused	0	b12-summary.json

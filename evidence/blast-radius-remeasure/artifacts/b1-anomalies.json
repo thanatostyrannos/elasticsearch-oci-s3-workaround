@@ -1,0 +1,65 @@
+[
+  {
+    "timestamp_in_millis": 1787696345127,
+    "anomaly": "missing blob",
+    "snapshot": {
+      "snapshot": "blast-snap-1",
+      "uuid": "UIF8pAV-QPyCLMnHvHtzYA"
+    },
+    "index": {
+      "name": "blast-share2",
+      "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+      "metadata_blob": "MgD9OqABiKEMB984_UGL",
+      "shards": 1
+    },
+    "shard_id": 0,
+    "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+    "physical_file_name": "_0.cfs",
+    "part_index": 0,
+    "part_count": 1,
+    "file_length_in_bytes": 486768,
+    "part_length_in_bytes": 486768
+  },
+  {
+    "timestamp_in_millis": 1787696345127,
+    "anomaly": "missing blob",
+    "snapshot": {
+      "snapshot": "blast-snap-2",
+      "uuid": "xb4MFxb7SRu6ltyR_5mk_Q"
+    },
+    "index": {
+      "name": "blast-share2",
+      "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+      "metadata_blob": "MgD9OqABiKEMB984_UGL",
+      "shards": 1
+    },
+    "shard_id": 0,
+    "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+    "physical_file_name": "_0.cfs",
+    "part_index": 0,
+    "part_count": 1,
+    "file_length_in_bytes": 486768,
+    "part_length_in_bytes": 486768
+  },
+  {
+    "timestamp_in_millis": 1787696345127,
+    "anomaly": "missing blob",
+    "snapshot": {
+      "snapshot": "blast-snap-3",
+      "uuid": "tJyJxYawQwiWDGV4EvJYlg"
+    },
+    "index": {
+      "name": "blast-share2",
+      "uuid": "UXdt_l7dRxGjcj2NMCWFbw",
+      "metadata_blob": "MgD9OqABiKEMB984_UGL",
+      "shards": 1
+    },
+    "shard_id": 0,
+    "blob_name": "__6HfSS9VGSUy_86kMSv-_Kw",
+    "physical_file_name": "_0.cfs",
+    "part_index": 0,
+    "part_count": 1,
+    "file_length_in_bytes": 486768,
+    "part_length_in_bytes": 486768
+  }
+]

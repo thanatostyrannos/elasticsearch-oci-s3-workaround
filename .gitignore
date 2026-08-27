@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+
+
+# Local session handoff notes, never published
+HANDOFF.md
+BOOTSTRAP.md
+
+# Credential material. Nothing here is ever committed, and
+# tests/test_no_credentials_committed.py fails the suite if it is.
+*.pem
+*.key
+*_rsa
+*_rsa.pub
+id_*
+oci_api_key*
+.oci/
+creds.json
+credentials.json
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/

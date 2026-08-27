@@ -1,0 +1,133 @@
+[
+  {
+    "snapshot": "blast-snap-1",
+    "restore_response": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b4:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b4:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b4/snap-UIF8pAV-QPyCLMnHvHtzYA.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C7E3E1E3CF2, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": 404
+    },
+    "elapsed_s": 0.4,
+    "cat_indices": [],
+    "counts": {}
+  },
+  {
+    "snapshot": "blast-snap-2",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-2",
+        "indices": [
+          "bxrb4-2-share1",
+          "bxrb4-2-share2"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 2.3,
+    "cat_indices": [
+      {
+        "index": "bxrb4-2-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb4-2-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      }
+    ],
+    "counts": {
+      "bxrb4-2-share1": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb4-2-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "snapshot": "blast-snap-3",
+    "restore_response": {
+      "snapshot": {
+        "snapshot": "blast-snap-3",
+        "indices": [
+          "bxrb4-3-share2",
+          "bxrb4-3-share1"
+        ],
+        "shards": {
+          "total": 2,
+          "failed": 0,
+          "successful": 2
+        }
+      }
+    },
+    "elapsed_s": 3.3,
+    "cat_indices": [
+      {
+        "index": "bxrb4-3-share2",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2000",
+        "store.size": "476.7kb"
+      },
+      {
+        "index": "bxrb4-3-share1",
+        "health": "green",
+        "status": "open",
+        "docs.count": "2050",
+        "store.size": "501.9kb"
+      }
+    ],
+    "counts": {
+      "bxrb4-3-share2": {
+        "count": 2000,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      },
+      "bxrb4-3-share1": {
+        "count": 2050,
+        "_shards": {
+          "total": 1,
+          "successful": 1,
+          "skipped": 0,
+          "failed": 0
+        }
+      }
+    }
+  }
+]

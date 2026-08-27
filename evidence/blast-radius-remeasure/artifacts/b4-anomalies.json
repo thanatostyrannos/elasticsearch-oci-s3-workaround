@@ -1,0 +1,27 @@
+[
+  {
+    "timestamp_in_millis": 1787696497063,
+    "anomaly": "failed to load snapshot info",
+    "snapshot": {
+      "snapshot": "blast-snap-1",
+      "uuid": "UIF8pAV-QPyCLMnHvHtzYA"
+    },
+    "exception": {
+      "error": {
+        "root_cause": [
+          {
+            "type": "snapshot_missing_exception",
+            "reason": "[blast-b4:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing"
+          }
+        ],
+        "type": "snapshot_missing_exception",
+        "reason": "[blast-b4:blast-snap-1/UIF8pAV-QPyCLMnHvHtzYA] is missing",
+        "caused_by": {
+          "type": "no_such_file_exception",
+          "reason": "Blob object [exp-b4/snap-UIF8pAV-QPyCLMnHvHtzYA.dat] not found: The specified key does not exist. (Service: S3, Status Code: 404, Request ID: 18CF2C7E11B140BB, Extended Request ID: dd9025bab4ad464b049177c95eb6ebf374d3b3fd1af9251148b658df7ac2e3e8) (SDK Attempt Count: 1)"
+        }
+      },
+      "status": "NOT_FOUND"
+    }
+  }
+]
