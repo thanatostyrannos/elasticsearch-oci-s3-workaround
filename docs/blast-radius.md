@@ -1,24 +1,11 @@
 # Blast radius: what a wrong delete costs in a snapshot repository
 
 > [!IMPORTANT]
-> **This document was written against three tools that are now retired and no
-> longer in this repository.** They classified objects LIVE, ORPHAN or
-> PROTECTED by reimplementing Elasticsearch's on-disk format, then deleted the
-> orphans, condemning a blob for being absent from a live set the tool
-> computed itself. A failed read and an unparseable document both resolved
-> toward deleting. `generation_chain`, the tool this repository ships today,
-> replaced them: it reproduces Elasticsearch's own shard-local set difference,
-> condemns on PRESENCE rather than absence, and its audit half has no delete
-> path at all.
->
-> What follows is an account of what a wrong delete costs in a snapshot
-> repository, which is why this document exists, and it applies to
-> `generation_chain.reclaim` exactly as it applied to the retired tools: any
-> tool that deletes objects out of a live repository can cause this damage.
-> Passages that described the retired tools' own guards, flags or internals
-> have been removed or replaced with what `generation_chain` does instead;
-> everything else is Elasticsearch and Lucene format fact, unchanged by which
-> tool reads it.
+> This is an account of what a wrong delete costs in an Elasticsearch snapshot
+> repository. It is Elasticsearch and Lucene format behaviour, so it holds
+> whatever tool does the deleting, including
+> [`generation_chain.reclaim`](../README.md#step-two-delete-once-you-have-read-the-manifest).
+> Read it before you approve a manifest.
 
 Every question an operator asks about a delete tool comes down to one thing. If
 it deletes the wrong object, what breaks, and how much of it.
@@ -44,7 +31,7 @@ yours.
 - [The files that have no object at all](#the-files-that-have-no-object-at-all)
 - [What a wrong delete costs](#what-a-wrong-delete-costs)
 - [Sharing is also the best defence](#sharing-is-also-the-best-defence)
-- [What changed in how this is guarded](#what-changed-in-how-this-is-guarded)
+- [Where the guarding actually happens](#where-the-guarding-actually-happens)
 - [What none of this covers](#what-none-of-this-covers)
 - [Before you run a delete](#before-you-run-a-delete)
 - [Sources](#sources)
@@ -342,8 +329,8 @@ naming that index fail on every snapshot.
 
 Report this out loud rather than leaving it to the reader. Never round a real
 quantity to `0.0%`: a run that removed 11.9 KiB of metadata and made 150,000
-documents unrestorable printed `0.0%` twice in the retired tools, in the two
-messages written to make an operator stop. `generation_chain`'s own report
+documents unrestorable can round to `0.0%` in both of the messages written to
+make an operator stop. `generation_chain`'s own report
 prints both the object share and the byte share, then the breakdown by
 disposition, on every run, with no threshold gating it (see the sample report
 in [Using it](../README.md#what-the-output-looks-like) in the README).
@@ -560,36 +547,29 @@ Two measurements on the rig separate the cases that no ratio can:
 Any threshold on the orphan ratio puts the legitimate case above the attack. The
 explanation rule puts them at opposite ends.
 
-## What changed in how this is guarded
+## Where the guarding actually happens
 
-The retired tools carried a long list of guards on top of their LIVE/ORPHAN/
-PROTECTED classification: a shape gate that refused to trust a decode that
-succeeded but returned nonsense, a rule that a condemned segment had to be
-named by some snapshot document or the whole shard was protected, a rule that
-a shard condemning all of its own segments was not believed, structural
-checks that a segment could produce the files it claimed, an abort if the
-root pointer was stale, mount-awareness read from the cluster, a
-corroboration pass against Elasticsearch, a volume cap, and a workflow that
-made a human type the delete count at a terminal. Their flags and internals
-went with them; this section used to describe those flags, and no longer
-does.
+Most of the damage above comes from one failure: the tool decides a blob is
+unreferenced when something still references it. You can defend that with a
+stack of checks after the fact, and it is tempting, because each check is easy
+to write and the list looks reassuring.
 
-`generation_chain` does not carry an equivalent guard for each one, because
-its algorithm removes the failure mode most of them existed to catch. It
-never builds a LIVE/ORPHAN/PROTECTED classification to begin with: it
-computes Elasticsearch's own shard-local set difference and condemns a blob
-only when some deleted snapshot's own shard document names it (the rule in
+`generation_chain` puts the defence in the decision instead. It never builds a
+LIVE/ORPHAN classification. It computes Elasticsearch's own shard-local set
+difference and names a blob only when some deleted snapshot's shard document
+names it, which is the rule in
 [Sharing is also the best defence](#sharing-is-also-the-best-defence) above,
-built into the algorithm rather than checked afterward), a read that fails
-shrinks the manifest instead of guessing (see
+built into the algorithm rather than checked afterward. A read that fails makes
+the manifest shorter, never longer (see
 [the safety condition](../FACTS.md#the-safety-condition-stated-correctly) in
-FACTS.md), and its audit half has no delete path at all. Two properties of
-the retired guards do carry forward, in different shape: mount-awareness is
-now `--elasticsearch`/`--es-repository` corroboration, read from the cluster
-and applied automatically rather than as an opt-in file; and approval is
-still a ceiling rather than a floor, now enforced by matching a manifest's
-sha256 digest and row count (`--approve-digest`, `--approve-rows`) rather
-than by re-reading the root pointer, so an edited or stale manifest cannot
+FACTS.md). The audit half has no delete path at all.
+
+Two checks sit outside the algorithm because they cannot live inside it. Which
+snapshots have searchable-snapshot indices mounted on them is in cluster state
+and nowhere in the bucket, so `--elasticsearch` and `--es-repository` fetch it
+and remove keys from the manifest. And approval is a ceiling rather than a
+floor: `--approve-digest` and `--approve-rows` must match the manifest's sha256
+and row count, so a manifest edited or regenerated after you read it cannot
 execute.
 
 ## What none of this covers
@@ -617,7 +597,7 @@ This document used to say the fix, an independent oracle reading `segments_N`
 either of the two copies above), had been priced twice and declined both
 times. `generation_chain` built it anyway:
 [`formats/lucene_segments.py`](../generation_chain/formats/lucene_segments.py)
-decodes the commit point, and the audit's report line
+decodes the commit point, and the [audit](../README.md#what-audit-means-here)'s report line
 `Lucene commit cross-check (issue #1)` runs it against every snapshot file
 list on every audit (see [the sample report](../README.md#what-the-output-looks-like)
 in the README). A file list that under-references what the commit point

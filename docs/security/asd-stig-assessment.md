@@ -59,7 +59,7 @@ login, no web front end, no cookies or session identifiers, no SOAP or SAML
 interface, and no database. A large part of this STIG presumes a multi-user
 interactive web application: session management, password complexity and
 rotation, PIV and FICAM authentication, SAML assertions, XSS and CSRF, SQL
-injection, account lifecycle auditing. Each Not Applicable row was checked
+injection, account lifecycle audit logging. Each Not Applicable row was checked
 against the control's actual subject matter and this codebase's architecture.
 It is not a blanket exemption by category.
 

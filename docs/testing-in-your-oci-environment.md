@@ -101,7 +101,7 @@ The key names are the ones the code asks for, `access_key_id` and
 `elasticsearch` section takes either an `api_key`, as above, or a `username`
 and a `password`.
 
-The `elasticsearch` section is what the audit itself uses when it asks the
+The `elasticsearch` section is what the [audit](../README.md#what-audit-means-here) itself uses when it asks the
 cluster which objects to protect. It is separate from the password file the
 test harness uses for its own calls, and deliberately so: the harness never
 hands its own credential to the audit.

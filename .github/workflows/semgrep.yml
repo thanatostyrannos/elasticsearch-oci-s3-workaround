@@ -1,20 +1,24 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# This workflow file requires a free account on Semgrep.dev to
-# manage rules, file ignores, notifications, and more.
+# Semgrep against this repository's own Python, feeding the Code Scanning
+# dashboard.
 #
-# See https://semgrep.dev/docs
-
+# The rulesets are named here rather than fetched from a Semgrep account or
+# resolved by --config=auto, so the set that ran is readable from this file
+# and a registry change cannot quietly alter a scan. No account and no token
+# are needed. These are the same two rulesets security-scan.yml runs against
+# the built archive; this one runs against the tree, because a Code Scanning
+# alert has to point at a line in a file the repository actually has.
+#
+# tests/ and evidence/ are left out on purpose. tests/ holds synthetic
+# credential-shaped fixtures that exist to be matched, and evidence/ holds
+# captured tool output that quotes them. Scanning either fills the dashboard
+# with findings about files nobody receives, and a dashboard that cries wolf
+# stops being read.
 name: Semgrep
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
-    # The branches below must be a subset of the branches above
     branches: [ "main" ]
   schedule:
     - cron: '29 4 * * 2'
@@ -25,25 +29,54 @@ permissions:
 jobs:
   semgrep:
     permissions:
-      contents: read # for actions/checkout to fetch code
-      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
-      actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
+      contents: read          # for actions/checkout
+      security-events: write  # for upload-sarif to file Code Scanning alerts
+      actions: read           # upload-sarif reads the run status
     name: Scan
     runs-on: ubuntu-latest
     steps:
-      # Checkout project source
       - uses: actions/checkout@v4
 
-      # Scan code using project's configuration on https://semgrep.dev/manage
-      - uses: returntocorp/semgrep-action@fcd5ab7459e8d91cb1777481980d1b18b4fc6735
+      - uses: actions/setup-python@v5
         with:
-          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
-          publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}
-          generateSarif: "1"
+          python-version: "3.12"
 
-      # Upload SARIF file generated in previous step
+      - name: Install Semgrep
+        run: |
+          pip install --quiet semgrep
+          semgrep --version
+
+      # Two passes over the same rulesets, because the JSON report carries the
+      # file count and the SARIF report does not. The count is what proves the
+      # scan happened: a scanner that walked nothing reports exactly what a
+      # clean codebase reports, and this project has already been burned once
+      # by reading that silence as safety.
+      - name: Scan, and count what was scanned
+        run: |
+          # A finding is an alert on the dashboard, not a broken build, so the
+          # scanner's own exit code is discarded. Whether the scan really ran
+          # is decided below by the file count, not by that exit code.
+          semgrep scan --config=p/python --config=p/secrets \
+            --json --output=semgrep.json --metrics=off \
+            --exclude=tests --exclude=evidence . || true
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open("semgrep.json"))
+          scanned = len(d.get("paths", {}).get("scanned", []))
+          findings = len(d.get("results", []))
+          print("semgrep: %d files scanned, %d findings" % (scanned, findings))
+          if scanned == 0:
+              sys.exit("semgrep scanned zero files; this result proves nothing")
+          PY
+
+      - name: Produce SARIF for the dashboard
+        run: |
+          semgrep scan --config=p/python --config=p/secrets \
+            --sarif --output=semgrep.sarif --metrics=off \
+            --exclude=tests --exclude=evidence . || true
+
       - name: Upload SARIF file
+        if: always() && hashFiles('semgrep.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep.sarif
-        if: always()

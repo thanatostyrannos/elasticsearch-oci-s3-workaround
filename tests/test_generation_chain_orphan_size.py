@@ -243,3 +243,54 @@ class TestTheReportSizesEveryDisposition(unittest.TestCase):
                             {"orphaned-0": 10, "unexplained-0": 8_000_000_000})
         block = text.split("Dispositions", 1)[1].split("\nReclaimable", 1)[0]
         self.assertIn("Only `orphaned` is a list of things to delete", block)
+
+
+class TheReportDoesNotPresentLeakedStorageAsSettled(unittest.TestCase):
+    """`evidence` reads as accounted for, and it is the opposite.
+
+    Elasticsearch removes superseded root generations and superseded shard
+    generation documents when it deletes a snapshot. Against a store with this
+    fault that delete failed, so they are still there, and this tool will not
+    name them because its derivation reads them. Nothing reclaims them.
+
+    On the lab repository that category was 39,753 objects and 137 MB against a
+    manifest of 30,029 objects and 52 MB: the pile the report treated as closed
+    was 2.6 times the pile it asked the operator to act on. An operator reads
+    two numbers and acts on the smaller one, so the report has to say which is
+    which.
+
+    Filed as issue 11.
+    """
+
+    def _report(self, placements, sizes):
+        from generation_chain.model import AuditResult, Coverage
+        from generation_chain.derivation.classification import Placement
+        from generation_chain.reporting import coverage as cov
+        result = AuditResult(
+            condemned=[],
+            coverage=Coverage(),
+            classification=[Placement(key=k, disposition=d, detail="")
+                            for k, d in placements],
+        )
+        out = io.StringIO()
+        cov.write_report(result, "local", "/tmp/x", out, sizes=sizes)
+        return out.getvalue()
+
+    def test_it_says_evidence_is_leaked_rather_than_accounted_for(self):
+        text = self._report([("index-0", "evidence")], {"index-0": 100})
+        self.assertIn("LEAKED STORAGE", text)
+        self.assertIn("Nothing reclaims them", text)
+
+    def test_it_says_so_when_what_cannot_be_reclaimed_is_the_larger_pile(self):
+        text = self._report(
+            [("index-0", "evidence"), ("seg-a", "orphaned")],
+            {"index-0": 2_600_000, "seg-a": 1_000_000})
+        self.assertIn("2.6 times", text)
+        self.assertIn("leaves the larger pile behind", text)
+
+    def test_it_stays_quiet_when_the_manifest_is_the_larger_pile(self):
+        # Saying it every run would train the reader to skip the line.
+        text = self._report(
+            [("index-0", "evidence"), ("seg-a", "orphaned")],
+            {"index-0": 1_000, "seg-a": 5_000_000})
+        self.assertNotIn("times the size", text)

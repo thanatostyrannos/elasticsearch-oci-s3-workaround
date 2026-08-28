@@ -30,8 +30,29 @@ case "$mode" in
   *) die "$CONF is mode $mode and must be 600 or 400. Run: chmod 600 $CONF" ;;
 esac
 
-# shellcheck disable=SC1090
-. "$CONF"
+# Parsed, never sourced. Sourcing executes the file, so anything in it that
+# looks like a command runs as the operator before a single check has
+# happened. The mode check above stops another user editing it, but it does
+# nothing about a config copied from a runbook or a ticket, and nobody reads a
+# settings file the way they read a script.
+#
+# Only KEY=value is accepted, with one optional layer of quotes. A line that
+# is anything else stops the run rather than being ignored, because a config
+# line nobody understood is not a line to guess at.
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    ''|'#'*) continue ;;
+  esac
+  if ! printf '%s' "$line" | grep -qE '^[[:space:]]*[A-Z_][A-Z0-9_]*[[:space:]]*=' ; then
+    die "$CONF has a line that is not KEY=value: $line"
+  fi
+  key=${line%%=*}
+  key=$(printf '%s' "$key" | tr -d '[:space:]')
+  value=${line#*=}
+  value=${value#\"}; value=${value%\"}
+  value=${value#\'}; value=${value%\'}
+  eval "$key=\$value"
+done < "$CONF"
 
 for required in ENDPOINT REGION BUCKET PREFIX CREDENTIALS REPOSITORY OUT; do
   eval "value=\${$required:-}"

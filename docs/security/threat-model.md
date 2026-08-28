@@ -52,7 +52,7 @@ to" cannot get that answer from any single place today. This section
 states the four plainly, once, before the rest of the document works
 through the pieces.
 
-The four are: a person running the audit, and separately the delete
+The four are: a person running the [audit](../../README.md#what-audit-means-here), and separately the delete
 tool, by hand; the audit running unattended in a GitLab worker; the
 churn rig running for hours inside Kubernetes; and the audit running
 unattended on a timer inside Kubernetes. They differ in which of

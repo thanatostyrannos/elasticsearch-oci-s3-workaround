@@ -1,12 +1,16 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Only the actions are watched, because only the actions have versions.
+#
+# The project imports the standard library and nothing else, verified by the
+# test suite, so there is no manifest for pip to read and a pip entry would
+# watch an empty set forever. The workflows in this directory pin third-party
+# actions by tag and by commit id, and those do go stale.
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "github-actions"
+    # Always "/" for this ecosystem. Dependabot reads .github/workflows from
+    # the repository root regardless of where the workflow files sit.
+    directory: "/"
     schedule:
       interval: "weekly"
-      
+    # Small enough that a bad bump is easy to spot and revert.
+    open-pull-requests-limit: 5

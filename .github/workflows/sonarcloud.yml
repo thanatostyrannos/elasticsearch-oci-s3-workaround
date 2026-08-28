@@ -1,31 +1,20 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# This workflow uses actions that are not certified by GitHub. They are
+# provided by a third party and are governed by separate terms of service,
+# privacy policy, and support documentation.
 
-# This workflow helps you trigger a SonarCloud analysis of your code and populates
-# GitHub Code Scanning alerts with the vulnerabilities found.
-# Free for open source project.
-
-# 1. Login to SonarCloud.io using your GitHub account
-
-# 2. Import your project on SonarCloud
-#     * Add your GitHub organization first, then add your repository as a new project.
-#     * Please note that many languages are eligible for automatic analysis,
-#       which means that the analysis will start automatically without the need to set up GitHub Actions.
-#     * This behavior can be changed in Administration > Analysis Method.
+# SonarCloud analysis, which runs only once this repository has been told how
+# to reach a SonarCloud project. Three things are needed, none of which can
+# live in this file:
 #
-# 3. Follow the SonarCloud in-product tutorial
-#     * a. Copy/paste the Project Key and the Organization Key into the args parameter below
-#          (You'll find this information in SonarCloud. Click on "Information" at the bottom left)
+#   SONAR_TOKEN         repository secret. SonarCloud > avatar > My account >
+#                       Security, or https://sonarcloud.io/account/security/
+#   SONAR_PROJECT_KEY   repository variable. SonarCloud > Information, bottom
+#   SONAR_ORGANIZATION  repository variable. Same place
 #
-#     * b. Generate a new token and add it to your Github repository's secrets using the name SONAR_TOKEN
-#          (On SonarCloud, click on your avatar on top-right > My account > Security
-#           or go directly to https://sonarcloud.io/account/security/)
-
-# Feel free to take a look at our documentation (https://docs.sonarcloud.io/getting-started/github/)
-# or reach out to our community forum if you need some help (https://community.sonarsource.com/c/help/sc/9)
-
+# Until all three are set the analysis step is skipped and the job reports
+# green, so a red check on this workflow means the analysis itself failed
+# rather than that nobody has signed up yet. The first step prints exactly
+# which of the three is missing.
 name: SonarCloud analysis
 
 on:
@@ -36,32 +25,55 @@ on:
   workflow_dispatch:
 
 permissions:
-  pull-requests: read # allows SonarCloud to decorate PRs with analysis results
+  contents: read       # for actions/checkout
+  pull-requests: read  # lets SonarCloud decorate pull requests with results
 
 jobs:
   Analysis:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Analyze with SonarCloud
+    # Read once here so the gate below can test them. A secret is empty when
+    # it has never been set, which is what makes this check possible at all:
+    # the secrets context is not available to a job-level `if`.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
 
-        # You can pin the exact commit or the version.
-        # uses: SonarSource/sonarcloud-github-action@v2.2.0
+    steps:
+      - name: Decide whether SonarCloud is configured
+        id: gate
+        run: |
+          missing=""
+          [ -n "$SONAR_TOKEN" ]        || missing="$missing SONAR_TOKEN(secret)"
+          [ -n "$SONAR_PROJECT_KEY" ]  || missing="$missing SONAR_PROJECT_KEY(variable)"
+          [ -n "$SONAR_ORGANIZATION" ] || missing="$missing SONAR_ORGANIZATION(variable)"
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SonarCloud is not configured; missing:$missing. Skipping the analysis."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "analysing $SONAR_ORGANIZATION/$SONAR_PROJECT_KEY"
+          fi
+
+      # The original of this file had no checkout step at all, so even with a
+      # token the scanner would have read an empty workspace.
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          # Sonar wants history to attribute a line to the commit that wrote
+          # it. Without this it sees one commit and blames everything on it.
+          fetch-depth: 0
+
+      - name: Analyze with SonarCloud
+        if: steps.gate.outputs.ready == 'true'
         uses: SonarSource/sonarcloud-github-action@4006f663ecaf1f8093e8e4abb9227f6041f52216
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Generate a token on Sonarcloud.io, add it to the secrets of this repo with the name SONAR_TOKEN (Settings > Secrets > Actions > add new repository secret)
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # Additional arguments for the SonarScanner CLI
-          args:
-            # Unique keys of your project and organization. You can find them in SonarCloud > Information (bottom-left menu)
-            # mandatory
-            -Dsonar.projectKey=
-            -Dsonar.organization=
-            # Comma-separated paths to directories containing main source files.
-            #-Dsonar.sources= # optional, default is project base directory
-            # Comma-separated paths to directories containing test source files.
-            #-Dsonar.tests= # optional. For more info about Code Coverage, please refer to https://docs.sonarcloud.io/enriching/test-coverage/overview/
-            # Adds more detail to both client and server-side analysis logs, activating DEBUG mode for the scanner, and adding client-side environment variables and system properties to the server-side log of analysis report processing.
-            #-Dsonar.verbose= # optional, default is false
-          # When you need the analysis to take place in a directory other than the one from which it was launched, default is .
+          args: >
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py
+            -Dsonar.tests=tests
           projectBaseDir: .

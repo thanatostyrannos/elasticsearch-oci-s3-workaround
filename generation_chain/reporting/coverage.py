@@ -190,10 +190,23 @@ def write_report(result: AuditResult, transport: str, location: str,
     write("  An unexplained key is not a key to delete. Some of them, the "
           "partial blob an aborted snapshot leaves behind for one, are named "
           "by nothing and Elasticsearch will never reclaim them either.")
-    write("  Elasticsearch's own delete also removes the superseded root "
-          "generations and the superseded shard generation documents. This "
-          "tool never names either, because its derivation reads them. They "
-          "are counted as evidence rather than left silently out.")
+    write("  `evidence` is LEAKED STORAGE, not a settled category. "
+          "Elasticsearch's own delete removes the superseded root generations "
+          "and the superseded shard generation documents. On a store with "
+          "this fault that delete failed, so they are still here, and this "
+          "tool will not name them because its derivation reads them. Nothing "
+          "reclaims them. They are counted so they are not silently absent, "
+          "not because they are accounted for.")
+    if sizes:
+        _, evidence_bytes, _ = measured.get("evidence", (0, 0, 0))
+        _, orphaned_bytes, _ = measured.get("orphaned", (0, 0, 0))
+        # An operator reads two numbers and acts on the smaller one. Say it
+        # out loud when the category they cannot act on is the larger.
+        if evidence_bytes > orphaned_bytes > 0:
+            ratio = evidence_bytes / orphaned_bytes
+            write(f"  The `evidence` you cannot reclaim is {ratio:.1f} times "
+                  f"the size of the `orphaned` you can. Reclaiming everything "
+                  f"this run names still leaves the larger pile behind.")
 
     write()
     write("Reclaimable")

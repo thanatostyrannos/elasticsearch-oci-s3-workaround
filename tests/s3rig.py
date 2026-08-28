@@ -231,6 +231,16 @@ def _parse_delete_request(body: bytes) -> list:
     Raises ValueError, which the handler turns into `MalformedXML`, matching
     what a real store answers a body it cannot parse.
     """
+    # The shipped code refuses a DOCTYPE before parsing, which is how it
+    # closes entity expansion without a third-party parser. The double that
+    # stands in for a store should refuse the same shapes, or a test can pass
+    # against something more permissive than the real thing.
+    from generation_chain.sources.s3 import refuse_doctype
+    from generation_chain.errors import SourceReadError
+    try:
+        refuse_doctype(body, "delete request")
+    except SourceReadError as exc:
+        raise ValueError(str(exc)) from exc
     try:
         root = ET.fromstring(body)
     except ET.ParseError as exc:

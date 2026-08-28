@@ -189,7 +189,14 @@ class _OciRig:
             return handler._send(404, b'{"code":"ObjectNotFound"}')
         if not name.startswith(self.prefix):
             return handler._send(404, b'{"code":"ObjectNotFound"}')
-        path = os.path.join(self.root, name[len(self.prefix):])
+        # A key arrives from the request line, so joining it to a root can
+        # walk out of that root with enough ".." in it. This is a test double
+        # on loopback, but a traversal is a traversal and the fix is two
+        # lines: resolve, then require the result to still be underneath.
+        root = os.path.realpath(self.root)
+        path = os.path.realpath(os.path.join(root, name[len(self.prefix):]))
+        if os.path.commonpath([root, path]) != root:
+            return handler._send(404, b'{"code":"ObjectNotFound"}')
         if not os.path.isfile(path):
             return handler._send(404, b'{"code":"ObjectNotFound"}')
         with open(path, "rb") as fh:

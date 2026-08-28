@@ -54,6 +54,8 @@ Run:  python3 -m unittest discover -s tests -v
 from __future__ import annotations
 
 import os
+import functools
+import pathlib
 import re
 import subprocess
 import tempfile
@@ -323,6 +325,40 @@ def _is_external(target: str) -> bool:
     return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target)) or target.startswith("//")
 
 
+@functools.lru_cache(maxsize=1)
+def _tracked_paths(root_str: str) -> frozenset:
+    """Everything git carries, plus every directory on the way to it.
+
+    `Path.exists()` alone answers a different question from the one that
+    matters. A path can exist on the machine that wrote the document and be
+    absent from a clean checkout, and git does not track an empty directory at
+    all. `docs/run-proofs/` was exactly that: every local run passed and CI
+    failed on the first fresh clone.
+
+    Falls back to an empty set outside a git work tree, where the on-disk
+    check is all there is.
+    """
+    root = pathlib.Path(root_str)
+    try:
+        listing = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=root, capture_output=True,
+            text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return frozenset()
+    if listing.returncode != 0:
+        return frozenset()
+    known = set()
+    for name in listing.stdout.split("\0"):
+        if not name:
+            continue
+        known.add(name)
+        parent = pathlib.PurePosixPath(name).parent
+        while str(parent) not in (".", "/"):
+            known.add(str(parent))
+            parent = parent.parent
+    return frozenset(known)
+
+
 def _resolve(root: Path, doc: Path, ref: str) -> bool:
     """True if `ref` names something real, relative to the doc or to the root.
 
@@ -346,6 +382,17 @@ def _resolve(root: Path, doc: Path, ref: str) -> bool:
         except (OSError, ValueError):
             continue
         if candidate.exists():
+            # Existing on this machine is not enough. A reference has to be
+            # something a clean checkout will also have, or the document is
+            # only correct where it was written.
+            tracked = _tracked_paths(str(root))
+            if tracked:
+                try:
+                    relative = candidate.relative_to(root.resolve())
+                except ValueError:
+                    return True          # outside the repo, not ours to judge
+                if str(relative) not in tracked:
+                    continue
             return True
     return False
 

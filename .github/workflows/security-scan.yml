@@ -85,8 +85,12 @@ jobs:
           assert scanned > 0, 'semgrep scanned zero files'
           "
 
+      # Pinned rather than tracking master. release.yml runs this with
+      # contents: write, so whatever master points at that day would run
+      # with permission to publish. A tag is also something Dependabot can
+      # see; a branch is not.
       - name: Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: scan

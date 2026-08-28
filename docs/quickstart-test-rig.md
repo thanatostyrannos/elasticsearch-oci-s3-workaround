@@ -116,7 +116,7 @@ cycle  utc  mode  settle  shards_read  segments_condemned  deleted  failed
 unconfirmed  reclaimable  exit
 ```
 
-- **exit** other than 0 means the audit did not run. The loop stops on it.
+- **exit** other than 0 means the [audit](../README.md#what-audit-means-here) did not run. The loop stops on it.
   The reason is in `derive-<n>.txt`.
 - **shards_read** as `16 of 52` is normal. A shard directory whose current
   document cannot be read is dropped whole, and so are the rest of that

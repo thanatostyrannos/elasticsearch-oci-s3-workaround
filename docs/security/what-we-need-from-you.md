@@ -2,7 +2,7 @@
 
 The ASD STIG assessment leaves 157 controls Not Reviewed. That is not a gap in
 the scan, it is the shape of the standard: most of what it asks about is not
-visible in source code. Whether audit records reach a central store, whether
+visible in source code. Whether security audit records reach a central store, whether
 the host runs FIPS-validated crypto, whether a change board approved a release,
 whether anyone ran a penetration test this year.
 

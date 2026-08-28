@@ -576,7 +576,7 @@ flowchart LR
     end
 ```
 
-`RunRefused.transient` is what separates exit 2 from exit 4 on the audit
+`RunRefused.transient` is what separates exit 2 from exit 4 on the [audit](../../README.md#what-audit-means-here)
 side, and it is a judgement this codebase states explicitly at each raise
 site rather than infers from the exception type: a 5xx or 429 from a store or
 a cluster is transient, an unsupported format or a self-contradiction is not.
@@ -695,12 +695,11 @@ stateDiagram-v2
     Unanswered --> [*] : reported separately in Coverage.existence_unanswered, never treated as a denial
 ```
 
-`KeyIndex` (`derivation/keys.py`) caches this per key for the run. The
-retired predecessor caught every exception from the existence check and
-recorded it as a denial, which folded "the store said no" and "the store
-could not answer" into one value; measured against a store failing 1 in
-1000 checks, about 31 of 30,938 keys silently left a 100-percent-coverage
-report. Keeping `Unanswered` separate does not change which keys reach the
-manifest, since only `Confirmed` does either way; it changes whether an
-operator reading the coverage report can tell a clean repository from one
-this run could not finish asking about.
+`KeyIndex` (`derivation/keys.py`) caches this per key for the run. The obvious
+implementation catches every exception from the existence check and records it
+as a denial, which folds "the store said no" and "the store could not answer"
+into one value. Against a store failing 1 in 1000 checks, that hides about 31
+of 30,938 keys behind a 100-percent-coverage report. Keeping `Unanswered`
+separate does not change which keys reach the manifest, since only `Confirmed`
+does either way. It changes whether an operator reading the coverage report can
+tell a clean repository from one this run could not finish asking about.

@@ -20,7 +20,7 @@ and a file listing every one of them.
   library and there is no dependency file to install.
 - Read access to the bucket. The audit cannot delete: its transport allows
   `GET` and `HEAD` and refuses anything else, and the package that deletes is
-  not importable from the audit at all.
+  not importable from the [audit](../README.md#what-audit-means-here) at all.
 - Your repository's `base_path`, which is the prefix inside the bucket.
 
 ## The credentials file

@@ -69,6 +69,24 @@ java.io.IOException: Failed to delete blobs [ObjectIdentifier(Key=<base-path>/in
 If that is you, keep reading. The affected version boundary, the mechanism and the upstream history are in
 [The failure in detail](#the-failure-in-detail) below.
 
+## What "audit" means here
+
+This project uses **audit** for one specific thing: the read-only pass that
+reconstructs, from a snapshot repository's own generation chain, which objects
+no live snapshot references. It is `python3 -m generation_chain`. It reads,
+writes a manifest, and cannot delete: its transport permits `GET` and `HEAD`
+and raises on anything else.
+
+It does not mean a security audit, and it does not mean audit logging. Where
+those are meant, the documents say "audit records" or name the assessment.
+
+Two programs, and the difference matters more than the word:
+
+| | Reads | Deletes |
+|---|---|---|
+| the audit, `generation_chain` | yes | no, and cannot be made to |
+| the delete tool, `generation_chain.reclaim` | yes | yes, past an approval matching the exact manifest |
+
 ## Start here
 
 **[Reading a leaking repository, without deleting anything](docs/quickstart-read-only.md)**
@@ -102,14 +120,15 @@ a filesystem repository, where retention is an ordinary unlink and no tooling
 sits in the loop at all. That is the split-repo migration, and it is the fix
 rather than the mitigation.
 
-The third answer is reclaiming what already leaked, and it is available again.
-Two published runbooks used to do that, one over each API, and both drove a
-sweeper retired for deciding what to delete by absence from a set it computed
-itself. Do not follow those runbooks. What replaced them derives the same answer
-the way Elasticsearch derives it, condemning a blob on its presence in a deleted
-snapshot's file list rather than on its absence from a live one, and it splits
-the work in two: an audit that cannot delete, and a separate tool that deletes
-only what a human approved. See [Using it](#using-it).
+The third answer is reclaiming what already leaked. This repository does that
+in two halves: an audit that reads and cannot delete, and a separate tool that
+deletes only what a person approved. See [Using it](#using-it).
+
+If you find an older runbook for this bug, from this project or anywhere else,
+check which direction it condemns in before you run it. Deciding what to delete
+by absence from a list the tool built itself puts every failed read on the
+deleting side. This one decides by presence in a deleted snapshot's file list,
+which is the direction Elasticsearch uses.
 
 Which credential you hold still decides what you can reach, so settle that
 first. The two APIs take different credentials, and holding one gets you
@@ -151,20 +170,11 @@ decode that *succeeds and returns a wrong file list* is the expensive case: one
 renamed field in an Elasticsearch upgrade deleted 96.4% of a repository in the
 test lab (henceforth **the rig**: Elasticsearch 9.5.2 under ECK in Rancher
 Desktop against a MinIO pinned to the last release that reproduces this fault) by
-bytes. Five guards stood in that path in the retired sweepers. They caught a
-decoded document that is not a file list, a whole shard condemned
-at once, a stale root pointer, and a shard file entry count that disagrees with
-Elasticsearch. What they did not catch is a wrong file list that keeps the count
-right. Every one of those guards also had an off-switch, and each switch removed
-the guard next to it. None of them was a tuning knob.
-
-That gap is the retirement in one paragraph. The guards defended the decode. The
-decision underneath them was a set difference over a live set the tool computed
-by reading the whole repository, so a read that failed and a document that would
-not parse both landed on the same side of it, which is the side that deletes.
-The answer is not a sixth guard. It is to compute the difference the way
-Elasticsearch computes it, inside a single shard directory, and to have nothing
-to delete with.
+bytes. No amount of guarding the decode closes that case, because a wrong file
+list that keeps the entry count right passes every check you can write against
+the decode itself. The decision underneath has to change: compute the difference
+the way Elasticsearch computes it, inside one shard directory, and give the
+half that reads nothing to delete with.
 
 Leaving backups on a repository whose deletes fail carries real risks, and they
 compound:
@@ -179,10 +189,11 @@ compound:
   people to ignore the log lines that would carry the next real failure.
 - **You depend on the tooling indefinitely.** If the cron breaks or drifts
   behind an Elasticsearch format change, growth resumes silently.
-- **Nothing here reclaims the space any more.** The tools that did are retired,
-  so between now and the replacement the only lever on growth is how much
-  deletion traffic the repository sees. That is what the migration below is
-  for: it moves the traffic somewhere deletes work.
+- **Reclaiming is a manual loop, not a fix.** `generation_chain` finds what
+  leaked and `generation_chain.reclaim` removes it, but somebody reads the
+  manifest and approves it every time. The leak resumes the moment the loop
+  stops. The migration below is what ends it, by moving deletion traffic
+  somewhere deletes work.
 
 Move the backups and all of that ends for them. Retention becomes filesystem
 unlinks, deletion means destruction again, and no tooling sits in the loop. The
@@ -329,25 +340,17 @@ snapshot of that index allocates a new folder UUID, so it cannot deduplicate
 against the orphaned segments and re-uploads the data in full. The leak
 compounds rather than plateaus.
 
-`?verify=false` is still a prerequisite for the cleanup in this repository, and
-in particular for the log-driven sweeper. That sweeper's only input is the set
-of keys Elasticsearch condemned, which it reads from the failed-delete WARN lines
-in the Elasticsearch logs. Those lines exist only because Elasticsearch is still
-*operating* the repository: running retention, attempting deletes, and failing.
-A repository that cannot be registered is one Elasticsearch never attempts to
-delete from. No attempts, no WARN lines, no input. So the order is:
+`?verify=false` is a prerequisite for the audit, for a plainer reason. The audit
+reads the repository's own metadata: the root index, the index metadata, the
+shard generation documents. It needs the repository reachable and readable, and
+a repository Elasticsearch refuses to register is neither.
 
-1. `?verify=false` keeps the repository registered and in service.
-2. Elasticsearch keeps attempting deletes on its normal schedule and keeps
-   naming the keys it failed to delete.
-3. Those keys used to be harvested and removed by a log-driven sweeper, and the
-   residue it could not see was reclaimed by a periodic reachability sweep.
-   Both tools are retired, so today the WARN lines are a measurement of the
-   leak and nothing acts on them.
-
-The reachability sweeper does not share that dependency. It reads the
-repository's own metadata and needs no logs. It does need the repository to stay
-reachable and readable, which is the same thing `?verify=false` preserves.
+Keeping it registered has a second effect worth knowing about. Elasticsearch
+carries on running retention, attempting the deletes, and logging a WARN line
+naming the keys each failed batch could not remove. Nothing in this repository
+reads those lines. They are a live measurement of the leak, useful for watching
+it grow between audits and for confirming the fault is still the one described
+here.
 
 #### Do not lower `delete_objects_max_size` to get more keys logged
 
@@ -904,11 +907,11 @@ corrupt the other's. If a re-registration lands you in that state, fix the
 registration before you snapshot or delete anything.
 
 **Any tool that reads the bucket needs this value, and getting it wrong is how
-a tool ends up looking at the wrong repository.** The retired sweepers took it
-as `--prefix` and it defined everything they were allowed to consider. On a
-bucket holding more than one repository, an empty prefix put every object in
-scope. Whatever reads this bucket next inherits that problem, so it is written
-down here rather than in a runbook.
+a tool ends up looking at the wrong repository.** `generation_chain` takes it as
+`--prefix`, and that value defines everything the run is allowed to consider. On
+a bucket holding more than one repository, an empty prefix puts every object in
+scope. Any other tool you point at this bucket has the same problem, which is
+why the value is written down here rather than in a runbook.
 
 ## The failure in detail
 
@@ -961,8 +964,8 @@ What this repository gives you:
    only what a human approved from a written manifest (see [Using it](#using-it)).
 2. [A validated runbook for getting off the broken path](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14),
    moving backups to block/NFS storage while the frozen tier stays mounted
-   where it is, minus its two cleanup steps, which drove a retired sweeper and
-   are marked withdrawn in place.
+   where it is. Its two cleanup steps are marked withdrawn in place: they drove
+   an earlier tool that no longer exists, and the pair above replaces them.
 
 Everything here was reproduced and validated end to end against a real
 Elasticsearch 9.5.2 cluster and a fault-reproducing object store, including a
@@ -1340,21 +1343,16 @@ live-rig campaigns against a real Oracle bucket, and adversarial review; see
 in FACTS.md for the raw numbers. Reproduce a campaign of your own with
 [Testing in your own OCI environment](docs/testing-in-your-oci-environment.md).
 
-## Why this replaced three earlier tools
+## Why it condemns on presence
 
-Three earlier tools took this project's original approach: classify every
-object LIVE, ORPHAN or PROTECTED by reimplementing Elasticsearch's on-disk
-format, then delete the orphans. They are retired, removed from this
-repository along with their tests and runbooks, and nothing below describes
-their flags or internals; the point that survives them is the one below.
+The obvious way to build this tool is the wrong way, and it is worth saying why
+before you write your own or run someone else's.
 
-All three condemned a blob by its absence from a live set they built themselves,
-which put every failed read and every unparseable document on the deleting side
-of the decision. A reviewer drove one of them, along its documented path, to a
-real delete of a live segment blob. A log-driven variant started from a stronger
-premise, that Elasticsearch itself named the key, but it still had to answer
-whether some surviving snapshot referenced the key now, and that is the same
-absence test.
+The obvious way is to classify every object LIVE or ORPHAN by reading the whole
+repository, then delete the orphans. That condemns a blob by its absence from a
+list the tool built itself, which puts every failed read and every unparseable
+document on the deleting side of the decision. Built that way, this project
+deleted a live segment blob in the lab, following its own documented path.
 
 `generation_chain` reproduces what Elasticsearch does when it deletes a
 snapshot: a set difference inside one shard directory, between the segment blobs
@@ -1375,7 +1373,7 @@ The direction of the test is what makes it safe. Elasticsearch condemns a blob
 on its ABSENCE from the current file list. This condemns on its PRESENCE in a
 deleted snapshot's file list, so what it names is a subset of what Elasticsearch
 itself would collect, and a read that fails makes the manifest shorter rather
-than longer. That is the whole difference from the three tools above, and it is
+than longer. That is the whole difference from the obvious approach, and it is
 why a failure here costs coverage instead of data.
 
 It also gives Elasticsearch a veto. Two facts live in cluster state and appear
@@ -1394,7 +1392,6 @@ invalidates its own approval.
 
 Snapshots share segment blobs, so a `__<blobid>` object is usually reachable
 from more than one snapshot and its key tells you nothing about how many.
-[Blast radius](docs/blast-radius.md) works through what that sharing costs
-when a delete is wrong, written while the retired tools were the tools and
-updated since for `generation_chain`.
+[Blast radius](docs/blast-radius.md) works through what that sharing costs when
+a delete is wrong.
 

@@ -26,7 +26,7 @@ node id; `flowchart` rather than the older `graph` keyword.
 ## 1. System context
 
 The four executables that get confused with each other, and what each one is
-allowed to touch. `generation_chain` is the audit: it can only read.
+allowed to touch. `generation_chain` is the [audit](../../README.md#what-audit-means-here): it can only read.
 `generation_chain.reclaim` is the only one of the four that can delete, and
 only after a human has read a manifest the audit wrote. `reclaim_test_protocol.py`
 drives both of those, cycle after cycle, as a qualification loop.
