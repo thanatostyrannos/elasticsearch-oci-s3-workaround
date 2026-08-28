@@ -79,9 +79,11 @@ docs/security/threat-model.md under mode 3.
 
 import argparse
 import base64
+import collections
 import datetime
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -147,6 +149,95 @@ def refuse_non_http_scheme(url, what):
     if scheme not in _ALLOWED_URL_SCHEMES:
         die(f"{what} is {url!r}; only http and https are accepted, so a "
             f"{scheme or '(no scheme)'!r} value cannot be opened")
+
+
+# Names a lab cluster answers on. Kubernetes hands out the first three to
+# in-cluster services, mDNS hands out .local, and a single-label name has no
+# public DNS to resolve it.
+LAB_HOST_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local",
+                     ".local", ".localdomain", ".internal")
+
+
+def is_lab_host(host):
+    """Is this an address only a lab or an in-cluster caller can reach?"""
+    if not host:
+        return False
+    host = host.rstrip(".")
+    if host == "localhost" or host.endswith(LAB_HOST_SUFFIXES):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # A name with no dot has no public DNS to resolve it, so it is a
+        # service name inside a cluster or a line in someone's hosts file.
+        return "." not in host
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+def write_state(path, state):
+    """Record what teardown will need, refusing the run if it cannot.
+
+    A run whose state was never written leaves cluster settings changed with
+    no record of what they were, so this stops before it starts rather than
+    after.
+    """
+    try:
+        with open(path, "w") as handle:
+            json.dump(state, handle, indent=2)
+    except OSError as problem:
+        die(f"state file {path!r} could not be written: "
+            f"{problem.__class__.__name__}: {problem.strerror or problem}. "
+            "Teardown restores cluster settings from this file, so the run "
+            "stops rather than changing them with nothing to undo it.")
+
+
+def load_state(path):
+    """The state a previous run wrote, or a refusal naming what went wrong.
+
+    A state file that will not parse is not the same as no state file at all.
+    Falling back to prefix-derived names would restore no cluster settings
+    and silently widen what teardown touches, so it refuses instead.
+    """
+    try:
+        with open(path) as handle:
+            return json.load(handle)
+    except (OSError, ValueError) as problem:
+        die(f"state file {path!r} exists but could not be read: "
+            f"{problem.__class__.__name__}: {problem}")
+
+
+def refuse_insecure_off_lab(url, what):
+    """Refuse --insecure for an endpoint a lab cluster does not live at.
+
+    Skipping verification is right for an ECK cluster serving a certificate
+    it signed itself, and wrong for anything routable, where an unverified
+    connection accepts whichever host answered and this harness then hands it
+    a cluster password. Checked here, at the one place the flag is read from
+    the command line, so the endpoint the operator named is the endpoint the
+    decision is made about.
+    """
+    host = urllib.parse.urlsplit(url).hostname
+    if not is_lab_host(host):
+        die(f"--insecure was passed for {what} {host!r}, which is not a "
+            "loopback, private or in-cluster address. It exists for a lab "
+            "cluster serving its own certificate, not for a cluster anything "
+            "can route to. Pass --ca-cert with the CA that certificate "
+            "chains to instead.")
+    log(f"TLS verification is OFF for {what} {host}, by --insecure")
+
+
+def read_secret_file(path, what):
+    """The one line in a secret file, or a refusal naming what would not open.
+
+    The message quotes the path and never the contents, because the contents
+    are the secret.
+    """
+    try:
+        with open(path) as handle:
+            return handle.read().strip()
+    except OSError as problem:
+        die(f"{what} {path!r} could not be read: "
+            f"{problem.__class__.__name__}: {problem.strerror or problem}")
 
 
 # ---------------------------------------------------------------------------
@@ -334,10 +425,9 @@ def make_s3(args):
     if not args.s3_endpoint:
         return None, "no --s3-endpoint supplied"
     access = args.s3_access_key or os.environ.get("S3_ACCESS_KEY")
-    secret = None
     if args.s3_secret_key_file:
-        with open(args.s3_secret_key_file) as f:
-            secret = f.read().strip()
+        secret = read_secret_file(args.s3_secret_key_file,
+                                  "--s3-secret-key-file")
     else:
         secret = os.environ.get("S3_SECRET_KEY")
     if not access or not secret:
@@ -375,9 +465,23 @@ def names(prefix, data_stream=None):
     }
 
 
-MANAGED_SETTINGS = ("indices.lifecycle.poll_interval",
-                    "slm.retention_schedule",
-                    "slm.minimum_interval")
+ILM_POLL_INTERVAL = "indices.lifecycle.poll_interval"
+SLM_RETENTION_SCHEDULE = "slm.retention_schedule"
+SLM_MINIMUM_INTERVAL = "slm.minimum_interval"
+
+MANAGED_SETTINGS = (ILM_POLL_INTERVAL, SLM_RETENTION_SCHEDULE,
+                    SLM_MINIMUM_INTERVAL)
+
+# The Elasticsearch paths this harness builds names onto. Named once so a
+# typo fails every call that uses the path rather than leaving one of them
+# quietly pointing at nothing.
+ILM_POLICY_PATH = "/_ilm/policy/"
+SLM_POLICY_PATH = "/_slm/policy/"
+SNAPSHOT_PATH = "/_snapshot/"
+INDEX_TEMPLATE_PATH = "/_index_template/"
+DATA_STREAM_PATH = "/_data_stream/"
+RESOLVE_PREFIX_PATH = "/_resolve/index/*%s*?expand_wildcards=all"
+SNAPSHOTS_IN_REPO_PATH = SNAPSHOT_PATH + "%s/_all?ignore_unavailable=true"
 
 
 # ---------------------------------------------------------------------------
@@ -424,19 +528,18 @@ def check_prefix_free(es, prefix, n):
     """Refuse when anything on the cluster already answers to the prefix,
     so the harness can never entangle itself with another tenant's work."""
     hits = []
-    res = es.get_or_none(
-        "/_resolve/index/*%s*?expand_wildcards=all" % prefix) or {}
+    res = es.get_or_none(RESOLVE_PREFIX_PATH % prefix) or {}
     for kind in ("indices", "aliases", "data_streams"):
         for entry in res.get(kind, []):
             hits.append("%s %s" % (kind[:-1] if kind != "indices"
                                    else "index", entry["name"]))
-    if es.get_or_none("/_ilm/policy/" + n["ilm"]):
+    if es.get_or_none(ILM_POLICY_PATH + n["ilm"]):
         hits.append("ilm policy " + n["ilm"])
-    if es.get_or_none("/_slm/policy/" + n["slm"]):
+    if es.get_or_none(SLM_POLICY_PATH + n["slm"]):
         hits.append("slm policy " + n["slm"])
-    if es.get_or_none("/_snapshot/" + n["repo"]):
+    if es.get_or_none(SNAPSHOT_PATH + n["repo"]):
         hits.append("snapshot repository " + n["repo"])
-    if es.get_or_none("/_index_template/" + n["template"]):
+    if es.get_or_none(INDEX_TEMPLATE_PATH + n["template"]):
         hits.append("index template " + n["template"])
     if hits:
         die("prefix %r collides with existing cluster state: %s. Pick "
@@ -568,15 +671,15 @@ def cmd_setup(es, args, n, s3):
     prior = read_prior_settings(es)
     schedule = slm_schedule(version, args.snapshot_interval, args.slm_cron)
     wanted = {
-        "indices.lifecycle.poll_interval": args.ilm_poll_interval,
-        "slm.retention_schedule": retention_cron(
+        ILM_POLL_INTERVAL: args.ilm_poll_interval,
+        SLM_RETENTION_SCHEDULE: retention_cron(
             args.retention_check_interval),
     }
     min_interval_secs = parse_duration(args.snapshot_interval)
-    prior_min = prior.get("slm.minimum_interval")
+    prior_min = prior.get(SLM_MINIMUM_INTERVAL)
     effective_min = parse_duration(prior_min) if prior_min else 900
     if min_interval_secs < effective_min:
-        wanted["slm.minimum_interval"] = args.snapshot_interval
+        wanted[SLM_MINIMUM_INTERVAL] = args.snapshot_interval
 
     state = {
         "prefix": args.prefix,
@@ -589,8 +692,7 @@ def cmd_setup(es, args, n, s3):
         "base_path": args.base_path or args.prefix,
         "slm_schedule": schedule,
     }
-    with open(args.state_file, "w") as f:
-        json.dump(state, f, indent=2)
+    write_state(args.state_file, state)
     log("state written to %s (teardown restores settings from it)"
         % args.state_file)
 
@@ -608,7 +710,7 @@ def cmd_setup(es, args, n, s3):
         repo_settings = {"location": args.location}
     repo_body = {"type": args.repo_type, "settings": repo_settings}
     try:
-        es.put("/_snapshot/" + n["repo"], repo_body)
+        es.put(SNAPSHOT_PATH + n["repo"], repo_body)
         log("repository %s registered and verified" % n["repo"])
     except EsError as e:
         if "cannot delete test data" not in e.body:
@@ -623,11 +725,10 @@ def cmd_setup(es, args, n, s3):
             "verification, the first evidence this store leaks deletes; "
             "registering %s with verify=false and continuing" % n["repo"])
         state["verify_rejected_batch_delete"] = True
-        es.put("/_snapshot/%s?verify=false" % n["repo"], repo_body)
-        with open(args.state_file, "w") as f:
-            json.dump(state, f, indent=2)
+        es.put(SNAPSHOT_PATH + n["repo"] + "?verify=false", repo_body)
+        write_state(args.state_file, state)
 
-    es.put("/_ilm/policy/" + n["ilm"], {"policy": {"phases": {
+    es.put(ILM_POLICY_PATH + n["ilm"], {"policy": {"phases": {
         "hot": {"min_age": "0ms", "actions": {"rollover": {
             "max_age": args.rollover_max_age,
             "max_docs": args.rollover_max_docs}}},
@@ -643,7 +744,7 @@ def cmd_setup(es, args, n, s3):
                            args.rollover_max_docs, args.frozen_min_age,
                            args.delete_min_age))
 
-    es.put("/_index_template/" + n["template"], {
+    es.put(INDEX_TEMPLATE_PATH + n["template"], {
         "index_patterns": [n["data_stream"] + "*"],
         "data_stream": {},
         "priority": 500,
@@ -651,11 +752,11 @@ def cmd_setup(es, args, n, s3):
             "index.number_of_shards": args.shards,
             "index.number_of_replicas": 0,
             "index.lifecycle.name": n["ilm"]}}})
-    es.put("/_data_stream/" + n["data_stream"])
+    es.put(DATA_STREAM_PATH + n["data_stream"])
     log("data stream %s created (%d shard(s) per backing index)"
         % (n["data_stream"], args.shards))
 
-    es.put("/_slm/policy/" + n["slm"], {
+    es.put(SLM_POLICY_PATH + n["slm"], {
         "schedule": schedule,
         "name": "<" + n["snap_prefix"] + "{now/s{yyyyMMdd-HHmmss|UTC}}>",
         "repository": n["repo"],
@@ -666,12 +767,18 @@ def cmd_setup(es, args, n, s3):
         "retention": {"expire_after": args.retention}})
     log("slm policy %s: schedule=%s retention=%s (checked on cron %s)"
         % (n["slm"], schedule, args.retention,
-           wanted["slm.retention_schedule"]))
+           wanted[SLM_RETENTION_SCHEDULE]))
     return state
 
 
 # ---------------------------------------------------------------------------
 # reporting
+
+
+# The cluster, the object store and the names one report is about, carried
+# together because every section of a report needs some of them and none of
+# them means anything without the others.
+Rig = collections.namedtuple("Rig", "es names s3 s3_reason base_path")
 
 
 def snap_name(s):
@@ -681,36 +788,38 @@ def snap_name(s):
     return s.get("snapshot") or s.get("name") or ""
 
 
-def gather_report(es, n, s3, s3_reason, base_path, cadence_memory=None):
-    rep = {"ts": now_iso(), "prefix": n["data_stream"].rsplit("-", 1)[0]}
-
-    ds = es.get_or_none("/_data_stream/" + n["data_stream"])
-    if ds and ds.get("data_streams"):
-        d = ds["data_streams"][0]
-        rep["data_stream"] = {
-            "backing_indices": len(d["indices"]),
+def data_stream_section(rig):
+    """Backing index count, names and generation, or None if it is gone."""
+    ds = rig.es.get_or_none(DATA_STREAM_PATH + rig.names["data_stream"])
+    if not (ds and ds.get("data_streams")):
+        return None
+    d = ds["data_streams"][0]
+    return {"backing_indices": len(d["indices"]),
             "backing_index_names": [i["index_name"] for i in d["indices"]],
             "generation": d["generation"]}
-    else:
-        rep["data_stream"] = None
 
+
+def ilm_section(rig):
+    """Backing indices counted by ILM phase, and any index stuck on ERROR."""
     phases = {}
     errors = []
-    explain = es.get_or_none("/%s/_ilm/explain" % n["data_stream"])
-    if explain:
-        for idx, info in explain.get("indices", {}).items():
-            phases[info.get("phase", "unmanaged")] = \
-                phases.get(info.get("phase", "unmanaged"), 0) + 1
-            if info.get("step") == "ERROR":
-                errors.append({"index": idx,
-                               "failed_step": info.get("failed_step")})
-    rep["by_ilm_phase"] = phases
-    rep["ilm_errors"] = errors
+    explain = rig.es.get_or_none(
+        "/%s/_ilm/explain" % rig.names["data_stream"])
+    for idx, info in (explain or {}).get("indices", {}).items():
+        phase = info.get("phase", "unmanaged")
+        phases[phase] = phases.get(phase, 0) + 1
+        if info.get("step") == "ERROR":
+            errors.append({"index": idx,
+                           "failed_step": info.get("failed_step")})
+    return phases, errors
 
-    mounted = []
-    settings = es.get_or_none(
+
+def mounted_indices(rig, prefix):
+    """Every index under the prefix that reads from a searchable snapshot."""
+    settings = rig.es.get_or_none(
         "/*%s*/_settings?expand_wildcards=all&filter_path="
-        "*.settings.index.store.snapshot" % rep["prefix"]) or {}
+        "*.settings.index.store.snapshot" % prefix) or {}
+    mounted = []
     for idx, body in settings.items():
         snap = (body.get("settings", {}).get("index", {})
                 .get("store", {}).get("snapshot", {}))
@@ -719,41 +828,47 @@ def gather_report(es, n, s3, s3_reason, base_path, cadence_memory=None):
                             "snapshot": snap.get("snapshot_name"),
                             "repository": snap.get("repository_name"),
                             "partial": snap.get("partial")})
+    return mounted
 
-    alive = []
-    snaps = es.get_or_none(
-        "/_snapshot/%s/_all?ignore_unavailable=true" % n["repo"])
-    if snaps:
-        alive = snaps.get("snapshots", [])
-    alive_names = {snap_name(s) for s in alive}
-    alive_uuids = {s.get("uuid") for s in alive}
+
+def mount_hazards(mounted, repo, alive_names):
+    """Mounts reading from a snapshot the repository no longer lists.
+
+    Reported, never prevented: an index serving reads out of blobs no
+    snapshot references any more is one of the states the reclaim tooling is
+    measured against.
+    """
+    return [{"index": m["index"], "snapshot": m["snapshot"],
+             "reason": "mounted searchable snapshot whose source snapshot "
+                       "is no longer in the repository"}
+            for m in mounted
+            if m["repository"] == repo and m["snapshot"] not in alive_names]
+
+
+def observed_start_deltas(rig, alive, cadence_memory):
+    """Seconds between consecutive snapshot starts, newest eight.
+
+    `cadence_memory` carries starts the repository has since expired, so the
+    cadence a long run reports is not truncated to the retention window.
+    """
+    ours = [s for s in alive if snap_name(s).startswith(rig.names["snap_prefix"])]
+    starts = sorted(s["start_time_in_millis"] for s in ours)
+    if cadence_memory is not None:
+        for s in ours:
+            cadence_memory[snap_name(s)] = s["start_time_in_millis"]
+        starts = sorted(cadence_memory.values())
+    return [round((b - a) / 1000.0, 1) for a, b in zip(starts, starts[1:])][-8:]
+
+
+def snapshot_section(rig, alive, cadence_memory):
+    """Snapshot counts alive and by state, plus what SLM says it has done."""
+    slm = rig.es.get_or_none(SLM_POLICY_PATH + rig.names["slm"]) or {}
+    stats = slm.get(rig.names["slm"], {}).get("stats", {})
+    global_stats = rig.es.get_or_none("/_slm/stats") or {}
     by_state = {}
     for s in alive:
         by_state[s["state"]] = by_state.get(s["state"], 0) + 1
-
-    hazards = []
-    for m in mounted:
-        if m["repository"] == n["repo"] and m["snapshot"] not in alive_names:
-            hazards.append({
-                "index": m["index"], "snapshot": m["snapshot"],
-                "reason": "mounted searchable snapshot whose source "
-                          "snapshot is no longer in the repository"})
-    rep["mounted_searchable"] = {"count": len(mounted), "indices": mounted,
-                                 "hazards": hazards}
-
-    slm = es.get_or_none("/_slm/policy/" + n["slm"]) or {}
-    stats = slm.get(n["slm"], {}).get("stats", {})
-    global_stats = es.get_or_none("/_slm/stats") or {}
-    starts = sorted(s["start_time_in_millis"] for s in alive
-                    if snap_name(s).startswith(n["snap_prefix"]))
-    if cadence_memory is not None:
-        for s in alive:
-            if snap_name(s).startswith(n["snap_prefix"]):
-                cadence_memory[snap_name(s)] = s["start_time_in_millis"]
-        starts = sorted(cadence_memory.values())
-    deltas = [round((b - a) / 1000.0, 1)
-              for a, b in zip(starts, starts[1:])]
-    rep["snapshots"] = {
+    return {
         "alive": len(alive),
         "alive_by_state": by_state,
         "taken_total": stats.get("snapshots_taken", 0),
@@ -763,39 +878,70 @@ def gather_report(es, n, s3, s3_reason, base_path, cadence_memory=None):
             "snapshot_deletion_failures", 0),
         "retention_runs": global_stats.get("retention_runs"),
         "retention_failed": global_stats.get("retention_failed"),
-        "observed_start_deltas_s": deltas[-8:],
+        "observed_start_deltas_s": observed_start_deltas(
+            rig, alive, cadence_memory),
     }
 
-    if s3 is None:
-        rep["repository"] = {"unavailable": s3_reason}
-        return rep
 
-    base = base_path.rstrip("/") + "/" if base_path else ""
-    objects = s3.list(base)
-    gens = []
-    snap_dats = []
-    latest = None
+_ROOT_GENERATION = re.compile(r"index-(\d+)")
+
+
+def repository_section(rig, alive_uuids):
+    """What the bucket holds under the base path, counted by blob kind.
+
+    Only the root of the base path is counted. A key with a slash left in it
+    after the prefix belongs to a shard directory, and this section is about
+    the repository's own top-level metadata.
+    """
+    base = rig.base_path.rstrip("/") + "/" if rig.base_path else ""
+    objects = rig.s3.list(base)
+    generations = []
+    snapshot_blobs = []
+    latest = False
     for key, _size in objects:
         rel = key[len(base):]
         if "/" in rel:
             continue
-        m = re.fullmatch(r"index-(\d+)", rel)
-        if m:
-            gens.append(int(m.group(1)))
+        generation = _ROOT_GENERATION.fullmatch(rel)
+        if generation:
+            generations.append(int(generation.group(1)))
         elif rel == "index.latest":
             latest = True
         elif rel.startswith("snap-") and rel.endswith(".dat"):
-            snap_dats.append(rel[5:-4])
-    leaked_snap_meta = [u for u in snap_dats if u not in alive_uuids]
-    rep["repository"] = {
+            snapshot_blobs.append(rel[5:-4])
+    leaked = [uuid for uuid in snapshot_blobs if uuid not in alive_uuids]
+    return {
         "object_count": len(objects),
-        "bytes": sum(s for _k, s in objects),
-        "root_generation_count": len(gens),
-        "root_generations": sorted(gens)[-8:],
-        "index_latest_present": bool(latest),
-        "snapshot_metadata_blobs": len(snap_dats),
-        "expired_snapshot_metadata_still_present": len(leaked_snap_meta),
+        "bytes": sum(size for _key, size in objects),
+        "root_generation_count": len(generations),
+        "root_generations": sorted(generations)[-8:],
+        "index_latest_present": latest,
+        "snapshot_metadata_blobs": len(snapshot_blobs),
+        "expired_snapshot_metadata_still_present": len(leaked),
     }
+
+
+def gather_report(rig, cadence_memory=None):
+    """One JSON-shaped report of everything the harness can currently see."""
+    prefix = rig.names["data_stream"].rsplit("-", 1)[0]
+    rep = {"ts": now_iso(), "prefix": prefix}
+    rep["data_stream"] = data_stream_section(rig)
+    rep["by_ilm_phase"], rep["ilm_errors"] = ilm_section(rig)
+
+    mounted = mounted_indices(rig, prefix)
+    snaps = rig.es.get_or_none(SNAPSHOTS_IN_REPO_PATH % rig.names["repo"])
+    alive = snaps.get("snapshots", []) if snaps else []
+    rep["mounted_searchable"] = {
+        "count": len(mounted), "indices": mounted,
+        "hazards": mount_hazards(mounted, rig.names["repo"],
+                                 {snap_name(s) for s in alive})}
+    rep["snapshots"] = snapshot_section(rig, alive, cadence_memory)
+
+    if rig.s3 is None:
+        rep["repository"] = {"unavailable": rig.s3_reason}
+    else:
+        rep["repository"] = repository_section(
+            rig, {s.get("uuid") for s in alive})
     return rep
 
 
@@ -832,102 +978,139 @@ def make_doc(seq, doc_bytes):
     return {"@timestamp": now_iso(), "seq": seq, "payload": payload}
 
 
+class RunState:
+    """Everything one `run` accumulates while the environment churns.
+
+    The counters live here rather than in closures over cmd_run because the
+    report writer, the milestone check and the ingest loop all read and write
+    the same three numbers, and a closure hid which of them owned each one.
+    """
+
+    def __init__(self, rig, args):
+        self.rig = rig
+        self.args = args
+        self.started = time.monotonic()
+        self.docs_sent = 0
+        self.bulk_errors = 0
+        self.seq = 0
+        self.milestones = {}
+        self.cadence_memory = {}
+        self.seen_backing = set()
+
+    @property
+    def elapsed(self):
+        return time.monotonic() - self.started
+
+    def ingest(self):
+        """One second of documents, counted whether or not they land."""
+        rate = self.args.docs_per_second
+        lines = []
+        for _ in range(rate):
+            self.seq += 1
+            lines.append('{"create":{}}')
+            lines.append(json.dumps(make_doc(self.seq, self.args.doc_bytes)))
+        if not lines:
+            return
+        try:
+            _, resp = self.rig.es.req(
+                "POST", "/%s/_bulk" % self.rig.names["data_stream"],
+                ndjson="\n".join(lines) + "\n", timeout=60)
+        except EsError as e:
+            self.bulk_errors += rate
+            log("bulk failed: %s" % e)
+            return
+        self.docs_sent += rate
+        if resp.get("errors"):
+            self.bulk_errors += sum(1 for item in resp["items"]
+                                    if item["create"].get("status", 201) >= 300)
+
+    def note_backing_index_loss(self, rep):
+        """Mark the report when a backing index this run saw has gone.
+
+        A frozen mount renames .ds-X to partial-.ds-X, so the comparison is
+        on canonical names; otherwise every mount would count as a deletion.
+        """
+        current = {name[len("partial-"):] if name.startswith("partial-")
+                   else name
+                   for name in (rep.get("data_stream") or {})
+                   .get("backing_index_names", [])}
+        if self.seen_backing - current:
+            rep["backing_index_disappeared"] = True
+        self.seen_backing |= current
+
+    def note_milestones(self, rep, now):
+        """Record the first time each milestone's condition holds."""
+        for name, reached in MILESTONES:
+            if name not in self.milestones and reached(rep):
+                self.milestones[name] = now
+                log("milestone at %ds: %s" % (int(now), name))
+
+    def observe(self, now):
+        """One observation pass: gather, mark what changed, log hazards."""
+        rep = gather_report(self.rig, self.cadence_memory)
+        self.note_backing_index_loss(rep)
+        self.note_milestones(rep, now)
+        for hazard in rep["mounted_searchable"]["hazards"]:
+            log("HAZARD: %s (index=%s snapshot=%s)"
+                % (hazard["reason"], hazard["index"], hazard["snapshot"]))
+        return rep
+
+    def emit(self, rep):
+        """Write one report to stdout and append it to the report file."""
+        rep["elapsed_s"] = round(self.elapsed, 1)
+        rep["ingest"] = {"docs_sent": self.docs_sent,
+                         "bulk_errors": self.bulk_errors}
+        rep["milestones"] = {k: round(v, 1)
+                             for k, v in sorted(self.milestones.items(),
+                                                key=lambda kv: kv[1])}
+        line = json.dumps(rep, sort_keys=True)
+        print(line, flush=True)
+        with open(self.args.report_file, "a") as f:
+            f.write(line + "\n")
+        return rep
+
+
+def churn(state, duration, report_every):
+    """Ingest and observe until the duration ends or someone interrupts."""
+    poll_every = min(report_every, 20)
+    next_report = 0.0
+    next_poll = 0.0
+    while state.elapsed < duration:
+        tick = time.monotonic()
+        state.ingest()
+        now = state.elapsed
+        if now >= next_poll:
+            next_poll = now + poll_every
+            try:
+                rep = state.observe(now)
+                if now >= next_report:
+                    next_report = now + report_every
+                    state.emit(rep)
+            except Exception as e:
+                log("report poll failed, continuing: %s: %s"
+                    % (type(e).__name__, e))
+        spent = time.monotonic() - tick
+        if spent < 1.0:
+            time.sleep(1.0 - spent)
+
+
 def cmd_run(es, args, n, s3, s3_reason):
     if os.path.exists(args.state_file):
         die("state file %s already exists; a previous run was not torn "
             "down. Run teardown first, or point --state-file elsewhere "
             "and pick a fresh --prefix" % args.state_file)
-    state = cmd_setup(es, args, n, s3)
-    base_path = state["base_path"]
-
-    duration = parse_duration(args.duration)
-    report_every = parse_duration(args.report_interval)
-    poll_every = min(report_every, 20)
-    rate = args.docs_per_second
-    t0 = time.monotonic()
-    docs_sent = 0
-    bulk_errors = 0
-    seq = 0
-    milestones = {}
-    cadence_memory = {}
-    seen_backing = set()
-    next_report = 0.0
-    next_poll = 0.0
+    setup = cmd_setup(es, args, n, s3)
+    state = RunState(Rig(es, n, s3, s3_reason, setup["base_path"]), args)
     log("run started: duration=%s ingest=%d docs/s of ~%d bytes; "
         "reports every %s to stdout and %s"
-        % (args.duration, rate, args.doc_bytes, args.report_interval,
-           args.report_file))
-
-    def emit(rep):
-        rep["elapsed_s"] = round(time.monotonic() - t0, 1)
-        rep["ingest"] = {"docs_sent": docs_sent, "bulk_errors": bulk_errors}
-        rep["milestones"] = {k: round(v, 1)
-                             for k, v in sorted(milestones.items(),
-                                                key=lambda kv: kv[1])}
-        line = json.dumps(rep, sort_keys=True)
-        print(line, flush=True)
-        with open(args.report_file, "a") as f:
-            f.write(line + "\n")
-        return rep
-
+        % (args.duration, args.docs_per_second, args.doc_bytes,
+           args.report_interval, args.report_file))
     try:
-        while time.monotonic() - t0 < duration:
-            tick = time.monotonic()
-            lines = []
-            for _ in range(rate):
-                seq += 1
-                lines.append('{"create":{}}')
-                lines.append(json.dumps(make_doc(seq, args.doc_bytes)))
-            if lines:
-                try:
-                    _, resp = es.req(
-                        "POST", "/%s/_bulk" % n["data_stream"],
-                        ndjson="\n".join(lines) + "\n", timeout=60)
-                    docs_sent += rate
-                    if resp.get("errors"):
-                        bulk_errors += sum(
-                            1 for i in resp["items"]
-                            if i["create"].get("status", 201) >= 300)
-                except EsError as e:
-                    bulk_errors += rate
-                    log("bulk failed: %s" % e)
-
-            now = time.monotonic() - t0
-            if now >= next_poll:
-                next_poll = now + poll_every
-                try:
-                    rep = gather_report(es, n, s3, s3_reason, base_path,
-                                        cadence_memory)
-                    # A frozen mount renames .ds-X to partial-.ds-X, so
-                    # compare canonical names or every mount would count
-                    # as a deletion.
-                    current = {name[len("partial-"):]
-                               if name.startswith("partial-") else name
-                               for name in (rep.get("data_stream") or {})
-                               .get("backing_index_names", [])}
-                    if seen_backing - current:
-                        rep["backing_index_disappeared"] = True
-                    seen_backing |= current
-                    for name, test in MILESTONES:
-                        if name not in milestones and test(rep):
-                            milestones[name] = now
-                            log("milestone at %ds: %s" % (int(now), name))
-                    for h in rep["mounted_searchable"]["hazards"]:
-                        log("HAZARD: %s (index=%s snapshot=%s)"
-                            % (h["reason"], h["index"], h["snapshot"]))
-                    if now >= next_report:
-                        next_report = now + report_every
-                        emit(rep)
-                except Exception as e:
-                    log("report poll failed, continuing: %s: %s"
-                        % (type(e).__name__, e))
-            spent = time.monotonic() - tick
-            if spent < 1.0:
-                time.sleep(1.0 - spent)
+        churn(state, parse_duration(args.duration),
+              parse_duration(args.report_interval))
     except KeyboardInterrupt:
         log("interrupted, emitting final report")
-    final = emit(gather_report(es, n, s3, s3_reason, base_path,
-                               cadence_memory))
+    final = state.emit(gather_report(state.rig, state.cadence_memory))
     log("run finished after %ss. The environment keeps churning until "
         "teardown; that standing churn is the measurement target."
         % final["elapsed_s"])
@@ -938,11 +1121,113 @@ def cmd_run(es, args, n, s3, s3_reason):
 # teardown
 
 
+def delete_cluster_objects(es, args, n):
+    """Remove exactly what this harness created on the cluster."""
+    es.delete(SLM_POLICY_PATH + n["slm"])
+    log("slm policy %s deleted" % n["slm"])
+
+    es.delete(DATA_STREAM_PATH + n["data_stream"])
+    res = es.get_or_none(RESOLVE_PREFIX_PATH % args.prefix) or {}
+    for name in teardown_index_scope(res, n["data_stream"]):
+        es.delete("/" + name)
+        log("leftover index %s deleted" % name)
+    log("data stream %s deleted" % n["data_stream"])
+
+    es.delete(INDEX_TEMPLATE_PATH + n["template"])
+    es.delete(ILM_POLICY_PATH + n["ilm"])
+    log("index template and ilm policy deleted")
+
+    snaps = es.get_or_none(SNAPSHOTS_IN_REPO_PATH % n["repo"])
+    if not snaps:
+        return
+    names_list = [snap_name(s) for s in snaps.get("snapshots", [])]
+    for i in range(0, len(names_list), 10):
+        batch = ",".join(names_list[i:i + 10])
+        es.delete("%s%s/%s" % (SNAPSHOT_PATH, n["repo"], batch), timeout=600)
+    log("%d snapshot(s) deleted from %s (each delete leaks blobs when "
+        "the store rejects batch deletes; that is the state under "
+        "test)" % (len(names_list), n["repo"]))
+    es.delete(SNAPSHOT_PATH + n["repo"])
+    log("repository %s unregistered" % n["repo"])
+
+
+def restore_managed_settings(es, state):
+    """Put back exactly the values recorded before this harness changed them."""
+    restore = {key: state["prior_settings"].get(key)
+               for key in MANAGED_SETTINGS
+               if key in state["settings_changed"]}
+    es.put("/_cluster/settings", {"persistent": restore})
+    log("cluster settings restored to recorded prior values: %s"
+        % json.dumps(restore))
+
+
+def clear_bucket(s3, base_path, purge):
+    """Count what the failed deletes left behind, and remove it if asked.
+
+    Returns (purged, leftover). Without --purge-bucket nothing is deleted:
+    the leaked corpus is the measurement target, so removing it is opt-in.
+    """
+    base = base_path.rstrip("/") + "/" if base_path else ""
+    objects = s3.list(base)
+    if not purge:
+        leftover = len(objects)
+        if leftover:
+            log("%d object(s) remain under %s/%s: the blobs Elasticsearch "
+                "failed to delete. Rerun teardown with --purge-bucket to "
+                "remove them, or keep them as a measurement corpus"
+                % (leftover, s3.bucket, base))
+        return 0, leftover
+    for key, _size in objects:
+        s3.delete_object(key)
+    leftover = len(s3.list(base))
+    log("purged %d leaked object(s) under %s/%s via single-object "
+        "deletes; %d remain" % (len(objects), s3.bucket, base, leftover))
+    return len(objects), leftover
+
+
+def surviving_cluster_objects(es, args, n):
+    """Anything answering to the prefix after teardown has run."""
+    res = es.get_or_none(RESOLVE_PREFIX_PATH % args.prefix) or {}
+    remaining = [e["name"] for kind in ("indices", "aliases", "data_streams")
+                 for e in res.get(kind, [])]
+    for path, label in ((ILM_POLICY_PATH + n["ilm"], "ilm policy"),
+                        (SLM_POLICY_PATH + n["slm"], "slm policy"),
+                        (SNAPSHOT_PATH + n["repo"], "repository"),
+                        (INDEX_TEMPLATE_PATH + n["template"], "template")):
+        if es.get_or_none(path):
+            remaining.append(label)
+    return remaining
+
+
+def settings_not_restored(es, state):
+    """Managed settings whose current value is not the one recorded."""
+    current = read_prior_settings(es)
+    return {key: {"expected": state["prior_settings"].get(key),
+                  "actual": current.get(key)}
+            for key in MANAGED_SETTINGS
+            if key in state["settings_changed"]
+            and current.get(key) != state["prior_settings"].get(key)}
+
+
+def teardown_verdict(es, args, n, state):
+    """Whether teardown left the cluster as it found it, and what it did not."""
+    verdict = {"ts": now_iso(), "prefix": args.prefix, "clean": True}
+    remaining = surviving_cluster_objects(es, args, n)
+    if remaining:
+        verdict["clean"] = False
+        verdict["remaining"] = remaining
+    if state:
+        mismatched = settings_not_restored(es, state)
+        if mismatched:
+            verdict["clean"] = False
+            verdict["settings_mismatch"] = mismatched
+    return verdict
+
+
 def cmd_teardown(es, args, n, s3, s3_reason):
     state = None
     if os.path.exists(args.state_file):
-        with open(args.state_file) as f:
-            state = json.load(f)
+        state = load_state(args.state_file)
         n = state["names"]
     else:
         log("WARNING: no state file at %s; deriving names from prefix %r "
@@ -956,97 +1241,32 @@ def cmd_teardown(es, args, n, s3, s3_reason):
     if refusal:
         die(refusal)
 
-    es.delete("/_slm/policy/" + n["slm"])
-    log("slm policy %s deleted" % n["slm"])
-
-    es.delete("/_data_stream/" + n["data_stream"])
-    res = es.get_or_none("/_resolve/index/*%s*?expand_wildcards=all"
-                         % args.prefix) or {}
-    for name in teardown_index_scope(res, n["data_stream"]):
-        es.delete("/" + name)
-        log("leftover index %s deleted" % name)
-    log("data stream %s deleted" % n["data_stream"])
-
-    es.delete("/_index_template/" + n["template"])
-    es.delete("/_ilm/policy/" + n["ilm"])
-    log("index template and ilm policy deleted")
-
-    snaps = es.get_or_none("/_snapshot/%s/_all?ignore_unavailable=true"
-                           % n["repo"])
-    if snaps:
-        names_list = [snap_name(s) for s in snaps.get("snapshots", [])]
-        for i in range(0, len(names_list), 10):
-            batch = ",".join(names_list[i:i + 10])
-            es.delete("/_snapshot/%s/%s" % (n["repo"], batch), timeout=600)
-        log("%d snapshot(s) deleted from %s (each delete leaks blobs when "
-            "the store rejects batch deletes; that is the state under "
-            "test)" % (len(names_list), n["repo"]))
-        es.delete("/_snapshot/" + n["repo"])
-        log("repository %s unregistered" % n["repo"])
-
+    delete_cluster_objects(es, args, n)
     if state:
-        restore = {}
-        for key in MANAGED_SETTINGS:
-            if key in state["settings_changed"]:
-                restore[key] = state["prior_settings"].get(key)
-        es.put("/_cluster/settings", {"persistent": restore})
-        log("cluster settings restored to recorded prior values: %s"
-            % json.dumps(restore))
+        restore_managed_settings(es, state)
 
-    purged = 0
-    leftover = None
+    purged, leftover = 0, None
     if s3 is not None:
-        base = base_path.rstrip("/") + "/" if base_path else ""
-        objects = s3.list(base)
-        if args.purge_bucket:
-            for key, _size in objects:
-                s3.delete_object(key)
-                purged += 1
-            leftover = len(s3.list(base))
-            log("purged %d leaked object(s) under %s/%s via single-object "
-                "deletes; %d remain" % (purged, s3.bucket, base, leftover))
-        else:
-            leftover = len(objects)
-            if leftover:
-                log("%d object(s) remain under %s/%s: the blobs "
-                    "Elasticsearch failed to delete. Rerun teardown with "
-                    "--purge-bucket to remove them, or keep them as a "
-                    "measurement corpus" % (leftover, s3.bucket, base))
+        purged, leftover = clear_bucket(s3, base_path, args.purge_bucket)
     else:
         log("bucket state not checked (%s)" % s3_reason)
 
-    verdict = {"ts": now_iso(), "prefix": args.prefix, "clean": True,
-               "leftover_bucket_objects": leftover, "purged": purged}
-    res = es.get_or_none("/_resolve/index/*%s*?expand_wildcards=all"
-                         % args.prefix) or {}
-    remaining = [e["name"] for k in ("indices", "aliases", "data_streams")
-                 for e in res.get(k, [])]
-    for path, label in (("/_ilm/policy/" + n["ilm"], "ilm policy"),
-                        ("/_slm/policy/" + n["slm"], "slm policy"),
-                        ("/_snapshot/" + n["repo"], "repository"),
-                        ("/_index_template/" + n["template"], "template")):
-        if es.get_or_none(path):
-            remaining.append(label)
-    if remaining:
-        verdict["clean"] = False
-        verdict["remaining"] = remaining
-    if state:
-        current = read_prior_settings(es)
-        mismatched = {k: {"expected": state["prior_settings"].get(k),
-                          "actual": current.get(k)}
-                      for k in MANAGED_SETTINGS
-                      if k in state["settings_changed"]
-                      and current.get(k) != state["prior_settings"].get(k)}
-        if mismatched:
-            verdict["clean"] = False
-            verdict["settings_mismatch"] = mismatched
+    verdict = teardown_verdict(es, args, n, state)
+    verdict["leftover_bucket_objects"] = leftover
+    verdict["purged"] = purged
     print(json.dumps(verdict, sort_keys=True), flush=True)
-    if verdict["clean"] and state:
-        os.unlink(args.state_file)
-        log("teardown verified clean; state file removed")
-    elif not verdict["clean"]:
+    if not verdict["clean"]:
         log("teardown left residue, state file kept; see the verdict above")
         return 1
+    if state:
+        try:
+            os.unlink(args.state_file)
+            log("teardown verified clean; state file removed")
+        except OSError as problem:
+            log(f"teardown verified clean, but the state file "
+                f"{args.state_file!r} could not be removed "
+                f"({problem.__class__.__name__}); delete it before the next "
+                "run, which refuses to start while it exists")
     return 0
 
 
@@ -1225,10 +1445,10 @@ def main():
     if not args.base_path_explicit:
         args.base_path = args.prefix
 
-    password = None
+    if args.insecure:
+        refuse_insecure_off_lab(args.es, "--es")
     if args.password_file:
-        with open(args.password_file) as f:
-            password = f.read().strip()
+        password = read_secret_file(args.password_file, "--password-file")
     else:
         password = os.environ.get("ES_PASSWORD")
     es = Es(args.es, args.user, password, args.ca_cert, args.insecure)
@@ -1244,11 +1464,10 @@ def main():
     if args.cmd == "status":
         base_path = args.base_path
         if os.path.exists(args.state_file):
-            with open(args.state_file) as f:
-                state = json.load(f)
+            state = load_state(args.state_file)
             n = state["names"]
             base_path = state.get("base_path", base_path)
-        rep = gather_report(es, n, s3, s3_reason, base_path)
+        rep = gather_report(Rig(es, n, s3, s3_reason, base_path))
         print(json.dumps(rep, sort_keys=True, indent=2))
         return 0
     if args.cmd == "teardown":

@@ -47,6 +47,18 @@ TOKEN_END_ARRAY = 0xF9
 TOKEN_START_OBJECT = 0xFA
 TOKEN_END_OBJECT = 0xFB
 
+# The four tokens that stand for a whole value on their own, and the four that
+# introduce a number. Both are written out here so the value dispatcher can ask
+# which family a token belongs to in one test instead of four.
+SIMPLE_LITERALS = {
+    TOKEN_LITERAL_EMPTY_STRING: "",
+    TOKEN_LITERAL_NULL: None,
+    TOKEN_LITERAL_FALSE: False,
+    TOKEN_LITERAL_TRUE: True,
+}
+NUMBER_TOKENS = frozenset(
+    (TOKEN_INT_32, TOKEN_INT_64, TOKEN_FLOAT_32, TOKEN_FLOAT_64))
+
 MAX_DEPTH = 200
 
 
@@ -163,30 +175,48 @@ class _Decoder:
             return self._object(depth + 1)
         if token == TOKEN_START_ARRAY:
             return self._array(depth + 1)
-        if 0x01 <= token <= 0x1F:
-            return self._values.get(token - 1)
-        if 0x30 <= token <= 0x33:
-            return self._values.get(((token & 0x03) << 8) | self._byte())
-        if token == TOKEN_LITERAL_EMPTY_STRING:
-            return ""
-        if token == TOKEN_LITERAL_NULL:
-            return None
-        if token == TOKEN_LITERAL_FALSE:
-            return False
-        if token == TOKEN_LITERAL_TRUE:
-            return True
-        if token in (TOKEN_INT_32, TOKEN_INT_64):
-            return _zigzag(self._vint())
+        return self._scalar(token)
+
+    def _scalar(self, token: int) -> Any:
+        """A value that holds no other value.
+
+        The three families below occupy disjoint token values, which is worth
+        saying because it means the order they are tried in decides nothing.
+        A token belonging to none of them falls through to the reserved-token
+        refusal at the end of `_text_or_binary`.
+        """
+        if token in SIMPLE_LITERALS:
+            return SIMPLE_LITERALS[token]
+        if token in NUMBER_TOKENS or 0xC0 <= token <= 0xDF:
+            return self._number(token)
+        return self._text_or_binary(token)
+
+    def _number(self, token: int) -> Any:
+        """A number written into the token itself, or into what follows it.
+
+        There is no refusal at the end because there is nothing left to refuse:
+        `_scalar` sends only the four number tokens and the small-int range
+        here, and the two it does not name above are `TOKEN_INT_32` and
+        `TOKEN_INT_64`, which both write a zigzag vint.
+        """
+        if 0xC0 <= token <= 0xDF:
+            return _zigzag(token & 0x1F)
         if token == TOKEN_FLOAT_32:
             return struct.unpack(">f", self._bits(5, 4))[0]
         if token == TOKEN_FLOAT_64:
             return struct.unpack(">d", self._bits(10, 8))[0]
+        return _zigzag(self._vint())
+
+    def _text_or_binary(self, token: int) -> Any:
+        """A string, a back reference to one, or a run of bytes."""
+        if 0x01 <= token <= 0x1F:
+            return self._values.get(token - 1)
+        if 0x30 <= token <= 0x33:
+            return self._values.get(((token & 0x03) << 8) | self._byte())
         if 0x40 <= token <= 0x7F:
             return self._shared_string(self._ascii_length(token))
         if 0x80 <= token <= 0xBF:
             return self._shared_string(self._unicode_length(token))
-        if 0xC0 <= token <= 0xDF:
-            return _zigzag(token & 0x1F)
         if 0xE0 <= token <= 0xE7:
             return self._long_text()
         if 0xE8 <= token <= 0xEB:

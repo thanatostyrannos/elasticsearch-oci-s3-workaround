@@ -160,38 +160,16 @@ def _place(key: str, chain: Chain, surviving: Set[str],
 
     match = ROOT_GENERATION.match(key)
     if match:
-        generation = int(match.group(1))
-        if generation == chain.current_generation:
-            return LIVE, "the current root generation"
-        if generation < chain.current_generation:
-            return EVIDENCE, (
-                "a superseded root generation; Elasticsearch's delete removes "
-                "these and this tool will not, because the derivation reads "
-                "them to learn what a delete removed")
-        return UNEXPLAINED, (
-            f"names a generation above {chain.current_generation}, which this "
-            "run anchored on")
+        return _place_root_generation(int(match.group(1)), chain)
 
     match = ROOT_DOCUMENT.match(key)
     if match:
-        kind, uuid = match.group(1), match.group(2)
-        what = "snapshot" if kind == "snap" else "global metadata"
-        if uuid in surviving:
-            return LIVE, f"the {what} document of a live snapshot"
-        return UNEXPLAINED, (
-            f"a {what} document for snapshot {uuid}, which no generation this "
-            "run could read names")
+        return _place_root_document(match.group(1), match.group(2), surviving)
 
     match = INDEX_METADATA.match(key)
     if match:
-        index_uuid, blob_id = match.group(1), match.group(2)
-        if live_metadata is None:
-            return UNEXPLAINED, (
-                "index metadata, and this run established no live set for "
-                "index metadata")
-        if blob_id in live_metadata.get(index_uuid, set()):
-            return LIVE, "index metadata a live snapshot references"
-        return UNEXPLAINED, "index metadata no live snapshot references"
+        return _place_index_metadata(match.group(1), match.group(2),
+                                     live_metadata)
 
     match = SHARD_PATH.match(key)
     if match:
@@ -200,6 +178,48 @@ def _place(key: str, chain: Chain, surviving: Set[str],
             surviving, current_shard_generation, live_blobs, survey)
 
     return OUTSIDE_MODEL, "not an object this tool models"
+
+
+def _place_root_generation(generation: int, chain: Chain) -> Tuple[str, str]:
+    """Where one `index-<n>` sits against the generation this run used."""
+    if generation == chain.current_generation:
+        return LIVE, "the current root generation"
+    if generation < chain.current_generation:
+        return EVIDENCE, (
+            "a superseded root generation; Elasticsearch's delete removes "
+            "these and this tool will not, because the derivation reads "
+            "them to learn what a delete removed")
+    return UNEXPLAINED, (
+        f"names a generation above {chain.current_generation}, which this "
+        "run anchored on")
+
+
+def _place_root_document(kind: str, uuid: str,
+                         surviving: Set[str]) -> Tuple[str, str]:
+    """Whether the snapshot a `snap-` or `meta-` document names is live."""
+    what = "snapshot" if kind == "snap" else "global metadata"
+    if uuid in surviving:
+        return LIVE, f"the {what} document of a live snapshot"
+    return UNEXPLAINED, (
+        f"a {what} document for snapshot {uuid}, which no generation this "
+        "run could read names")
+
+
+def _place_index_metadata(index_uuid: str, blob_id: str,
+                          live_metadata: Optional[Dict[str, Set[str]]]
+                          ) -> Tuple[str, str]:
+    """Whether a live snapshot still references one index metadata blob.
+
+    A None live set is no answer rather than an empty one, so the blob is
+    unexplained instead of being read as unreferenced.
+    """
+    if live_metadata is None:
+        return UNEXPLAINED, (
+            "index metadata, and this run established no live set for "
+            "index metadata")
+    if blob_id in live_metadata.get(index_uuid, set()):
+        return LIVE, "index metadata a live snapshot references"
+    return UNEXPLAINED, "index metadata no live snapshot references"
 
 
 def _place_in_shard(directory: str, name: str, surviving: Set[str],

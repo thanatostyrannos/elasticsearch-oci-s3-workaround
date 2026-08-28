@@ -96,6 +96,41 @@ def parse_listing_body(body: bytes):
         raise SourceReadError(f"the listing is not XML: {exc}") from exc
 
 
+def _entry_size(contents: ET.Element) -> Optional[int]:
+    """Stored bytes for one listing entry, or None when the store did not say.
+
+    A missing or unparseable Size is left out rather than guessed. The report
+    counts what it could not size and calls its total a floor, which is the
+    honest direction for a number an operator quotes upward.
+    """
+    raw = contents.findtext(f"{LIST_NAMESPACE}Size")
+    if raw is None:
+        return None
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return None
+
+
+def _continuation_token(tree: ET.Element) -> Optional[str]:
+    """The token for the next page, or None when this page was the last.
+
+    A store that says it is truncated and names no token has ended the
+    listing early. Reading that as the end returns a repository smaller than
+    it is, and every generation and blob past that point silently does not
+    exist as far as the run is concerned.
+    """
+    truncated = tree.findtext(f"{LIST_NAMESPACE}IsTruncated", "false")
+    if truncated.strip().lower() != "true":
+        return None
+    token = tree.findtext(f"{LIST_NAMESPACE}NextContinuationToken")
+    if not token:
+        raise SourceReadError(
+            "the listing says it is truncated and names no continuation "
+            "token")
+    return token
+
+
 class S3CompatibleSource:
     """Reads one repository over the S3 compatibility API, path style."""
 
@@ -187,35 +222,35 @@ class S3CompatibleSource:
             f"the listing did not finish in {MAX_PAGES} pages")
 
     def _page(self, body: bytes):
+        """One listing page: its keys under this prefix, and the next token."""
         tree = parse_listing_body(body)
+        return self._page_keys(tree), _continuation_token(tree)
+
+    def _page_keys(self, tree: ET.Element) -> List[str]:
+        """The keys on this page that belong to this repository.
+
+        Sizes are recorded on the way past, from the same entry the key came
+        from. A key outside the prefix belongs to another repository sharing
+        the bucket, and it is dropped here rather than carried as a None.
+        """
         decode = self._decoder(tree)
-        keys = []
+        keys: List[str] = []
         for contents in tree.findall(f"{LIST_NAMESPACE}Contents"):
-            element = contents.find(f"{LIST_NAMESPACE}Key")
-            if element is None or element.text is None:
-                raise SourceReadError("a listing entry carries no key")
-            relative = self._relative(decode(element.text))
+            relative = self._entry_key(contents, decode)
+            if relative is None:
+                continue
             keys.append(relative)
-            # A missing or unparseable Size is left out rather than guessed.
-            # The report counts what it could not size and calls its total a
-            # floor, which is the honest direction for a number an operator
-            # quotes upward.
-            if relative is not None:
-                raw = contents.findtext(f"{LIST_NAMESPACE}Size")
-                if raw is not None:
-                    try:
-                        self._sizes[relative] = int(raw.strip())
-                    except ValueError:
-                        pass
-        truncated = tree.findtext(f"{LIST_NAMESPACE}IsTruncated", "false")
-        token = tree.findtext(f"{LIST_NAMESPACE}NextContinuationToken")
-        if truncated.strip().lower() == "true":
-            if not token:
-                raise SourceReadError(
-                    "the listing says it is truncated and names no "
-                    "continuation token")
-            return [k for k in keys if k is not None], token
-        return [k for k in keys if k is not None], None
+            size = _entry_size(contents)
+            if size is not None:
+                self._sizes[relative] = size
+        return keys
+
+    def _entry_key(self, contents: ET.Element, decode) -> Optional[str]:
+        """One entry's key relative to the prefix, or None if it is outside."""
+        element = contents.find(f"{LIST_NAMESPACE}Key")
+        if element is None or element.text is None:
+            raise SourceReadError("a listing entry carries no key")
+        return self._relative(decode(element.text))
 
     @staticmethod
     def _decoder(tree: ET.Element):

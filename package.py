@@ -50,6 +50,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import sys
 import zipfile
 
@@ -113,32 +114,75 @@ PACKAGED_MUST_NOT_CONTAIN = (
 
 DOCUMENTATION_PREFIXES = ("docs/", "README.md", "FACTS.md")
 
+# --version reaches the filesystem twice: in the archive's own name, and in
+# the directory name every member unpacks into. Both are path components, not
+# labels, so a value carrying a separator or a parent reference writes the
+# archive somewhere the operator did not name and unpacks members outside the
+# directory the archive promises. Constrained to the characters a version
+# number actually uses, and required to start with an alphanumeric so a
+# leading dot or dash cannot start one either.
+SAFE_VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+_-]*\Z")
+
 
 class ReleaseRefused(Exception):
     """The build stopped rather than shipping something it should not."""
 
 
-def members():
-    """Every path that ships, relative to the repository root, sorted."""
+def tree_members(tree, suffixes):
+    """Every shipped file under one packaged tree, relative to the root."""
     found = []
-    for tree, suffixes in PACKAGED_TREES:
-        base = os.path.join(ROOT, tree)
-        for directory, _, names in os.walk(base):
-            if "__pycache__" in directory:
-                continue
-            for name in names:
-                if not name.endswith(suffixes):
-                    continue
+    for directory, _, names in os.walk(os.path.join(ROOT, tree)):
+        if "__pycache__" in directory:
+            continue
+        for name in names:
+            if name.endswith(suffixes):
                 absolute = os.path.join(directory, name)
                 found.append(os.path.relpath(absolute, ROOT))
+    return found
+
+
+def named_members():
+    """The individually listed files, refusing the build if one has moved."""
     for name in PACKAGED_FILES:
         if not os.path.exists(os.path.join(ROOT, name)):
             raise ReleaseRefused(
                 f"{name} is named in PACKAGED_FILES and is not in the tree. "
                 "Either it moved and the list is stale, or the release is "
                 "missing something an operator was promised.")
-        found.append(name)
-    return sorted(found)
+    return list(PACKAGED_FILES)
+
+
+def members():
+    """Every path that ships, relative to the repository root, sorted."""
+    found = []
+    for tree, suffixes in PACKAGED_TREES:
+        found.extend(tree_members(tree, suffixes))
+    return sorted(found + named_members())
+
+
+def archive_path(destination, stem):
+    """Where the archive goes, refusing a name that lands outside --out."""
+    directory = os.path.realpath(destination)
+    archive = os.path.realpath(os.path.join(directory, stem + ".zip"))
+    if os.path.dirname(archive) != directory:
+        raise ReleaseRefused(
+            f"the archive would be written to {archive!r}, which is not in "
+            f"{directory!r}. The release goes where --out names it and "
+            "nowhere else.")
+    return archive
+
+
+def release_stem(version):
+    """The archive's name and the directory its members unpack into."""
+    if version is None:
+        return NAME
+    if not SAFE_VERSION.match(version):
+        raise ReleaseRefused(
+            f"--version {version!r} is not a version. It names a directory "
+            "inside the archive and part of the archive's own filename, so "
+            "it may hold only letters, digits, dot, plus, underscore and "
+            "dash, and must start with a letter or digit.")
+    return f"{NAME}-{version}"
 
 
 def _refuse_credentials(relative, body):
@@ -157,9 +201,9 @@ def is_documentation(relative):
 
 def build(destination, version=None):
     """Write the archive and its checksum, and return the archive's path."""
+    stem = release_stem(version)
     os.makedirs(destination, exist_ok=True)
-    stem = f"{NAME}-{version}" if version else NAME
-    archive = os.path.join(destination, stem + ".zip")
+    archive = archive_path(destination, stem)
 
     bodies = {}
     for relative in members():
@@ -218,7 +262,8 @@ def main():
     with zipfile.ZipFile(archive) as zf:
         count = len(zf.namelist())
     print(f"{archive}  ({count} members)")
-    print(open(archive + ".sha256").read().strip())
+    with open(archive + ".sha256") as handle:
+        print(handle.read().strip())
     return 0
 
 

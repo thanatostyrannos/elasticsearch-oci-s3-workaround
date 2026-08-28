@@ -10,9 +10,54 @@ So the cheap checks run first because they are cheap, and none of them is
 believed. The answer comes from restoring a snapshot and counting what comes
 back. Exit 0 means intact, 1 means something is wrong and the caller should stop.
 """
-import json, os, ssl, sys, time, urllib.error, urllib.parse, urllib.request
-
 import argparse
+import base64
+import ipaddress
+import json
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+# Names a lab cluster answers on. Kubernetes hands out the first three to
+# in-cluster services, mDNS hands out .local, and a single-label name has no
+# public DNS to resolve it.
+LAB_HOST_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local",
+                     ".local", ".localdomain", ".internal")
+
+
+def is_lab_host(host):
+    """Is this an address only a lab or an in-cluster caller can reach?"""
+    if not host:
+        return False
+    host = host.rstrip(".")
+    if host == "localhost" or host.endswith(LAB_HOST_SUFFIXES):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # A name with no dot has no public DNS to resolve it, so it is a
+        # service name inside a cluster or a line in someone's hosts file.
+        return "." not in host
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+def read_secret(path, what):
+    """The one line in a secret file, or a refusal naming what would not open.
+
+    The message quotes the path and never the contents, because the contents
+    are the secret.
+    """
+    try:
+        with open(path) as handle:
+            return handle.read().strip()
+    except OSError as problem:
+        sys.exit(f"{what} {path!r} could not be read: "
+                 f"{problem.__class__.__name__}: "
+                 f"{problem.strerror or problem}")
+
 
 _p = argparse.ArgumentParser(
     description="Prove a snapshot repository is still restorable after deletion "
@@ -24,7 +69,10 @@ _p.add_argument("--user", default="elastic")
 _p.add_argument("--password-file", required=True, metavar="PATH",
                 help="a PATH, never a value: a secret in argv is visible in ps")
 _p.add_argument("--insecure", action="store_true",
-                help="skip TLS verification, for a self-signed development cluster")
+                help="skip TLS verification of --elasticsearch, for a lab "
+                     "cluster with a self-signed certificate. Accepted only "
+                     "for a loopback, private or in-cluster address; anything "
+                     "else needs a CA the certificate chains to")
 _a = _p.parse_args()
 
 ES, REPO = _a.elasticsearch.rstrip("/"), _a.repository
@@ -33,16 +81,30 @@ ES, REPO = _a.elasticsearch.rstrip("/"), _a.repository
 # configuration is not the same as trusted. urlopen does not care, and will
 # happily open file:// or ftp://. This script only ever needs http or https,
 # so anything else is refused before ES is ever passed to urlopen.
-_es_scheme = urllib.parse.urlsplit(ES).scheme
-if _es_scheme not in ("http", "https"):
+_split = urllib.parse.urlsplit(ES)
+if _split.scheme not in ("http", "https"):
     _p.error(f"--elasticsearch is {ES!r}; only http and https are accepted, "
-             f"so a {_es_scheme or '(no scheme)'!r} value cannot be opened")
-PW = open(_a.password_file).read().strip()
+             f"so a {_split.scheme or '(no scheme)'!r} value cannot be opened")
+
+# Verification starts on and is turned off only for the one endpoint the
+# operator named, and only when that endpoint is somewhere a lab cluster
+# lives. The restore this script drives reads a whole index back over the
+# connection; against a routable cluster an unverified connection hands the
+# contents to whoever answered.
 CTX = ssl.create_default_context()
 if _a.insecure:
+    if not is_lab_host(_split.hostname):
+        _p.error(f"--insecure was passed for {_split.hostname!r}, which is "
+                 "not a loopback, private or in-cluster address. It exists "
+                 "for a lab cluster serving its own certificate, not for a "
+                 "cluster anything can route to. Pass the CA that "
+                 "certificate chains to instead.")
+    print(f"  TLS verification is OFF for {_split.hostname}, by --insecure",
+          file=sys.stderr)
     CTX.check_hostname = False
     CTX.verify_mode = ssl.CERT_NONE
-import base64
+
+PW = read_secret(_a.password_file, "--password-file")
 AUTH = "Basic " + base64.b64encode(f"{_a.user}:{PW}".encode()).decode()
 
 

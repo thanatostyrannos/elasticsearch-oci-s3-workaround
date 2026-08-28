@@ -11,6 +11,9 @@ spec:
         app: minio-make-bucket
     spec:
       restartPolicy: OnFailure
+      # This job only talks to MinIO over S3; it never calls the
+      # Kubernetes API, so it does not need a service account token mounted.
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -37,6 +40,16 @@ spec:
               drop: ["ALL"]
             runAsUser: 1000
             runAsGroup: 1000
+          # One alias-set call and one bucket-create call, nothing else:
+          # sized for a shell script that makes two HTTP requests and exits.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+              ephemeral-storage: 32Mi
+            limits:
+              memory: 64Mi
+              ephemeral-storage: 64Mi
           volumeMounts:
             - name: tmp
               mountPath: /tmp

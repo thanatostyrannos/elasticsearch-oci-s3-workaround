@@ -19,6 +19,9 @@ spec:
         app: {{ include "rig.fullname" . }}-churn-rig
     spec:
       restartPolicy: Never
+      # This job talks to Elasticsearch and S3/OCI, never the Kubernetes
+      # API, so it does not need a service account token mounted.
+      automountServiceAccountToken: false
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

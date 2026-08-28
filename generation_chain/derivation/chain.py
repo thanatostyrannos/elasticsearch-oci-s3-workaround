@@ -168,16 +168,36 @@ def load_chain(source: RepositorySource, keys: List[str]) -> Chain:
             f"generation {current} names no live snapshots, so there is no "
             "live set to measure file lists against")
 
-    generations: Dict[int, RootGeneration] = {current: anchor}
+    below_anchor = [n for n in present if n < current and n not in rejected]
     # Every generation below the anchor gets read, in this order. Saying so
     # lets the transport overlap the round trips; it changes nothing about
     # which blobs are read or what happens when one of them fails.
-    hint(source, [f"index-{n}" for n in present
-                  if n not in generations and n not in rejected
-                  and n <= current])
-    for number in present:
-        if number in generations or number in rejected or number > current:
-            continue
+    hint(source, [f"index-{n}" for n in below_anchor])
+    generations: Dict[int, RootGeneration] = {current: anchor}
+    generations.update(
+        _read_below_anchor(source, below_anchor, repository_uuid, rejected))
+
+    if latest not in present:
+        notes.append(
+            f"{INDEX_LATEST_KEY} names generation {latest} and the listing "
+            "does not show it; that generation was read by key")
+    return Chain(current_generation=current, repository_uuid=repository_uuid,
+                 generations=generations, present=tuple(present),
+                 latest_generation=latest, anchored_by=anchored_by,
+                 rejected=rejected, notes=notes)
+
+
+def _read_below_anchor(source: RepositorySource, numbers: List[int],
+                       repository_uuid: str,
+                       rejected: Dict[int, str]) -> Dict[int, RootGeneration]:
+    """The generations under the anchor this run can read and can claim.
+
+    Anything else is recorded in `rejected` and contributes nothing, which is
+    always the safe direction: a generation left out is a delete operation
+    this run does not interpret, so the manifest gets shorter.
+    """
+    out: Dict[int, RootGeneration] = {}
+    for number in numbers:
         try:
             parsed = parse_repository_data(
                 source.fetch(f"index-{number}"), number)
@@ -192,25 +212,28 @@ def load_chain(source: RepositorySource, keys: List[str]) -> Chain:
         except (SourceReadError, GenerationChainError) as exc:
             rejected[number] = str(exc)
         else:
-            if parsed.repository_uuid is None:
-                rejected[number] = (
-                    "carries no repository uuid, which is no opinion rather "
-                    "than evidence, so it is not attributed to this repository")
-            elif parsed.repository_uuid != repository_uuid:
-                rejected[number] = (
-                    f"belongs to repository {parsed.repository_uuid}, not "
-                    f"{repository_uuid}")
+            refusal = _why_not_ours(parsed, repository_uuid)
+            if refusal is None:
+                out[number] = parsed
             else:
-                generations[number] = parsed
+                rejected[number] = refusal
+    return out
 
-    if latest not in present:
-        notes.append(
-            f"{INDEX_LATEST_KEY} names generation {latest} and the listing "
-            "does not show it; that generation was read by key")
-    return Chain(current_generation=current, repository_uuid=repository_uuid,
-                 generations=generations, present=tuple(present),
-                 latest_generation=latest, anchored_by=anchored_by,
-                 rejected=rejected, notes=notes)
+
+def _why_not_ours(parsed: RootGeneration,
+                  repository_uuid: str) -> Optional[str]:
+    """Why this generation is not attributed to our repository, or None.
+
+    No uuid at all is no opinion rather than evidence of a match, so it is
+    turned away on the same footing as a uuid naming somebody else.
+    """
+    if parsed.repository_uuid is None:
+        return ("carries no repository uuid, which is no opinion rather "
+                "than evidence, so it is not attributed to this repository")
+    if parsed.repository_uuid != repository_uuid:
+        return (f"belongs to repository {parsed.repository_uuid}, not "
+                f"{repository_uuid}")
+    return None
 
 
 def _highest_ours(source: RepositorySource, present: List[int], latest: int,

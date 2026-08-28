@@ -24,6 +24,9 @@ spec:
         app: {{ include "rig.fullname" . }}-minio-make-bucket
     spec:
       restartPolicy: OnFailure
+      # This job only talks to MinIO over S3; it never calls the
+      # Kubernetes API, so it does not need a service account token mounted.
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -35,6 +38,8 @@ spec:
               value: "1"
           securityContext:
             {{- include "rig.securityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.initContainerResources | nindent 12 }}
           command:
             - python3
             - -c
@@ -85,6 +90,8 @@ spec:
               drop: ["ALL"]
             runAsUser: 1000
             runAsGroup: 1000
+          resources:
+            {{- toYaml .Values.minio.mcResources | nindent 12 }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

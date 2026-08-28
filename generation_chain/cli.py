@@ -28,6 +28,7 @@ from .corroboration import (CorroborationUnavailable,
                             ElasticsearchVeto, Veto)
 from .derivation.audit import run_audit
 from .errors import GenerationChainError
+from .paths import checked_path
 from .model import AuditResult
 from .reporting import coverage as coverage_report
 from .reporting import manifest as manifest_writer
@@ -303,7 +304,8 @@ def _budget_bytes(args: argparse.Namespace) -> Optional[int]:
     return available_bytes()
 
 
-def _named_transport(args: argparse.Namespace, stderr: TextIO) -> Optional[str]:
+def _named_transport(args: argparse.Namespace) -> Optional[str]:
+    """The transport the invocation names, or None if it names none."""
     if args.transport and args.local_repo and args.transport != "local":
         raise Misconfigured(
             f"--transport {args.transport} and --local-repo name different "
@@ -315,34 +317,80 @@ def _named_transport(args: argparse.Namespace, stderr: TextIO) -> Optional[str]:
     return None
 
 
+def _resolve_transport(args: argparse.Namespace, stdin: TextIO,
+                       stderr: TextIO) -> str:
+    """The transport, from the flags or from the operator, or a refusal."""
+    named = _named_transport(args)
+    if named is not None:
+        return named
+    if not stdin.isatty():
+        raise Misconfigured(
+            "No transport was named and there is no terminal to ask at. Pass "
+            f"--transport {{{','.join(TRANSPORTS)}}}, or --local-repo DIR for "
+            "a mirror. Nothing was read.")
+    return choose_transport(stdin, stderr)
+
+
+def _stream_or(stream: Optional[TextIO], fallback: TextIO) -> TextIO:
+    return stream if stream is not None else fallback
+
+
+def _progress_writer(stderr: TextIO):
+    """A progress line writer, or the report has nothing to say for minutes."""
+    def _progress(message: str) -> None:
+        # Straight to stderr, unbuffered, so it is visible while the run is
+        # still going. The report goes to stderr too and the manifest goes to
+        # its own file, so nothing here can end up parsed as a result.
+        stderr.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
+        stderr.flush()
+    return _progress
+
+
+def _reported_sizes(source) -> dict:
+    """Stored bytes per key, when the transport can say so for free.
+
+    Optional across transports. A source that cannot size cheaply omits the
+    method, and the report says so rather than paying a request per object. A
+    source that offers one and then fails is treated the same way: sizes
+    qualify the report and nothing is condemned on them, so losing them must
+    not lose the manifest.
+    """
+    sizer = getattr(source, "sizes", None)
+    if not callable(sizer):
+        return {}
+    try:
+        return sizer()
+    except Exception:
+        return {}
+
+
+def _exit_code(coverage) -> int:
+    """The exit code this run's coverage earns. See EXIT_CODES."""
+    if not coverage.refused:
+        return EXIT_OK
+    if coverage.refusal_needs_a_bigger_host:
+        return EXIT_TOO_BIG
+    return EXIT_TRANSPORT if coverage.refusal_is_transient else EXIT_REFUSED
+
+
 def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
          stdout: Optional[TextIO] = None,
          stderr: Optional[TextIO] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    stdin = stdin if stdin is not None else sys.stdin
-    stdout = stdout if stdout is not None else sys.stdout
-    stderr = stderr if stderr is not None else sys.stderr
+    stdin = _stream_or(stdin, sys.stdin)
+    stdout = _stream_or(stdout, sys.stdout)
+    stderr = _stream_or(stderr, sys.stderr)
 
     if args.self_test:
         return EXIT_OK if selftest.run(stderr) == 0 else EXIT_REFUSED
 
     try:
-        transport = _named_transport(args, stderr)
-        if transport is None:
-            if not stdin.isatty():
-                stderr.write(
-                    "No transport was named and there is no terminal to ask "
-                    f"at. Pass --transport {{{','.join(TRANSPORTS)}}}, or "
-                    "--local-repo DIR for a mirror. Nothing was read.\n")
-                return EXIT_USAGE
-            transport = choose_transport(stdin, stderr)
+        transport = _resolve_transport(args, stdin, stderr)
         # The stack the run reads through: the transport, then the guard,
-        # escalation and read-ahead wrappers `prepared` assembles. The
-        # memory ceiling no longer wraps the transport: it used to refuse a
-        # repository this host could not hold in one go, and now it sizes
-        # how many shard directories `run_audit` reads at once, so it is
-        # passed to `run_audit` below instead of built into the source.
+        # escalation and read-ahead wrappers `prepared` assembles. The memory
+        # ceiling is not part of it. It sizes how many shard directories
+        # `run_audit` reads at once, so it goes to `run_audit` below.
         source = prepared(build_source(transport, args, stdin, stderr),
                           concurrency=args.concurrency)
     except GenerationChainError as exc:
@@ -357,32 +405,16 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
     except GenerationChainError as exc:
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
-    def _progress(message: str) -> None:
-        # Straight to stderr, unbuffered, so it is visible while the run is
-        # still going. The report goes to stderr too and the manifest goes to
-        # its own file, so nothing here can end up parsed as a result.
-        stderr.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
-        stderr.flush()
 
-    result = run_audit(source, veto, budget_bytes=_budget_bytes(args),
-                       progress=None if args.quiet else _progress)
-    # Optional across transports. A source that cannot size cheaply omits the
-    # method, and the report says so rather than paying a request per object.
-    sizer = getattr(source, "sizes", None)
-    try:
-        sizes = sizer() if callable(sizer) else {}
-    except Exception:
-        sizes = {}
+    result = run_audit(
+        source, veto, budget_bytes=_budget_bytes(args),
+        progress=None if args.quiet else _progress_writer(stderr))
     _write(result, transport, source.describe(), args, stdout, stderr,
-           sizes=sizes)
-    if not result.coverage.refused:
-        return EXIT_OK
-    if result.coverage.refusal_needs_a_bigger_host:
-        return EXIT_TOO_BIG
-    return EXIT_TRANSPORT if result.coverage.refusal_is_transient else EXIT_REFUSED
+           sizes=_reported_sizes(source))
+    return _exit_code(result.coverage)
 
 
-def _write_atomically(path: str, render) -> None:
+def _write_atomically(path: str, render, purpose: str = "an output file") -> None:
     """Write through a neighbouring temporary file and rename over the target.
 
     A manifest is a list an operator acts on. A run interrupted part way
@@ -390,21 +422,27 @@ def _write_atomically(path: str, render) -> None:
     manifest, and nothing in it says it was cut off. The rename makes the file
     appear whole or not at all.
 
+    The path is checked and resolved before anything is created, so the
+    temporary file lands beside the file that will actually be replaced rather
+    than beside the path as it was spelled. `purpose` names the flag it came
+    from, because three flags here take a path.
+
     A path this cannot be done next to, such as /dev/null, is written directly.
     """
-    directory = os.path.dirname(os.path.abspath(path)) or "."
+    target = checked_path(path, purpose)
+    directory = os.path.dirname(target) or "."
     try:
         handle = tempfile.NamedTemporaryFile(
             "w", encoding="utf-8", dir=directory, prefix=".genchain-",
             suffix=".part", delete=False)
     except OSError:
-        with open(path, "w", encoding="utf-8") as direct:
+        with open(target, "w", encoding="utf-8") as direct:
             render(direct)
         return
     try:
         with handle:
             render(handle)
-        os.replace(handle.name, path)
+        os.replace(handle.name, target)
     except BaseException:
         safe_unlink(handle.name)
         raise
@@ -443,17 +481,21 @@ def _write(result: AuditResult, transport: str, location: str,
                      "a tab, a newline or a control character and cannot be "
                      "written to a tab separated file.\n")
     if args.manifest:
-        _write_atomically(args.manifest, lambda h: _write_manifest_file(result, h))
+        _write_atomically(args.manifest,
+                          lambda h: _write_manifest_file(result, h),
+                          "--manifest")
     else:
         manifest_writer.write_manifest(result.condemned, stdout)
     if args.classification:
         _write_atomically(args.classification, lambda h:
                           manifest_writer.write_classification(
-                              result.classification, h))
+                              result.classification, h),
+                          "--classification")
     if args.coverage_json:
         document = coverage_report.as_document(result, transport, location)
         _write_atomically(args.coverage_json, lambda h:
-                          json.dump(document, h, indent=1, sort_keys=True))
+                          json.dump(document, h, indent=1, sort_keys=True),
+                          "--coverage-json")
 
 
 

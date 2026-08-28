@@ -169,13 +169,54 @@ FAILED = re.compile(r"^failed:\s*(\d+)", re.M)
 UNCONFIRMED = re.compile(r"^unconfirmed:\s*(\d+)", re.M)
 DIGEST = re.compile(r"approve-digest ([0-9a-f]{64})")
 ROWS = re.compile(r"approve-rows (\d+)")
-RECLAIMABLE = re.compile(r"^Reclaimable\n\s+(.+)$", re.M)
+# The capture starts at the first non-space on purpose. With `\s+(.+)`
+# the two halves both match spaces, so there are as many ways to split a run
+# of them as there are spaces, and the engine tries them all on a line that
+# does not end the way it expects.
+RECLAIMABLE = re.compile(r"^Reclaimable\n[ \t]+(\S.*)$", re.M)
 SEGMENTS_READ = re.compile(r"shard directories read: (\d+) of (\d+)")
 
 # Consecutive subprocess executions are spaced by this many seconds. The audit,
 # the dry run and the execute all talk to the same endpoint, and running them
 # back to back gives it no gap at all.
 EXECUTION_GAP_SECONDS = 1
+
+
+def artifact(outdir, name):
+    """The path of one run artifact under --out, refusing to leave it.
+
+    Every name comes from this file and carries a cycle number, so the check
+    is an invariant rather than a guess about the caller. It holds --out
+    itself to the directory the operator named, which is the part that comes
+    from outside.
+    """
+    directory = os.path.realpath(outdir)
+    path = os.path.realpath(os.path.join(directory, name))
+    if os.path.dirname(path) != directory:
+        raise ValueError(f"{name!r} would be written to {path!r}, which is "
+                         f"outside --out {directory!r}")
+    return path
+
+
+def read_text(path):
+    """A whole artifact file, closed before the caller reads a line of it."""
+    with open(path) as handle:
+        return handle.read()
+
+
+def read_secret_file(path, what):
+    """The one line in a secret file, or a refusal naming what would not open.
+
+    The message quotes the path and never the contents, because the contents
+    are the secret.
+    """
+    try:
+        with open(path) as handle:
+            return handle.read().strip()
+    except OSError as problem:
+        raise ValueError(f"{what} {path!r} could not be read: "
+                         f"{problem.__class__.__name__}: "
+                         f"{problem.strerror or problem}")
 
 
 def counted(pattern, text):
@@ -344,8 +385,8 @@ def cycle(args, n, mode, outdir, log):
     if mode == "segment":
         ok, note = wait_until_ready(args, log)
 
-    manifest = os.path.join(outdir, f"manifest-{n}.tsv")
-    derive = os.path.join(outdir, f"derive-{n}.txt")
+    manifest = artifact(outdir, f"manifest-{n}.tsv")
+    derive = artifact(outdir, f"derive-{n}.txt")
     cmd = [sys.executable, "-m", "generation_chain"] + transport_flags(args) + [
         "--bucket", args.bucket, "--prefix", args.prefix,
         "--credentials", args.credentials, "--manifest", manifest]
@@ -354,7 +395,7 @@ def cycle(args, n, mode, outdir, log):
                 "--es-repository", args.repository]
     rc, _ = run(cmd, derive, args.timeout)
 
-    report = open(derive).read()
+    report = read_text(derive)
     m = SEGMENTS_READ.search(report)
     shards_read = f"{m.group(1)}/{m.group(2)}" if m else "?"
     r = RECLAIMABLE.search(report)
@@ -368,19 +409,19 @@ def cycle(args, n, mode, outdir, log):
 
     deleted = failed = unconfirmed = 0
     time.sleep(EXECUTION_GAP_SECONDS)
-    dry = os.path.join(outdir, f"dry-{n}.txt")
+    dry = artifact(outdir, f"dry-{n}.txt")
     base = reclaim_command(args, manifest)
     run(base, dry, args.timeout)
-    text = open(dry).read()
+    text = read_text(dry)
     dg, rw = DIGEST.search(text), ROWS.search(text)
     if dg and rw and not args.dry_run_only:
         time.sleep(EXECUTION_GAP_SECONDS)
-        ex = os.path.join(outdir, f"exec-{n}.txt")
+        ex = artifact(outdir, f"exec-{n}.txt")
         run(base + ["--execute", "--approve-digest", dg.group(1),
                     "--approve-rows", rw.group(1),
-                    "--report", os.path.join(outdir, f"report-{n}.jsonl")],
+                    "--report", artifact(outdir, f"report-{n}.jsonl")],
             ex, args.timeout)
-        got = open(ex).read()
+        got = read_text(ex)
         deleted = counted(DELETED, got)
         failed = counted(FAILED, got)
         unconfirmed = counted(UNCONFIRMED, got)
@@ -552,14 +593,25 @@ def main():
         p.error("segment mode needs --data-stream to check shard population")
     args.es_password = ""
     if args.es_password_file:
-        args.es_password = open(args.es_password_file).read().strip()
+        try:
+            args.es_password = read_secret_file(args.es_password_file,
+                                                "--es-password-file")
+        except ValueError as exc:
+            p.error(str(exc))
 
     problem = corroboration_credential_problem(args)
     if problem:
         p.error(problem)
 
-    os.makedirs(args.out, exist_ok=True)
-    tsv = os.path.join(args.out, "cycles.tsv")
+    # Resolved once, here, so every artifact path below is a join onto a
+    # directory that exists and has already been through the filesystem.
+    args.out = os.path.realpath(args.out)
+    try:
+        os.makedirs(args.out, exist_ok=True)
+    except OSError as exc:
+        p.error(f"--out {args.out!r} could not be created: "
+                f"{exc.__class__.__name__}: {exc.strerror or exc}")
+    tsv = artifact(args.out, "cycles.tsv")
     if not os.path.exists(tsv):
         with open(tsv, "w") as fh:
             fh.write("\t".join(COLUMNS) + "\n")

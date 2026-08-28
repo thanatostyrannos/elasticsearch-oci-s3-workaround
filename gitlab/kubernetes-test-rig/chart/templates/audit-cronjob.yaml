@@ -35,6 +35,10 @@ spec:
             app: {{ include "rig.fullname" . }}-audit
         spec:
           restartPolicy: Never
+          # This job only reads from the bucket over S3/OCI (GET/HEAD); it
+          # never calls the Kubernetes API, so it does not need a service
+          # account token mounted.
+          automountServiceAccountToken: false
           {{- with .Values.image.pullSecrets }}
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}

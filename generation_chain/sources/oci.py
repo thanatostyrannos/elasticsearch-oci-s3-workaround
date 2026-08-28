@@ -31,14 +31,16 @@ MAX_KEYS_PER_PAGE = 1000
 # Only the realms whose second-level domain is not oraclecloud.com. Anything
 # missing here falls back, and an operator in a realm nobody enumerated needs
 # the override rather than a table this package cannot keep current.
+US_GOV_DOMAIN = "oraclegovcloud.com"
+UK_GOV_DOMAIN = "oraclegovcloud.uk"
 REALM_DOMAINS = {
-    "us-langley-1": "oraclegovcloud.com",
-    "us-luke-1": "oraclegovcloud.com",
-    "us-gov-ashburn-1": "oraclegovcloud.com",
-    "us-gov-chicago-1": "oraclegovcloud.com",
-    "us-gov-phoenix-1": "oraclegovcloud.com",
-    "uk-gov-london-1": "oraclegovcloud.uk",
-    "uk-gov-cardiff-1": "oraclegovcloud.uk",
+    "us-langley-1": US_GOV_DOMAIN,
+    "us-luke-1": US_GOV_DOMAIN,
+    "us-gov-ashburn-1": US_GOV_DOMAIN,
+    "us-gov-chicago-1": US_GOV_DOMAIN,
+    "us-gov-phoenix-1": US_GOV_DOMAIN,
+    "uk-gov-london-1": UK_GOV_DOMAIN,
+    "uk-gov-cardiff-1": UK_GOV_DOMAIN,
 }
 DEFAULT_REALM_DOMAIN = "oraclecloud.com"
 ENDPOINT_ENV_VAR = "OCI_OBJECTSTORAGE_ENDPOINT"

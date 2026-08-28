@@ -121,30 +121,76 @@ from __future__ import annotations
 
 import argparse
 import base64
+import collections
 import datetime as dt
+import ipaddress
 import json
 import math
 import ssl
 import statistics
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
-def http_get(url: str, args: argparse.Namespace) -> dict:
-    req = urllib.request.Request(url)
+# Names a lab cluster answers on. Kubernetes hands out the first three to
+# in-cluster services, mDNS hands out .local, and a single-label name has no
+# public DNS to resolve it.
+LAB_HOST_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local",
+                     ".local", ".localdomain", ".internal")
+
+
+def is_lab_host(host: str) -> bool:
+    """Is this an address only a lab or an in-cluster caller can reach?"""
+    if not host:
+        return False
+    host = host.rstrip(".")
+    if host == "localhost" or host.endswith(LAB_HOST_SUFFIXES):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # A name with no dot has no public DNS to resolve it, so it is a
+        # service name inside a cluster or a line in someone's hosts file.
+        return "." not in host
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+def tls_context(args: argparse.Namespace):
+    """The one TLS context this run uses, for the one endpoint it was given.
+
+    Verification starts on and is turned off only by --insecure, which main()
+    has already refused for anything but a lab address. Built once, here,
+    rather than per request, so the relaxed context belongs to the endpoint
+    the operator named and cannot end up on some other connection.
+    """
+    if not args.es.startswith("https"):
+        return None
+    ctx = ssl.create_default_context(cafile=args.ca_cert)
+    if args.insecure:
+        print(f"# TLS verification is OFF for "
+              f"{urllib.parse.urlsplit(args.es).hostname}, by --insecure",
+              file=sys.stderr)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
+def http_get(path: str, args: argparse.Namespace) -> dict:
+    """GET one path from the cluster --es names.
+
+    A path, never a whole URL. The host is the one the operator gave and
+    nothing passed in here can move the request to a different one.
+    """
+    req = urllib.request.Request(args.es + path)
     if args.user:
         tok = base64.b64encode(args.user.encode()).decode()
         req.add_header("Authorization", f"Basic {tok}")
     elif args.api_key:
         req.add_header("Authorization", f"ApiKey {args.api_key}")
-    ctx = None
-    if url.startswith("https"):
-        ctx = ssl.create_default_context(cafile=args.ca_cert)
-        if args.insecure:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-    with urllib.request.urlopen(req, context=ctx, timeout=120) as r:
+    with urllib.request.urlopen(  # nosec B310
+            req, context=getattr(args, "tls", None), timeout=120) as r:
         return json.load(r)
 
 
@@ -209,6 +255,19 @@ FROZEN_FOOTPRINT_LABEL = (
 FETCH_ERRORS = (urllib.error.URLError, OSError, ssl.SSLError, ValueError)
 
 
+def index_store_snapshot(settings_body: dict | None) -> dict | None:
+    """The index.store.snapshot subtree of one index, if it has one."""
+    store = (((settings_body or {}).get("settings") or {})
+             .get("index") or {}).get("store") or {}
+    snap = store.get("snapshot")
+    return snap if isinstance(snap, dict) else None
+
+
+def is_partial_mount(snap: dict) -> bool:
+    """True for a frozen-tier shared_cache mount, false for a cold-tier copy."""
+    return str(snap.get("partial", "false")).lower() == "true"
+
+
 def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     """Discover snapshots pinned by mounted searchable-snapshot indices.
 
@@ -223,27 +282,21 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     both a partial and a full mount reports both flags true.
     """
     data = http_get(
-        f"{args.es}/*/_settings?filter_path=*.settings.index.store.snapshot",
-        args,
-    )
+        "/*/_settings?filter_path=*.settings.index.store.snapshot", args)
     mounted: dict[str, dict] = {}
     for index, body in (data or {}).items():
-        store = (((body or {}).get("settings") or {})
-                 .get("index") or {}).get("store") or {}
-        snap = store.get("snapshot")
-        if not isinstance(snap, dict):
-            continue
-        name = snap.get("snapshot_name")
+        snap = index_store_snapshot(body)
+        name = snap.get("snapshot_name") if snap else None
         if not name or snap.get("repository_name") != args.repo:
             continue
-        partial = str(snap.get("partial", "false")).lower() == "true"
-        e = mounted.setdefault(
+        entry = mounted.setdefault(
             name, {"partial": False, "full": False, "indices": [],
                    "uuid": None})
-        e["partial" if partial else "full"] = True
-        e["indices"].append(index)
-        if not e["uuid"]:
-            e["uuid"] = snap.get("snapshot_uuid") or None
+        tier = "partial" if is_partial_mount(snap) else "full"
+        entry[tier] = True
+        entry["indices"].append(index)
+        if not entry["uuid"]:
+            entry["uuid"] = snap.get("snapshot_uuid") or None
     return mounted
 
 
@@ -287,7 +340,7 @@ def emit_mounted(args: argparse.Namespace) -> int:
     # names lowercase and repository names are not, which is exactly how the
     # wrong character gets typed.
     try:
-        registered = http_get(f"{args.es}/_snapshot/{args.repo}", args)
+        registered = http_get(f"/_snapshot/{args.repo}", args)
     except FETCH_ERRORS as e:
         print(f"repository {args.repo!r} could not be resolved: {e}\n"
               f"List what exists with: GET {args.es}/_snapshot/_all\n"
@@ -390,10 +443,8 @@ def fetch_slm_policies(args: argparse.Namespace) -> dict[str, str]:
     snapshots have no metadata.policy.
     """
     data = http_get(
-        f"{args.es}/_snapshot/{args.repo}/*"
-        f"?filter_path=snapshots.snapshot,snapshots.metadata.policy",
-        args,
-    )
+        f"/_snapshot/{args.repo}/*"
+        f"?filter_path=snapshots.snapshot,snapshots.metadata.policy", args)
     out: dict[str, str] = {}
     for s in (data or {}).get("snapshots") or []:
         name = s.get("snapshot")
@@ -678,8 +729,7 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
     and its status code is the actionable half of the message.
     """
     try:
-        listing = http_get(f"{args.es}/_snapshot/{args.repo}/*?verbose=false",
-                           args)
+        listing = http_get(f"/_snapshot/{args.repo}/*?verbose=false", args)
     except urllib.error.HTTPError as e:
         print(f"ES returned HTTP {e.code} for {args.es}: {e.reason} "
               f"(check --user/--api-key and the repo name)", file=sys.stderr)
@@ -704,9 +754,7 @@ def fetch_status_rows(args: argparse.Namespace,
         chunk = names[i : i + args.batch]
         try:
             st = http_get(
-                f"{args.es}/_snapshot/{args.repo}/{','.join(chunk)}/_status",
-                args,
-            )
+                f"/_snapshot/{args.repo}/{','.join(chunk)}/_status", args)
         except (urllib.error.URLError, OSError, ssl.SSLError) as e:
             print(f"_status fetch failed for batch {i//args.batch + 1}: {e} "
                   f"(partial results discarded)", file=sys.stderr)
@@ -787,6 +835,225 @@ def emit_classified(args: argparse.Namespace,
     return 0
 
 
+# Every number a sizing recommendation prints, computed once so the printing
+# below reads what it reports rather than recomputing it.
+Sizing = collections.namedtuple(
+    "Sizing",
+    "baseline_row baseline days samples median mean p95 growth growth_p95 "
+    "headroom frozen frozen_total total total_margin total_p95 "
+    "total_p95_margin skipped partial excluded first_snapshot_day")
+
+OPERATIONAL_MARGIN = 1.2
+
+RECOMMEND_HEADING = "\n=== Repository sizing recommendation ==="
+
+
+def slm_pool(rows: list, split: dict | None) -> list:
+    """The snapshots whose sizes may feed a recommendation.
+
+    IN_PROGRESS snapshots report partial totals and would pollute both the
+    baseline and the growth samples. Under --split-frozen this narrows again
+    to the slm class: a pinned mount snapshot is a footprint floor, not growth.
+    """
+    usable = [r for r in rows if r[4] in ("SUCCESS", "PARTIAL")]
+    if not split:
+        return usable
+    labels = split["labels"]
+    return [r for r in usable
+            if class_bucket(labels.get(r[1], CLASS_OTHER)) == CLASS_SLM]
+
+
+def measure_sizing(rows: list, retention_days: int,
+                   split: dict | None) -> Sizing | None:
+    """Work out the recommendation's arithmetic, or None with nothing to size.
+
+    Growth is aggregated per calendar day (UTC). Several snapshots on one day,
+    SLM dailies plus ILM mounts, would otherwise shrink the window.
+    """
+    usable = [r for r in rows if r[4] in ("SUCCESS", "PARTIAL")]
+    pool = slm_pool(rows, split)
+    if not pool:
+        return None
+
+    daily: dict[str, int] = {}
+    for ms, _name, inc, _tot, _state in pool:
+        day = period_key(ms, "day")
+        daily[day] = daily.get(day, 0) + inc
+    days = sorted(daily)[-retention_days:]
+    samples = [daily[d] for d in days]
+
+    # Baseline is the LARGEST snapshot total, not the newest row: whatever
+    # finished last may be a per-index mount snapshot. The repository floor is
+    # the union of every retained snapshot's referenced bytes, and the largest
+    # single total is a lower bound on that union.
+    baseline_row = max(pool, key=lambda r: r[3])
+    baseline = baseline_row[3]
+    median = statistics.median(samples)
+    growth = retention_days * median
+    growth_p95 = retention_days * p95(samples)
+    frozen = split_totals(usable, split)[1] if split else None
+    frozen_total = frozen["total"] if frozen else 0
+    # An upgrade day rewrites segments, so the next snapshot re-uploads far
+    # more than a normal day. One full baseline is the heuristic for that.
+    total = baseline + growth + baseline + frozen_total
+    total_p95 = baseline + growth_p95 + baseline + frozen_total
+    return Sizing(
+        baseline_row=baseline_row, baseline=baseline, days=days,
+        samples=samples, median=median, mean=statistics.fmean(samples),
+        p95=p95(samples), growth=growth, growth_p95=growth_p95,
+        headroom=baseline, frozen=frozen, frozen_total=frozen_total,
+        total=total, total_margin=total * OPERATIONAL_MARGIN,
+        total_p95=total_p95,
+        total_p95_margin=total_p95 * OPERATIONAL_MARGIN,
+        skipped=len(rows) - len(usable),
+        partial=sum(1 for r in pool if r[4] == "PARTIAL"),
+        excluded=len(usable) - len(pool),
+        first_snapshot_day=period_key(min(pool)[0], "day"))
+
+
+def print_frozen_caveat(split: dict | None) -> None:
+    """Say what the frozen tier does to these numbers, measured or not."""
+    if split:
+        print("\nNOTE: --split-frozen is active. Baseline and growth below")
+        print("come from the slm (regular backup) class ONLY, and the measured")
+        print("frozen footprint is added as its own term instead of being an")
+        print("unquantified undercount. A byte count over the blobs the")
+        print("repository's own metadata still reaches remains the ground")
+        print("truth for total repository capacity: the repo floor is the UNION of")
+        print("all retained snapshots, which these per-snapshot totals can")
+        print("only bound from below.")
+        return
+    print("\nWARNING (precondition): if this repository backs searchable")
+    print("snapshots (frozen tier), regular snapshots upload ZERO files for")
+    print("already-mounted indices, so the baseline below UNDERCOUNTS by the")
+    print("entire frozen footprint (it lives in separate pinned per-index")
+    print("mount snapshots). For such repositories a byte count over the")
+    print("reachable blobs is the sizing source of truth, not this")
+    print("recommendation.")
+
+
+def print_measured_inputs(sizing: Sizing, split: dict | None) -> None:
+    """The baseline, the frozen footprint, and what was left out of both."""
+    frozen = sizing.frozen
+    print("\nMeasured inputs (from _snapshot/<repo>/_status):")
+    if split:
+        print(f"  largest SLM snapshot total ({sizing.baseline_row[1]}) : "
+              f"{fmt(sizing.baseline)}")
+        print(f"  {FROZEN_FOOTPRINT_LABEL}: {fmt(sizing.frozen_total)}")
+        print(f"    partial mounts (frozen tier) : {frozen['partial_n']} "
+              f"snapshot(s), {fmt(frozen['partial_tot'])}")
+        print(f"    full mounts (cold tier)      : {frozen['full_n']} "
+              f"snapshot(s), {fmt(frozen['full_tot'])}")
+        if sizing.excluded:
+            print(f"  note: {sizing.excluded} non-slm snapshot(s) excluded "
+                  f"from baseline/growth")
+            print("  (frozen-pinned mounts are a footprint floor, not growth;")
+            print("  'other' snapshots have no policy and no mount pinning "
+                  "them).")
+    else:
+        print(f"  largest snapshot total ({sizing.baseline_row[1]}) : "
+              f"{fmt(sizing.baseline)}")
+    if sizing.skipped:
+        print(f"  note: {sizing.skipped} snapshot(s) excluded (not "
+              f"SUCCESS/PARTIAL,")
+        print("  e.g. IN_PROGRESS, whose partial totals would pollute them).")
+    if sizing.partial:
+        print(f"  warning: {sizing.partial} PARTIAL snapshot(s) included; "
+              f"some shards")
+        print("  failed, so their incrementals may understate real growth.")
+
+
+def print_growth_window(sizing: Sizing, split: dict | None) -> None:
+    """The daily growth samples, and what would make them misleading."""
+    window = (f"{len(sizing.days)} day(s) with data "
+              f"({sizing.days[0]} .. {sizing.days[-1]}):")
+    if split:
+        print("  growth samples (slm class ONLY): per-calendar-day incremental")
+        print(f"  sums over the last {window}")
+    else:
+        print("  growth samples: per-calendar-day incremental sums over the last")
+        print(f"  {window}")
+    print(f"    median daily growth : {fmt(sizing.median)}")
+    print(f"    mean daily growth   : {fmt(sizing.mean)}")
+    print(f"    p95 daily growth    : {fmt(sizing.p95)}")
+    # Earliest by timestamp, not input order. This must not depend on callers
+    # pre-sorting rows: a reversed list once produced a FALSE "growth is
+    # overstated" caveat.
+    if sizing.first_snapshot_day in sizing.days:
+        print("    note: window includes the repository's FIRST snapshot day,")
+        print("    whose incremental == a full upload; growth is overstated.")
+    if sizing.samples and sizing.median > 0 and \
+            max(sizing.samples) > 3 * sizing.median:
+        print(f"    note: outlier day present (max {fmt(max(sizing.samples))} "
+              f"> 3x median). Reindex/merge/upgrade days upload far more.")
+
+
+def print_formula(sizing: Sizing, retention_days: int,
+                  split: dict | None) -> None:
+    """The addition itself, term by term, in both variants."""
+    print(f"\nFormula (retention_days = {retention_days}):")
+    if split:
+        print(f"  baseline (largest slm snapshot total)     : "
+              f"{fmt(sizing.baseline)}")
+    else:
+        print(f"  baseline (largest snapshot total)         : "
+              f"{fmt(sizing.baseline)}")
+    print(f"  + retention growth ({retention_days} x median daily)     : "
+          f"{fmt(sizing.growth)}")
+    print(f"  + upgrade-day headroom (1 x baseline)     : "
+          f"{fmt(sizing.headroom)}")
+    if split:
+        print(f"  + frozen footprint (pinned mounts)        : "
+              f"{fmt(sizing.frozen_total)}")
+    print(f"  = recommended repository capacity         : {fmt(sizing.total)}")
+    print(f"  = with +20% operational margin            : "
+          f"{fmt(sizing.total_margin)}")
+    print(f"  conservative variant ({retention_days} x p95 daily):")
+    print(f"  = recommended repository capacity (p95)   : "
+          f"{fmt(sizing.total_p95)}")
+    print(f"  = with +20% operational margin (p95)      : "
+          f"{fmt(sizing.total_p95_margin)}")
+
+
+def print_assumptions(split: dict | None) -> None:
+    """What the arithmetic above takes on trust, and where it came from."""
+    print("\nAssumptions:")
+    print("  * Snapshots are incremental: each copies only new segments since")
+    print("    the previous snapshot; the first is ~full. [Elastic docs]")
+    print("  * The true repo floor is the UNION of all retained snapshots'")
+    print("    referenced bytes; the largest single snapshot total is a lower")
+    print("    bound on that union, used here as the baseline.")
+    print("  * Elastic recommends a fresh snapshot before upgrading, and large")
+    print("    segment rewrites (e.g. a version upgrade merging/rewriting")
+    print("    segments) make the next snapshot re-upload far more than a")
+    print("    normal day. Modeling that as 1x baseline full is a heuristic,")
+    print("    not an official Elastic figure.")
+    if split:
+        print("  * The frozen footprint is MEASURED (sum of pinned mount")
+        print("    snapshot totals), not estimated. It is a floor: mounts that")
+        print("    share segment lineage double-count, and it excludes any")
+        print("    blob the repository retains that no snapshot references.")
+        print("  * The +20% margin is applied to the whole figure, frozen term")
+        print("    included, so it stays conservative.")
+    print("  * The +20% margin is a heuristic, not an official Elastic figure.")
+    print("  * Elastic publishes no official repo-capacity formula; sizing here")
+    print("    is derived from documented incremental behavior only.")
+
+
+def print_retention_hint(retention_days: int) -> None:
+    """The SLM retention block that matches the window just sized."""
+    print(f"\nMatching SLM retention for a {retention_days}-day window, e.g.:")
+    print(f'  "retention": {{ "expire_after": "{retention_days}d", '
+          f'"min_count": 5 }}')
+    print("  (avoid max_count here: with multiple snapshots per day, from SLM")
+    print("  dailies plus ILM mount snapshots, a count bound can delete")
+    print("  snapshots that are still inside the time window.)")
+    print("\nSources (fetched 2026-08-24):")
+    print("  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore")
+    print("  https://www.elastic.co/docs/deploy-manage/upgrade/prepare-to-upgrade")
+    print("  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/create-snapshots")
+
+
 def recommend(rows: list[tuple[int, str, int, int, str]],
               retention_days: int,
               split: dict | None = None) -> None:
@@ -824,165 +1091,22 @@ def recommend(rows: list[tuple[int, str, int, int, str]],
     warning and becomes arithmetic: baseline and growth come from the `slm`
     class only, and the measured frozen footprint is added as its own term.
     """
-    usable = [r for r in rows if r[4] in ("SUCCESS", "PARTIAL")]
-    skipped = len(rows) - len(usable)
-    if split:
-        labels = split["labels"]
-        pool = [r for r in usable
-                if class_bucket(labels.get(r[1], CLASS_OTHER)) == CLASS_SLM]
-    else:
-        pool = usable
-    if not pool:
-        print("\n=== Repository sizing recommendation ===")
-        if split:
-            print("no SUCCESS/PARTIAL slm snapshots — cannot recommend a size.")
-        else:
-            print("no SUCCESS/PARTIAL snapshots — cannot recommend a size.")
+    sizing = measure_sizing(rows, retention_days, split)
+    if sizing is None:
+        print(RECOMMEND_HEADING)
+        which = "slm " if split else ""
+        print(f"no SUCCESS/PARTIAL {which}snapshots - cannot recommend a size.")
         return
-    partial = sum(1 for r in pool if r[4] == "PARTIAL")
-
-    baseline_row = max(pool, key=lambda r: r[3])
-    baseline = baseline_row[3]
-
-    # Per-calendar-day incremental sums (UTC), over the newest retention_days
-    # days that have any data.
-    daily: dict[str, int] = {}
-    for ms, _name, inc, _tot, _state in pool:
-        day = period_key(ms, "day")
-        daily[day] = daily.get(day, 0) + inc
-    days = sorted(daily)[-retention_days:]
-    samples = [daily[d] for d in days]
-    med = statistics.median(samples)
-    mean = statistics.fmean(samples)
-    p95v = p95(samples)
-    growth = retention_days * med
-    growth_p95 = retention_days * p95v
-    upgrade_headroom = baseline  # heuristic: upgrade day ~= one full snapshot
-    frozen_total = 0
-    if split:
-        _agg, frozen = split_totals(usable, split)
-        frozen_total = frozen["total"]
-    rec = baseline + growth + upgrade_headroom + frozen_total
-    rec_margin = rec * 1.2
-    rec_p95 = baseline + growth_p95 + upgrade_headroom + frozen_total
-    rec_p95_margin = rec_p95 * 1.2
-
-    print("\n=== Repository sizing recommendation ===")
-    if split:
-        print("\nNOTE: --split-frozen is active. Baseline and growth below")
-        print("come from the slm (regular backup) class ONLY, and the measured")
-        print("frozen footprint is added as its own term instead of being an")
-        print("unquantified undercount. A byte count over the blobs the")
-        print("repository's own metadata still reaches remains the ground")
-        print("truth for total repository capacity: the repo floor is the UNION of")
-        print("all retained snapshots, which these per-snapshot totals can")
-        print("only bound from below.")
-    else:
-        print("\nWARNING (precondition): if this repository backs searchable")
-        print("snapshots (frozen tier), regular snapshots upload ZERO files for")
-        print("already-mounted indices, so the baseline below UNDERCOUNTS by the")
-        print("entire frozen footprint (it lives in separate pinned per-index")
-        print("mount snapshots). For such repositories a byte count over the")
-        print("reachable blobs is the sizing source of truth, not this")
-        print("recommendation.")
-
-    print("\nMeasured inputs (from _snapshot/<repo>/_status):")
-    if split:
-        print(f"  largest SLM snapshot total ({baseline_row[1]}) : "
-              f"{fmt(baseline)}")
-        print(f"  {FROZEN_FOOTPRINT_LABEL}: {fmt(frozen_total)}")
-        print(f"    partial mounts (frozen tier) : {frozen['partial_n']} "
-              f"snapshot(s), {fmt(frozen['partial_tot'])}")
-        print(f"    full mounts (cold tier)      : {frozen['full_n']} "
-              f"snapshot(s), {fmt(frozen['full_tot'])}")
-        by_class = len(usable) - len(pool)
-        if by_class:
-            print(f"  note: {by_class} non-slm snapshot(s) excluded from "
-                  f"baseline/growth")
-            print("  (frozen-pinned mounts are a footprint floor, not growth;")
-            print("  'other' snapshots have no policy and no mount pinning "
-                  "them).")
-    else:
-        print(f"  largest snapshot total ({baseline_row[1]}) : {fmt(baseline)}")
-    if skipped:
-        print(f"  note: {skipped} snapshot(s) excluded (not SUCCESS/PARTIAL,")
-        print("  e.g. IN_PROGRESS, whose partial totals would pollute them).")
-    if partial:
-        print(f"  warning: {partial} PARTIAL snapshot(s) included; some shards")
-        print("  failed, so their incrementals may understate real growth.")
-    window = f"{len(days)} day(s) with data ({days[0]} .. {days[-1]}):"
-    if split:
-        print("  growth samples (slm class ONLY): per-calendar-day incremental")
-        print(f"  sums over the last {window}")
-    else:
-        print("  growth samples: per-calendar-day incremental sums over the last")
-        print(f"  {window}")
-    print(f"    median daily growth : {fmt(med)}")
-    print(f"    mean daily growth   : {fmt(mean)}")
-    print(f"    p95 daily growth    : {fmt(p95v)}")
-    # Earliest by timestamp, not input order. recommend() must not depend on
-    # callers pre-sorting rows: a reversed list once produced a FALSE
-    # "growth is overstated" caveat.
-    if days and period_key(min(pool)[0], "day") in days:
-        print("    note: window includes the repository's FIRST snapshot day,")
-        print("    whose incremental == a full upload; growth is overstated.")
-    if samples and med > 0 and max(samples) > 3 * med:
-        print(f"    note: outlier day present (max {fmt(max(samples))} > "
-              f"3x median). Reindex/merge/upgrade days upload far more.")
-
-    print(f"\nFormula (retention_days = {retention_days}):")
-    if split:
-        print(f"  baseline (largest slm snapshot total)     : {fmt(baseline)}")
-    else:
-        print(f"  baseline (largest snapshot total)         : {fmt(baseline)}")
-    print(f"  + retention growth ({retention_days} x median daily)     : "
-          f"{fmt(growth)}")
-    print(f"  + upgrade-day headroom (1 x baseline)     : "
-          f"{fmt(upgrade_headroom)}")
-    if split:
-        print(f"  + frozen footprint (pinned mounts)        : "
-              f"{fmt(frozen_total)}")
-    print(f"  = recommended repository capacity         : {fmt(rec)}")
-    print(f"  = with +20% operational margin            : {fmt(rec_margin)}")
-    print(f"  conservative variant ({retention_days} x p95 daily):")
-    print(f"  = recommended repository capacity (p95)   : {fmt(rec_p95)}")
-    print(f"  = with +20% operational margin (p95)      : "
-          f"{fmt(rec_p95_margin)}")
-
-    print("\nAssumptions:")
-    print("  * Snapshots are incremental: each copies only new segments since")
-    print("    the previous snapshot; the first is ~full. [Elastic docs]")
-    print("  * The true repo floor is the UNION of all retained snapshots'")
-    print("    referenced bytes; the largest single snapshot total is a lower")
-    print("    bound on that union, used here as the baseline.")
-    print("  * Elastic recommends a fresh snapshot before upgrading, and large")
-    print("    segment rewrites (e.g. a version upgrade merging/rewriting")
-    print("    segments) make the next snapshot re-upload far more than a")
-    print("    normal day. Modeling that as 1x baseline full is a heuristic,")
-    print("    not an official Elastic figure.")
-    if split:
-        print("  * The frozen footprint is MEASURED (sum of pinned mount")
-        print("    snapshot totals), not estimated. It is a floor: mounts that")
-        print("    share segment lineage double-count, and it excludes any")
-        print("    blob the repository retains that no snapshot references.")
-        print("  * The +20% margin is applied to the whole figure, frozen term")
-        print("    included, so it stays conservative.")
-    print("  * The +20% margin is a heuristic, not an official Elastic figure.")
-    print("  * Elastic publishes no official repo-capacity formula; sizing here")
-    print("    is derived from documented incremental behavior only.")
-    print(f"\nMatching SLM retention for a {retention_days}-day window, e.g.:")
-    print(f'  "retention": {{ "expire_after": "{retention_days}d", '
-          f'"min_count": 5 }}')
-    print("  (avoid max_count here: with multiple snapshots per day, from SLM")
-    print("  dailies plus ILM mount snapshots, a count bound can delete")
-    print("  snapshots that are still inside the time window.)")
-    print("\nSources (fetched 2026-08-24):")
-    print("  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore")
-    print("  https://www.elastic.co/docs/deploy-manage/upgrade/prepare-to-upgrade")
-    print("  https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/create-snapshots")
+    print(RECOMMEND_HEADING)
+    print_frozen_caveat(split)
+    print_measured_inputs(sizing, split)
+    print_growth_window(sizing, split)
+    print_formula(sizing, retention_days, split)
+    print_assumptions(split)
+    print_retention_hint(retention_days)
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[1],
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument("--es", required=True, help="http(s)://host:9200")
@@ -991,7 +1115,11 @@ def main() -> int:
     p.add_argument("--user", help="basic auth user:password")
     p.add_argument("--api-key", help="ApiKey header value")
     p.add_argument("--ca-cert", help="CA bundle for https")
-    p.add_argument("--insecure", action="store_true")
+    p.add_argument("--insecure", action="store_true",
+                   help="skip TLS verification of --es, for a lab cluster "
+                        "with a self-signed certificate. Accepted only for a "
+                        "loopback, private or in-cluster address; anything "
+                        "else needs --ca-cert")
     p.add_argument("--batch", type=int, default=20,
                    help="snapshots per _status request")
     p.add_argument("--recommend", action="store_true",
@@ -1020,35 +1148,71 @@ def main() -> int:
                    help="write the emit mode's machine-readable output to "
                         "FILE instead of stdout (requires --emit-mounted or "
                         "--emit-classified)")
-    args = p.parse_args()
+    return p
 
+
+def check_arguments(parser: argparse.ArgumentParser,
+                    args: argparse.Namespace):
+    """Refuse argument combinations that cannot mean anything.
+
+    Returns the set of accounting classes --emit-classified may export.
+    """
     if not 5 <= args.retention_days <= 10:
-        p.error(f"--retention-days must be between 5 and 10 "
-                f"(got {args.retention_days}); site snapshot policy is "
-                f"5-10 days max")
+        parser.error(f"--retention-days must be between 5 and 10 "
+                     f"(got {args.retention_days}); site snapshot policy is "
+                     f"5-10 days max")
+
+    # --es comes from configuration, and configuration is not the same as
+    # trusted: urlopen will happily open file:// or ftp://. This tool only
+    # ever reads over http or https.
+    split = urllib.parse.urlsplit(args.es)
+    if split.scheme not in ("http", "https"):
+        parser.error(f"--es is {args.es!r}; only http and https are accepted, "
+                     f"so a {split.scheme or '(no scheme)'!r} value cannot "
+                     f"be opened")
+    # --insecure is for an ECK or lab cluster serving a certificate it signed
+    # itself. Against a cluster anything can route to, an unverified
+    # connection means the numbers in this report describe whichever host
+    # answered, and the basic-auth header has already been sent to it.
+    if args.insecure and not is_lab_host(split.hostname):
+        parser.error(f"--insecure was passed for {split.hostname!r}, which is "
+                     f"not a loopback, private or in-cluster address. It "
+                     f"exists for a lab cluster serving its own certificate, "
+                     f"not for a cluster anything can route to. Pass "
+                     f"--ca-cert with the CA that certificate chains to "
+                     f"instead.")
 
     if args.emit_mounted and args.emit_classified:
-        p.error("--emit-mounted and --emit-classified are mutually exclusive; "
-                "pick one export mode")
+        parser.error("--emit-mounted and --emit-classified are mutually "
+                     "exclusive; pick one export mode")
     if args.out and not (args.emit_mounted or args.emit_classified):
-        p.error("--out requires an emit mode (--emit-mounted or "
-                "--emit-classified); the report tables are written for humans "
-                "and are not redirected into a file")
+        parser.error("--out requires an emit mode (--emit-mounted or "
+                     "--emit-classified); the report tables are written for "
+                     "humans and are not redirected into a file")
     if args.classes is not None and not args.emit_classified:
-        p.error("--class only applies to --emit-classified")
+        parser.error("--class only applies to --emit-classified")
     try:
-        class_filter = parse_class_filter(args.classes)
+        return parse_class_filter(args.classes)
     except ValueError as e:
-        p.error(str(e))
+        parser.error(str(e))
 
-    # Needs only --es/--repo/auth: no snapshot listing, no _status pass.
-    if args.emit_mounted:
-        return emit_mounted(args)
-    # Needs the same discovery fetches as --split-frozen, plus _status, but
-    # short-circuits the human report the same way --emit-mounted does.
-    if args.emit_classified:
-        return emit_classified(args, class_filter)
 
+def print_split_header(args: argparse.Namespace, names: list, split: dict):
+    """What --split-frozen found, and a banner if a mount is unbacked."""
+    print(f"# --split-frozen: {len(split['mounted'])} snapshot(s) pinned by "
+          f"mounted indices, {len(split['policies'])} SLM-created",
+          file=sys.stderr)
+    # A mount pinning a snapshot the repository no longer lists is the
+    # deleted-while-mounted state: the index runs on leaked blobs that a
+    # reachability sweep would classify ORPHAN.
+    gone = mounted_not_in_listing(split["mounted"], names)
+    if gone:
+        print_mounted_danger(gone, split["mounted"], args.repo)
+
+
+def period_report(args: argparse.Namespace) -> int:
+    """The human-readable per-period table, and the sizing section under
+    --recommend."""
     names = fetch_snapshot_listing(args)
     if names is None:
         return 1
@@ -1064,16 +1228,7 @@ def main() -> int:
         if split_error:
             print(f"# --split-frozen skipped: {split_error}", file=sys.stderr)
         else:
-            n_mounted = len(split["mounted"])
-            print(f"# --split-frozen: {n_mounted} snapshot(s) pinned by "
-                  f"mounted indices, {len(split['policies'])} SLM-created",
-                  file=sys.stderr)
-            # A mount pinning a snapshot the repository no longer lists is the
-            # deleted-while-mounted state: the index runs on leaked blobs that
-            # a reachability sweep would classify ORPHAN.
-            gone = mounted_not_in_listing(split["mounted"], names)
-            if gone:
-                print_mounted_danger(gone, split["mounted"], args.repo)
+            print_split_header(args, names, split)
 
     rows = fetch_status_rows(args, names)  # (start_ms, name, inc, total, state)
     if rows is None:
@@ -1096,6 +1251,23 @@ def main() -> int:
     if args.recommend:
         recommend(rows, args.retention_days, split)
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    args.es = args.es.rstrip("/")
+    class_filter = check_arguments(parser, args)
+    args.tls = tls_context(args)
+
+    # Needs only --es/--repo/auth: no snapshot listing, no _status pass.
+    if args.emit_mounted:
+        return emit_mounted(args)
+    # Needs the same discovery fetches as --split-frozen, plus _status, but
+    # short-circuits the human report the same way --emit-mounted does.
+    if args.emit_classified:
+        return emit_classified(args, class_filter)
+    return period_report(args)
 
 
 if __name__ == "__main__":

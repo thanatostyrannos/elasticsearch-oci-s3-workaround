@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 from ..errors import GenerationChainError
+from ..paths import PathRefused, checked_path
 from ..reporting.manifest import COMPLETION_MARKER, MANIFEST_COLUMNS
 
 EXPECTED_HEADER = "\t".join(MANIFEST_COLUMNS)
@@ -73,6 +74,14 @@ def load_manifest(path: str) -> ManifestData:
     with the wrong number of columns, a file that does not end on a newline,
     or a file with no completion marker as its last line.
     """
+    try:
+        # Resolved before it is opened, so every message below and the
+        # `path` this hands back to the approval and staleness checks all
+        # name the file that was actually read.
+        path = checked_path(path, "--manifest")
+    except PathRefused as exc:
+        raise ManifestError(str(exc)) from None
+
     try:
         with open(path, "rb") as handle:
             raw = handle.read()

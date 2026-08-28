@@ -30,25 +30,36 @@ REQUIRED = ("ENDPOINT", "REGION", "BUCKET", "PREFIX", "CREDENTIALS",
             "REPOSITORY", "OUT")
 DEFAULTS = {"CYCLES": "100", "MODE": "mixed", "SLEEP_BETWEEN": "5",
             "SETTLE_TIMEOUT": "300", "DRY_RUN_ONLY": "yes"}
-LINE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*"?(.*?)"?\s*$')
+# The line is stripped before this runs, so anchoring whitespace on both ends
+# and making the value lazy between two optional quotes bought nothing and let
+# the value be matched several ways. Take the rest of the line as it comes and
+# deal with the quotes afterwards, which is one pass instead of a search.
+LINE = re.compile(r'^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$')
 
 
 class Refused(Exception):
     """A preflight check said no, with a reason worth printing."""
 
 
+def _unquote(value):
+    """Drop one pair of surrounding double quotes, if that is what they are."""
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
 def read_config(path):
     """Parse KEY="value" lines. Never execute the file."""
-    require_private(path, "the config file")
+    resolved = require_private(path, "the config file")
     values = dict(DEFAULTS)
-    for number, raw in enumerate(open(path, encoding="utf-8"), 1):
+    for number, raw in enumerate(open(resolved, encoding="utf-8"), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         match = LINE.match(line)
         if not match:
             raise Refused(f"{path}:{number} is not KEY=value: {line[:60]}")
-        values[match.group(1)] = match.group(2)
+        values[match.group(1)] = _unquote(match.group(2))
     missing = [k for k in REQUIRED if not values.get(k)]
     if missing:
         raise Refused(f"{path} does not set: {', '.join(missing)}")
@@ -56,20 +67,29 @@ def read_config(path):
 
 
 def require_private(path, what):
-    """Refuse a file other users can read, the way the tools themselves do."""
-    if not os.path.exists(path):
+    """Refuse a file other users can read, the way the tools themselves do.
+
+    Resolves symlinks first and refuses anything that is not an ordinary
+    file, so a config value can't point at a device, a pipe, or a directory
+    dressed up as a file path. Returns the resolved path; callers open that
+    one, not the one they were given, so the path that got checked is the
+    path that gets read.
+    """
+    resolved = os.path.realpath(path)
+    if not os.path.isfile(resolved):
         raise Refused(f"no such file: {path}")
-    mode = stat.S_IMODE(os.stat(path).st_mode)
+    mode = stat.S_IMODE(os.stat(resolved).st_mode)
     if mode & (stat.S_IRWXG | stat.S_IRWXO):
         raise Refused(
             f"{what} {path} is mode {mode:04o} and must be 0600 or 0400. "
             "Any other mode lets other users on this host read it")
+    return resolved
 
 
 def check_credentials(path, wants_cluster):
-    require_private(path, "the credentials file")
+    resolved = require_private(path, "the credentials file")
     try:
-        document = json.load(open(path, encoding="utf-8"))
+        document = json.load(open(resolved, encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise Refused(f"{path} is not readable JSON: {exc}") from None
     if "s3" not in document:
@@ -99,8 +119,8 @@ def check_endpoint(endpoint):
 
 def check_cluster(url, password_file):
     """Ask the cluster whether it answers. No curl, no shell."""
-    require_private(password_file, "the password file")
-    password = open(password_file, encoding="utf-8").read().strip()
+    resolved = require_private(password_file, "the password file")
+    password = open(resolved, encoding="utf-8").read().strip()
     request = urllib.request.Request(url.rstrip("/") + "/_cluster/health")
     import base64
     token = base64.b64encode(f"elastic:{password}".encode()).decode()

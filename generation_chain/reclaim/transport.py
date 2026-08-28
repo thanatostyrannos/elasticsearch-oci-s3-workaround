@@ -34,6 +34,13 @@ from ..sources.signing import sigv4
 
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
+# The only schemes this module speaks. urllib opens an ftp:// or a file:// URL
+# through the same call, so an endpoint naming one is either a typo or
+# something steering this process at a target it was never pointed at.
+# Checked here as well as where the endpoint is parsed, because this is the
+# request that deletes and it is the last place before the send.
+ALLOWED_SCHEMES = frozenset({"https", "http"})
+
 
 class TransportError(GenerationChainError):
     """The batch delete request could not be completed against the store."""
@@ -45,6 +52,33 @@ class RetryPolicy:
     base_seconds: float = 1.0
     growth_factor: float = 2.0
     max_sleep_seconds: float = 20.0
+
+
+def _refuse_unsendable_target(scheme: str, host: str) -> None:
+    """Refuse a scheme or a host this module will not send a delete to.
+
+    The host is copied into the `Host` header and signed, so whitespace or a
+    control character in it would let the rest of the string be read as
+    another header. Userinfo is refused for a quieter reason: urllib strips
+    `user@` before connecting and this module would sign a Host the store
+    never sees, which fails as a bare 403 that reads like a bad credential.
+    """
+    if scheme not in ALLOWED_SCHEMES:
+        raise TransportError(
+            f"{scheme!r} is not a scheme this tool sends a delete over; "
+            f"expected {' or '.join(sorted(ALLOWED_SCHEMES))}. Nothing was "
+            "sent")
+    if not host:
+        raise TransportError("the endpoint names no host. Nothing was sent")
+    if "@" in host:
+        raise TransportError(
+            f"the endpoint host {host!r} carries userinfo, which would be "
+            "signed and then dropped before the connection. Nothing was sent")
+    if any(character.isspace() or ord(character) < 0x20 for character in host):
+        raise TransportError(
+            f"the endpoint host {host!r} holds whitespace or a control "
+            "character, which would let the rest of it be read as another "
+            "header. Nothing was sent")
 
 
 def _signed_headers(host: str, amz_date: str, payload_sha256: str,
@@ -78,6 +112,7 @@ def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
     it; it never recomputes a checksum from `body`, which would reopen the
     same scan-versus-send gap a checksum is supposed to close.
     """
+    _refuse_unsendable_target(scheme, host)
     canonical_uri = f"/{sigv4.quote_path(bucket)}"
     canonical_query = sigv4.canonical_query({"delete": ""})
     payload_sha256 = hashlib.sha256(body).hexdigest()

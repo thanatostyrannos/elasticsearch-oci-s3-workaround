@@ -48,7 +48,7 @@ is worse than no docstring.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, FrozenSet, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Set, Tuple
 
 from ..errors import ShapeGateError
 from ..model import ShardDocument
@@ -179,22 +179,40 @@ def _declared(document: Mapping[str, Any],
     names: Dict[str, str] = {}
     commit_contents: Dict[str, bytes] = {}
     for entry in raw:
-        if not isinstance(entry, dict):
-            raise ShapeGateError(f"{where} has a non-object files entry")
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            raise ShapeGateError(f"{where} has a files entry with no name")
-        physical = entry.get("physical_name")
-        physical = physical if isinstance(physical, str) else ""
+        name, physical, commit = _declared_entry(entry, where)
         names[name] = physical
-        if LUCENE_COMMIT.match(physical):
-            content = entry.get("meta_hash")
-            if isinstance(content, (bytes, bytearray)):
-                commit_contents[name] = bytes(content)
+        if commit is not None:
+            commit_contents[name] = commit
     if raw and not names:
         raise ShapeGateError(
             f"{where} has {len(raw)} files entries and no names in them")
     return names, commit_contents
+
+
+def _declared_entry(entry: Any,
+                    where: str) -> Tuple[str, str, Optional[bytes]]:
+    """What one entry of the `files` array declares.
+
+    The declared name, the Lucene name behind it, and the commit bytes the
+    entry carries inline when it is a `segments_N` and the document kept them.
+
+    A `physical_name` that is missing or is not a string reads as absent
+    rather than as a name. The only question asked of it downstream is
+    whether it is a Lucene commit, and a field this reader could not read is
+    not evidence that it is one.
+    """
+    if not isinstance(entry, dict):
+        raise ShapeGateError(f"{where} has a non-object files entry")
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        raise ShapeGateError(f"{where} has a files entry with no name")
+    physical = entry.get("physical_name")
+    physical = physical if isinstance(physical, str) else ""
+    if LUCENE_COMMIT.match(physical):
+        content = entry.get("meta_hash")
+        if isinstance(content, (bytes, bytearray)):
+            return name, physical, bytes(content)
+    return name, physical, None
 
 
 def _by_snapshot(document: Mapping[str, Any], physical: Dict[str, str],
@@ -215,53 +233,9 @@ def _by_snapshot(document: Mapping[str, Any], physical: Dict[str, str],
     for snapshot_name, entry in raw.items():
         if not isinstance(snapshot_name, str) or not isinstance(entry, dict):
             raise ShapeGateError(f"{where} has a malformed snapshots entry")
-        files = entry.get("files")
-        if not isinstance(files, list):
-            raise ShapeGateError(
-                f"{where} snapshot {snapshot_name!r} has no files array")
-        if not files:
-            # A shard snapshot always carries at least its Lucene commit, so
-            # an empty list is a list that was not read rather than a shard
-            # that references nothing. Returning it empty makes this document
-            # indistinguishable from every other shard's document, and the
-            # live set built from it condemns the whole directory.
-            raise ShapeGateError(
-                f"{where} snapshot {snapshot_name!r} lists no files at all. A "
-                "shard snapshot always carries at least its Lucene commit, so "
-                "an empty list is a list that was not read")
-        blobs: Set[str] = set()
-        commit_names = []
-        declared_physical: Set[str] = set()
-        for name in files:
-            if not isinstance(name, str) or not name:
-                raise ShapeGateError(
-                    f"{where} snapshot {snapshot_name!r} lists a non-string "
-                    "file")
-            if name not in physical:
-                # The two halves of this document disagree. One of them was
-                # decoded wrongly, and there is no way to tell which, so the
-                # caller drops the whole shard rather than pick a half.
-                raise ShapeGateError(
-                    f"{where} snapshot {snapshot_name!r} references {name!r}, "
-                    "which the files array does not declare")
-            declared_physical.add(physical[name])
-            if LUCENE_COMMIT.match(physical[name]):
-                commit_names.append(name)
-            stem = segment_stem(name)
-            if stem is not None:
-                blobs.add(stem)
-        if not commit_names:
-            # Restoring a shard means restoring a Lucene commit, and a commit
-            # is named by its segments_N file. A list without one cannot
-            # restore what it claims to describe, so it is not a list this
-            # tool read correctly. Real 9.5.2 keeps that commit inline, which
-            # is where a drift that moved the inline entries would land.
-            raise ShapeGateError(
-                f"{where} snapshot {snapshot_name!r} names {len(files)} "
-                "file(s) and none of them is a Lucene segments_N commit, so "
-                "the file list is incomplete")
-
         location = f"{where} snapshot {snapshot_name!r}"
+        blobs, declared_physical, commit_names = _snapshot_file_list(
+            entry, physical, location)
         for commit_name in commit_names:
             if _cross_check_commit(physical[commit_name],
                                    commit_contents.get(commit_name),
@@ -269,8 +243,63 @@ def _by_snapshot(document: Mapping[str, Any], physical: Dict[str, str],
                 commit_oracle_checked += 1
             else:
                 commit_oracle_skipped += 1
-        out[snapshot_name] = frozenset(blobs)
+        out[snapshot_name] = blobs
     return out, commit_oracle_checked, commit_oracle_skipped
+
+
+def _snapshot_file_list(entry: Mapping[str, Any], physical: Dict[str, str],
+                        location: str) -> Tuple[FrozenSet[str], Set[str],
+                                                List[str]]:
+    """What one snapshot entry's file list names, once it has passed the gates.
+
+    Returns the segment blobs behind the names, the Lucene names those files
+    were written from, and the names whose Lucene name is a `segments_N`
+    commit. Every refusal below is a refusal to return a SHORT list: a list
+    this reader only partly understood is not a shard that references less,
+    and the caller has no way to tell those apart from what comes back.
+    """
+    files = entry.get("files")
+    if not isinstance(files, list):
+        raise ShapeGateError(f"{location} has no files array")
+    if not files:
+        # A shard snapshot always carries at least its Lucene commit, so
+        # an empty list is a list that was not read rather than a shard
+        # that references nothing. Returning it empty makes this document
+        # indistinguishable from every other shard's document, and the
+        # live set built from it condemns the whole directory.
+        raise ShapeGateError(
+            f"{location} lists no files at all. A shard snapshot always "
+            "carries at least its Lucene commit, so an empty list is a list "
+            "that was not read")
+    blobs: Set[str] = set()
+    commit_names: List[str] = []
+    declared_physical: Set[str] = set()
+    for name in files:
+        if not isinstance(name, str) or not name:
+            raise ShapeGateError(f"{location} lists a non-string file")
+        if name not in physical:
+            # The two halves of this document disagree. One of them was
+            # decoded wrongly, and there is no way to tell which, so the
+            # caller drops the whole shard rather than pick a half.
+            raise ShapeGateError(
+                f"{location} references {name!r}, which the files array does "
+                "not declare")
+        declared_physical.add(physical[name])
+        if LUCENE_COMMIT.match(physical[name]):
+            commit_names.append(name)
+        stem = segment_stem(name)
+        if stem is not None:
+            blobs.add(stem)
+    if not commit_names:
+        # Restoring a shard means restoring a Lucene commit, and a commit
+        # is named by its segments_N file. A list without one cannot
+        # restore what it claims to describe, so it is not a list this
+        # tool read correctly. Real 9.5.2 keeps that commit inline, which
+        # is where a drift that moved the inline entries would land.
+        raise ShapeGateError(
+            f"{location} names {len(files)} file(s) and none of them is a "
+            "Lucene segments_N commit, so the file list is incomplete")
+    return frozenset(blobs), declared_physical, commit_names
 
 
 def _segment_is_represented(segment: str, declared_physical: Set[str]) -> bool:

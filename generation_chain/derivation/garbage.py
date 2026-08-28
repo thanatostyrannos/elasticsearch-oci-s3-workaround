@@ -51,7 +51,7 @@ only ever shorten this list.
 
 from __future__ import annotations
 
-from typing import Dict, FrozenSet, List, Optional, Set
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ..model import (Condemnation, DeleteOperation, RootGeneration,
                      ShardLocation)
@@ -64,6 +64,14 @@ CATEGORY_SHARD_SNAPSHOT = "shard snapshot document"
 CATEGORY_ROOT_SNAPSHOT = "root snapshot document"
 CATEGORY_GLOBAL_METADATA = "global metadata"
 CATEGORY_INDEX_METADATA = "index metadata"
+
+# How a condemnation's reason opens, before `DeleteOperation.describes` names
+# the operation. A segment blob is ORPHANED: Elasticsearch's own set difference
+# would have collected it and the store still holds it. The three kinds that
+# carry a snapshot uuid in their name were LEFT BEHIND: the snapshot they
+# belong to left the catalog and they did not.
+REASON_ORPHANED = "orphaned"
+REASON_LEFT_BEHIND = "left behind"
 
 
 def delete_operations(chain: Chain) -> List[DeleteOperation]:
@@ -204,7 +212,7 @@ def _condemn_segments(survey: ShardSurvey, operation: DeleteOperation,
             for key in keys.objects_for(f"{location.directory}/{blob}"):
                 _remember(found, Condemnation(
                     key=key, category=CATEGORY_SEGMENT,
-                    reason=operation.describes("orphaned"),
+                    reason=operation.describes(REASON_ORPHANED),
                     snapshot_uuid=operation.snapshot_uuid,
                     snapshot_name=operation.snapshot_name,
                     from_generation=operation.from_generation,
@@ -224,7 +232,7 @@ def _condemn_root_documents(operation: DeleteOperation, keys: KeyIndex,
         if key in keys:
             _remember(found, Condemnation(
                 key=key, category=category,
-                reason=operation.describes("left behind"),
+                reason=operation.describes(REASON_LEFT_BEHIND),
                 snapshot_uuid=operation.snapshot_uuid,
                 snapshot_name=operation.snapshot_name,
                 from_generation=operation.from_generation,
@@ -265,7 +273,7 @@ def _condemn_shard_documents(chain: Chain, operation: DeleteOperation,
             if key in keys:
                 _remember(found, Condemnation(
                     key=key, category=CATEGORY_SHARD_SNAPSHOT,
-                    reason=operation.describes("left behind"),
+                    reason=operation.describes(REASON_LEFT_BEHIND),
                     snapshot_uuid=operation.snapshot_uuid,
                     snapshot_name=operation.snapshot_name,
                     from_generation=operation.from_generation,
@@ -306,7 +314,7 @@ def _condemn_index_metadata(chain: Chain, operation: DeleteOperation,
         if key in keys:
             _remember(found, Condemnation(
                 key=key, category=CATEGORY_INDEX_METADATA,
-                reason=operation.describes("left behind"),
+                reason=operation.describes(REASON_LEFT_BEHIND),
                 snapshot_uuid=operation.snapshot_uuid,
                 snapshot_name=operation.snapshot_name,
                 from_generation=operation.from_generation,
@@ -339,7 +347,8 @@ def live_metadata_blobs(final: RootGeneration,
 
 def attribution_coverage(
         chain: Chain,
-        era_snapshot_names: Dict[ShardLocation, Dict[int, FrozenSet[str]]]):
+        era_snapshot_names: Dict[ShardLocation, Dict[int, FrozenSet[str]]]
+) -> Tuple[int, int]:
     """How many delete operations this run could follow all the way down.
 
     Counting generation TRANSITIONS answers "how much of the history did I see".
@@ -365,20 +374,34 @@ def attribution_coverage(
         found += 1
         if operation.snapshot_name in surviving:
             continue
-        earlier = chain.generations[operation.from_generation]
-        complete = True
-        for index_uuid, entry in earlier.indices.items():
-            if operation.snapshot_uuid not in entry.snapshot_uuids:
-                continue
-            for shard in range(len(entry.shard_generations)):
-                location = ShardLocation(index_uuid=index_uuid, shard=shard)
-                names = era_snapshot_names.get(location, {}).get(
-                    operation.from_generation)
-                if names is None or operation.snapshot_name not in names:
-                    complete = False
-        if complete:
+        if _named_in_every_shard_it_touched(
+                operation, chain.generations[operation.from_generation],
+                era_snapshot_names):
             attributed += 1
     return found, attributed
+
+
+def _named_in_every_shard_it_touched(
+        operation: DeleteOperation, earlier: RootGeneration,
+        era_snapshot_names: Dict[ShardLocation, Dict[int, FrozenSet[str]]]
+) -> bool:
+    """Whether every shard the deleted snapshot took named it in its era list.
+
+    One shard directory whose era document this run could not read is enough
+    to answer no. Attribution is a claim about the whole delete operation, and
+    a claim built on the shards that happened to read is the flattering half
+    of one.
+    """
+    for index_uuid, entry in earlier.indices.items():
+        if operation.snapshot_uuid not in entry.snapshot_uuids:
+            continue
+        for shard in range(len(entry.shard_generations)):
+            location = ShardLocation(index_uuid=index_uuid, shard=shard)
+            names = era_snapshot_names.get(location, {}).get(
+                operation.from_generation)
+            if names is None or operation.snapshot_name not in names:
+                return False
+    return True
 
 
 def era_snapshot_names_of(

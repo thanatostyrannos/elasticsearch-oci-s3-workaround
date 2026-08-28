@@ -17,9 +17,9 @@ die() { printf '\n%s\n' "$*" >&2; exit 1; }
 say() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 CONF="${1:-}"
-[ -n "$CONF" ] || die "usage: $0 <config-file>
+[[ -n "$CONF" ]] || die "usage: $0 <config-file>
 Copy scripts/test-cycle.conf.example and fill it in first."
-[ -f "$CONF" ] || die "no such config file: $CONF"
+[[ -f "$CONF" ]] || die "no such config file: $CONF"
 
 # A config file holds credentials paths and, in the ES case, is read by tools
 # that refuse a world-readable credential. Refuse early rather than let one of
@@ -39,13 +39,15 @@ esac
 # Only KEY=value is accepted, with one optional layer of quotes. A line that
 # is anything else stops the run rather than being ignored, because a config
 # line nobody understood is not a line to guess at.
-while IFS= read -r line || [ -n "$line" ]; do
+while IFS= read -r line || [[ -n "$line" ]]; do
   case "$line" in
     ''|'#'*) continue ;;
+    *)
+      if ! printf '%s' "$line" | grep -qE '^[[:space:]]*[A-Z_][A-Z0-9_]*[[:space:]]*=' ; then
+        die "$CONF has a line that is not KEY=value: $line"
+      fi
+      ;;
   esac
-  if ! printf '%s' "$line" | grep -qE '^[[:space:]]*[A-Z_][A-Z0-9_]*[[:space:]]*=' ; then
-    die "$CONF has a line that is not KEY=value: $line"
-  fi
   key=${line%%=*}
   key=$(printf '%s' "$key" | tr -d '[:space:]')
   value=${line#*=}
@@ -56,7 +58,7 @@ done < "$CONF"
 
 for required in ENDPOINT REGION BUCKET PREFIX CREDENTIALS REPOSITORY OUT; do
   eval "value=\${$required:-}"
-  [ -n "$value" ] || die "$CONF does not set $required"
+  [[ -n "$value" ]] || die "$CONF does not set $required"
 done
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -76,7 +78,7 @@ import sys
 raise SystemExit(0 if sys.version_info >= (3, 9) else 1)
 PY
 
-[ -f "$CREDENTIALS" ] || die "credentials file not found: $CREDENTIALS"
+[[ -f "$CREDENTIALS" ]] || die "credentials file not found: $CREDENTIALS"
 cmode=$(stat -c '%a' "$CREDENTIALS" 2>/dev/null || stat -f '%Lp' "$CREDENTIALS")
 case "$cmode" in
   600|400) ;;
@@ -99,10 +101,10 @@ PY
 
 # The audit refuses corroboration it cannot complete, so find out now rather
 # than on cycle 1 after a long derive.
-if [ -n "${ELASTICSEARCH:-}" ]; then
-  [ -n "${ES_PASSWORD_FILE:-}" ] || die "ELASTICSEARCH is set but ES_PASSWORD_FILE is not.
+if [[ -n "${ELASTICSEARCH:-}" ]]; then
+  [[ -n "${ES_PASSWORD_FILE:-}" ]] || die "ELASTICSEARCH is set but ES_PASSWORD_FILE is not.
 The harness needs it for its own calls to the cluster."
-  [ -f "$ES_PASSWORD_FILE" ] || die "no such file: $ES_PASSWORD_FILE"
+  [[ -f "$ES_PASSWORD_FILE" ]] || die "no such file: $ES_PASSWORD_FILE"
   python3 - "$CREDENTIALS" <<'PY' || die "add an 'elasticsearch' section to the credentials file.
 The audit reads its cluster credential from there. ES_PASSWORD_FILE
 authenticates this harness only and never reaches the audit."
@@ -114,7 +116,7 @@ raise SystemExit(0 if ok else 1)
 PY
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
          -u "elastic:$(cat "$ES_PASSWORD_FILE")" "$ELASTICSEARCH/_cluster/health" || true)
-  [ "$code" = "200" ] || die "Elasticsearch at $ELASTICSEARCH answered HTTP ${code:-nothing}.
+  [[ "$code" = "200" ]] || die "Elasticsearch at $ELASTICSEARCH answered HTTP ${code:-nothing}.
 If it answered 401 the password is stale: it is regenerated whenever the
 cluster is rebuilt. If nothing, check the endpoint is reachable."
   say "  elasticsearch reachable, corroboration will be re-checked at execute time"
@@ -142,11 +144,11 @@ args=(
   --credentials "$CREDENTIALS"
   --repository "$REPOSITORY" --out "$OUT"
 )
-[ -n "${DATA_STREAM:-}" ] && args+=(--data-stream "$DATA_STREAM")
-[ -n "${ELASTICSEARCH:-}" ] && args+=(--elasticsearch "$ELASTICSEARCH" --es-password-file "$ES_PASSWORD_FILE")
-[ "$DRY_RUN_ONLY" = "yes" ] && args+=(--dry-run-only)
+[[ -n "${DATA_STREAM:-}" ]] && args+=(--data-stream "$DATA_STREAM")
+[[ -n "${ELASTICSEARCH:-}" ]] && args+=(--elasticsearch "$ELASTICSEARCH" --es-password-file "$ES_PASSWORD_FILE")
+[[ "$DRY_RUN_ONLY" = "yes" ]] && args+=(--dry-run-only)
 
-if [ "$DRY_RUN_ONLY" = "yes" ]; then
+if [[ "$DRY_RUN_ONLY" = "yes" ]]; then
   say "DRY RUN ONLY. Nothing will be deleted. Set DRY_RUN_ONLY=no to delete."
 else
   say "DELETES ARE ENABLED. This will remove objects from $BUCKET/$PREFIX"

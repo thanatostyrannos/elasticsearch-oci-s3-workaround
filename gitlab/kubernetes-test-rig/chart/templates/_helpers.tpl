@@ -90,6 +90,8 @@ unconditionally.
       value: {{ .Values.source.ref | quote }}
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
+  resources:
+    {{- toYaml .Values.initContainerResources | nindent 4 }}
   volumeMounts:
     - name: workspace
       mountPath: /workspace
@@ -134,6 +136,8 @@ else, and it does nothing but the copy.
     readOnlyRootFilesystem: true
     capabilities:
       drop: ["ALL"]
+  resources:
+    {{- toYaml .Values.initContainerResources | nindent 4 }}
   env:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
@@ -358,6 +362,8 @@ listening, not that this container can authenticate.
       value: "1"
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
+  resources:
+    {{- toYaml .Values.initContainerResources | nindent 4 }}
   command:
     - python3
     - -c
@@ -407,6 +413,12 @@ so it removes exactly what the previous run created.
       value: "1"
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
+  # Runs the exact same teardown command as the standalone teardown Job
+  # (rig.teardownArgs below), so it gets that job's own sizing rather than
+  # the small initContainerResources profile used by the utility steps
+  # above.
+  resources:
+    {{- toYaml .Values.teardown.resources | nindent 4 }}
   command:
     - sh
     - -c

@@ -25,8 +25,14 @@ from typing import Iterator, List, Sequence, Tuple
 
 from ..errors import GenerationChainError
 
+# An XML namespace, which is a name rather than an address. Nothing here
+# fetches it, and it is spelled http:// because that is the string the S3
+# API defines; writing https:// would name a different namespace and the
+# store would not recognise the document.
 NAMESPACE = "http://s3.amazonaws.com/doc/2006-03-01/"
 MAX_KEYS_PER_BATCH = 1000
+DELETED_ENTRY = "Deleted"
+ERROR_ENTRY = "Error"
 
 # Error codes a store uses to say "this key was never here", distinct from a
 # genuine failure to delete something that was. Reported as `already_absent`
@@ -84,14 +90,8 @@ class BatchOutcome:
     unconfirmed: Tuple[str, ...] = field(default_factory=tuple)
 
 
-def parse_response(body: bytes, requested: Sequence[str]) -> BatchOutcome:
-    """Read a `DeleteResult` document, one key at a time.
-
-    `requested` is the exact list this batch asked the store to delete. A key
-    named there that appears in neither `<Deleted>` nor `<Error>` is a store
-    that answered a request it did not fully honour, and it is `unconfirmed`
-    rather than assumed either way.
-    """
+def _delete_result_root(body: bytes) -> ET.Element:
+    """The `DeleteResult` element, or BatchDeleteError naming what came back."""
     if b"<!DOCTYPE" in body[:2048].lstrip():
         # Same reasoning as the listing parser in sources/s3.py: a store does
         # not send a DOCTYPE, and entity expansion inside one can be made to
@@ -109,33 +109,52 @@ def parse_response(body: bytes, requested: Sequence[str]) -> BatchOutcome:
         raise BatchDeleteError(
             f"the delete response's root element is {root.tag!r}, not "
             "DeleteResult")
+    return root
 
+
+def _entry(child: ET.Element) -> Tuple[str, str, str, str]:
+    """One response entry as (kind, key, code, message).
+
+    An entry this cannot read is refused rather than skipped. A skipped entry
+    leaves its key accounted for by nothing, and the caller would then report
+    a key the store had something to say about as merely unconfirmed.
+    """
+    name = _local(child.tag)
+    key = _text(child, "Key")
+    if key is None:
+        raise BatchDeleteError(
+            f"a {name!r} entry in the delete response carries no Key")
+    if name == DELETED_ENTRY:
+        return DELETED_ENTRY, key, "", ""
+    if name == ERROR_ENTRY:
+        return (ERROR_ENTRY, key, _text(child, "Code") or "",
+                _text(child, "Message") or "")
+    raise BatchDeleteError(
+        f"the delete response carries an unrecognised element {child.tag!r}")
+
+
+def parse_response(body: bytes, requested: Sequence[str]) -> BatchOutcome:
+    """Read a `DeleteResult` document, one key at a time.
+
+    `requested` is the exact list this batch asked the store to delete. A key
+    named there that appears in neither `<Deleted>` nor `<Error>` is a store
+    that answered a request it did not fully honour, and it is `unconfirmed`
+    rather than assumed either way.
+    """
     deleted: List[str] = []
     already_absent: List[Tuple[str, str, str]] = []
     failed: List[Tuple[str, str, str]] = []
     accounted = set()
 
-    for child in root:
-        name = _local(child.tag)
-        key = _text(child, "Key")
-        if key is None:
-            raise BatchDeleteError(
-                f"a {name!r} entry in the delete response carries no Key")
-        if name == "Deleted":
+    for child in _delete_result_root(body):
+        kind, key, code, message = _entry(child)
+        accounted.add(key)
+        if kind == DELETED_ENTRY:
             deleted.append(key)
-            accounted.add(key)
-        elif name == "Error":
-            code = _text(child, "Code") or ""
-            message = _text(child, "Message") or ""
-            if code in NOT_FOUND_CODES:
-                already_absent.append((key, code, message))
-            else:
-                failed.append((key, code, message))
-            accounted.add(key)
+        elif code in NOT_FOUND_CODES:
+            already_absent.append((key, code, message))
         else:
-            raise BatchDeleteError(
-                f"the delete response carries an unrecognised element "
-                f"{child.tag!r}")
+            failed.append((key, code, message))
 
     unconfirmed = tuple(key for key in requested if key not in accounted)
     return BatchOutcome(deleted=tuple(deleted),

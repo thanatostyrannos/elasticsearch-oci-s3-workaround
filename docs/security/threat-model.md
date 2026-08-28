@@ -1034,6 +1034,187 @@ values actually changed, and that was not tested here. The honest statement
 is narrower than "safe": the schedule refusal is real, and it is scoped to
 one deployment path.
 
+## 11. The static analyser's LLM findings, checked against these four modes
+
+A SonarCloud run raised forty findings under two rules that name a particular
+caller. Thirty-eight of them, under `pythonsecurity:S8707`, say an LLM running
+this code with faulty command line arguments could escape file system
+restrictions. Two, under `pythonsecurity:S8703`, say the same caller could
+send a request somewhere it did not mean to. Both rules assume an autonomous
+agent builds the arguments out of input it did not control. That assumption
+is the whole of the finding, so the useful question is not whether a path is
+built from an argument. It is who supplies the argument, and whether anything
+untrusted decided it. This section answers that for each of the four modes
+above.
+
+**The verdict.** The architecture those rules assume is not one this project
+has. In all four modes the arguments come from a person at a prompt or from a
+configuration file held in version control, and nothing in this repository
+reads a value off the network, out of a document or out of a model and puts
+it in argv.
+
+**The nearest thing to it, said up front rather than buried.**
+`reclaim_test_protocol.py` scrapes `--approve-digest` and `--approve-rows`
+out of the delete tool's own dry-run text with a regular expression and
+passes them straight to the next invocation. A program derives two arguments
+and hands them to a process that can delete. Section 8 already records that
+this automates the mechanism and not the judgment. What it adds here is that
+the stream being scraped is the delete tool's stderr, and that stream prints
+no object key: the dry run prints the manifest path, a key count, the
+manifest digest, a batch count, a checksum header and the target URL, and
+nothing drawn from the store's own listing. There is no route by which an object someone wrote into the bucket
+reaches that regular expression. If the scrape picked up a wrong value
+anyway, `verify_approval` refuses and the process exits 3 without sending
+anything.
+
+### Where the forty findings sit
+
+| Where the finding sits | Findings | Which modes run that code |
+|---|---|---|
+| The tool itself, inside the `generation_chain` package | 6 | all four |
+| The shipped harnesses: `reclaim_test_protocol.py`, `snapshot_churn_rig.py`, `verify_restorable.py` | 17 | mode 3 only |
+| Files the release archive does not contain: the release packager, a reporting side tool, a local loop runner, and captured measurement harnesses | 17 | none of the four; they run on a contributor's own machine |
+
+The six inside the tool are the ones an operator inherits, so here is what
+each one does. Two are in `generation_chain/cli.py`, in the helper that
+writes a report through a neighbouring temporary file and renames it over the
+target; the path is whatever `--manifest`, `--classification` or
+`--coverage-json` named. One is in `generation_chain/credentials.py`, opening
+the credentials file, after `require_private` has already refused anything
+looser than mode 600. One is in `generation_chain/reclaim/cli.py`, appending
+to the JSON-lines report `--report` named. One is in
+`generation_chain/reclaim/manifest.py`, reading the manifest, which is then
+refused unless it carries this tool's exact header row, a matching column
+count on every row, a trailing newline, and `# derivation complete` as its
+last line. The sixth is the network one, in
+`generation_chain/reclaim/transport.py`: the delete URL is built from the
+scheme and host `urlsplit` returned for `--endpoint`, with the bucket
+path-quoted by `sigv4.quote_path`. Two checks sit in front of it.
+`_refuse_plain_http` refuses a non-loopback plain-http endpoint unless
+`--insecure-http` was passed. `_refuse_unsendable_target` refuses, in the
+last place before the send, any scheme but http or https, an empty host, a
+host carrying userinfo, and a host holding whitespace or a control character,
+which is what would otherwise let the rest of the string be read as another
+signed header. That is the answer to the two `pythonsecurity:S8703` findings
+on this path, and it is a check on the string rather than a claim about who
+supplied it.
+
+None of those escapes a restriction by default, because by default there is
+no restriction to escape. Every one of those paths is expanded, made
+absolute and resolved through its symlinks before it is opened, and refused
+if it is empty or carries a NUL byte, but nothing confines it to a directory
+unless someone asks. `GENCHAIN_FILE_ROOT` is how someone asks: it names a
+tree every path must resolve inside, and it is unset by default, because an
+operator running the audit by hand writes the manifest wherever they keep
+their evidence and a hardcoded root would refuse every real invocation. That
+variable is the honest answer to the thirty-eight findings for a caller that
+is not a person. Something driving this tool from a schedule or from a model
+knows up front which tree the run may touch, and can say so.
+
+Nothing else in the tool confines a path, so the rest of the bound comes
+from outside the process: the uid it runs as, and in modes 3 and 4 the pod
+`securityContext` shared by every non-root container in the chart, which sets
+`readOnlyRootFilesystem: true` and drops every Linux capability, so the only
+writable paths in those containers are the emptyDir and PVC mounts the chart
+gives them. No pipeline or chart in this repository sets `GENCHAIN_FILE_ROOT`
+today; in the two Kubernetes modes the container's read-only root already
+does that job, and in the GitLab worker there is no path argument to misuse
+because every path the job writes is a literal. The restrictions the rules
+have in mind are ones an agent harness imposes on itself. This tool is not
+that harness, and the variable above is what it offers a harness instead.
+
+### Mode by mode
+
+| | Does anything but a person supply argv | Does the escape rule land | What stands in the way |
+|---|---|---|---|
+| Mode 1: standalone, at a prompt | No. A person types the command | No | Nothing inside the process. The operator's own uid bounds the writes, and the delete needs an approval the operator computed from the manifest by hand |
+| Mode 2: audit in a GitLab worker | No. CI/CD variables, set once in project settings | No | Every filesystem path in the job is a literal: `./creds.json`, `orphans.tsv`, `classification.tsv`, `coverage.json`. No variable names a path at all. The command is a bash array with quoted expansions, so no value can split into extra arguments. And the process cannot delete: `ALLOWED_METHODS` in `generation_chain/sources/http_reads.py` permits GET and HEAD and raises `ForbiddenMethod` on anything else |
+| Mode 3: churn rig in Kubernetes | Partly. Helm values, plus the digest and row count the harness scrapes from the dry run | No | `readOnlyRootFilesystem: true` leaves only the mounted volumes writable. The scraped values come from a stream that prints no object key, and a wrong one is refused by `verify_approval` |
+| Mode 4: audit on a timer in Kubernetes | No. Helm values, rendered into the CronJob at install time | No | The same read-only root filesystem, and the same structural absence of a delete path: `reclaim/` is never imported on the audit path, so there is no `--execute` to reach |
+
+Two things in that table are worth saying in full rather than in a cell.
+
+**Mode 2 is the strongest of the four against this class of finding.** Its
+four required variables name a store, not a path, and every file the job
+writes is a hardcoded relative name inside the job directory. Its argument
+list is a bash array with quoted expansions, so a variable holding a space
+stays one argument.
+
+**Modes 3 and 4 build their argument list the other way.** The chart
+templates append to a shell string and then word-split it at the call site,
+with the shellcheck warning for that switched off in a comment above the
+line. A chart value carrying a space becomes two arguments. The values come
+from a file an operator wrote and committed, so this is a configuration
+defect rather than a channel for anything untrusted, but the argument
+boundary is decided by the shell rather than by the chart, and someone
+setting a prefix with a space in it should know that before they do.
+
+One more thing about the two unattended modes, because "nobody reads it
+first" is the condition these rules are really about. In modes 2 and 4
+nobody reads the arguments before the run. That matters less than it sounds.
+The arguments cannot change between runs: they are fixed in a pipeline file
+and a chart at install time, and changing one takes a commit or a
+`helm upgrade`. What goes unread in those modes is not the argument, it is
+the answer. A scheduled audit produces a manifest nobody looks at, which is
+the standing concern issue 13 records, and it is a different concern from the
+one these rules name. The argument is settled and unreviewed. The manifest is
+fresh and unreviewed. Only the second one accumulates.
+
+### Where the concern does land: the approval names the keys, not the target
+
+```mermaid
+flowchart TD
+    Manifest["The manifest file on disk"]
+    Approve["--approve-digest and --approve-rows"]
+    Verify["verify_approval in generation_chain/reclaim/approval.py"]
+    Keys["The key list the batch will name"]
+    Target["--endpoint, --region, --bucket, --prefix"]
+    Request["POST bucket delete"]
+
+    Manifest -->|"sha256 over the exact bytes, and a row count"| Approve
+    Approve --> Verify
+    Manifest --> Keys
+    Verify -->|"refuses unless both match this exact file"| Keys
+    Keys --> Request
+    Target -->|"nothing compares these to the manifest"| Request
+```
+
+**What this shows.** `verify_approval` hashes the manifest's bytes and counts
+its rows. The manifest's columns are `key`, `reason`, `category`,
+`snapshot_uuid`, `snapshot_name`, `from_generation` and `to_generation`. It
+records nothing about where it was derived from. So `--endpoint`, `--region`,
+`--bucket` and `--prefix` sit outside the approval entirely. An execute
+invocation carrying a correct digest and a correct row count, pointed at a
+different bucket, passes the gate and sends the same key list to that other
+bucket. `--prefix` is not inert either: `normalise_prefix` prepends it to
+every manifest key before the batch is built, so changing it changes which
+store objects the request names.
+
+What limits the damage is luck, not a control. Manifest keys are repository
+relative and mostly carry index UUIDs and shard segment filenames, so aimed
+at a different repository most of them match nothing and come back as
+`already_absent`. That is a property of how the keys happen to be named, and
+it would stop being true for a bucket holding a second repository under a
+sibling prefix. Nothing checks the target. Nothing reports a mismatch. The
+dry run prints the target it is about to use, which is the material such a
+check would need, and no step of the approval performs it.
+
+This is the real finding in this section, and it does not depend on an agent
+being involved. It lands on mode 1, where the human step covers the manifest
+and not the target: the operator computes a digest from the file and is never
+asked to show that the command line points at the repository that file
+describes. It lands on mode 3, where the target comes from a values file and
+the approval comes from a regular expression, so nothing in that loop
+compares them either. It does not land on modes 2 and 4, which have no delete
+path to reach.
+
+An empty `--prefix` widens this in one direction. Both parsers default it to
+the empty string. On the audit side that puts every object in the bucket in
+scope for classification. On the delete side it means the manifest's keys are
+sent exactly as written, with nothing prepended. A manifest derived under a
+prefix and executed without one names a different set of objects, and the
+approval matches in both cases, because the approval never saw the prefix.
+
 ## Residual risk, stated plainly
 
 A threat model that ends in "everything is fine" has not done its job. This
@@ -1065,21 +1246,28 @@ one does not conclude that. In order of how much they matter:
    the audit credential to read-only actions at the object store is a
    deployment-layer control this project does not provide and does not
    currently recommend anywhere in its documentation.
-4. **The veto's scope is narrower than its name suggests.** It protects a
+4. **The approval binds which keys, not which store.** `verify_approval`
+   settles the manifest's exact bytes and its row count. The manifest records
+   no endpoint, bucket or prefix, so `--endpoint`, `--region`, `--bucket` and
+   `--prefix` sit outside the gate. An execute invocation with a correct
+   approval and a different bucket, or a different prefix, passes and sends
+   the same key list somewhere the manifest never described. Section 11 works
+   through what limits the damage and why that limit is not a control.
+5. **The veto's scope is narrower than its name suggests.** It protects a
    mounted searchable snapshot's snapshot and index UUIDs. It does not
    protect an ordinary live index, and it does not close attribution
    errors; `corroboration.py` says the second part plainly in its own
    documentation.
-5. **The schedule-refusal property for the delete-capable pipeline is
+6. **The schedule-refusal property for the delete-capable pipeline is
    pipeline-scoped, not chart-scoped.** A GitOps deployment of the same
    Helm chart through a route other than the provided GitLab pipeline does
    not inherit that refusal automatically.
-6. **The automated qualification loop exercises the approval mechanism,
+7. **The automated qualification loop exercises the approval mechanism,
    not human judgment.** A passing qualification run is evidence the
    digest-and-row binding works; it is not evidence anyone has read a
    manifest for correctness before approving it, because nothing in that
    loop does.
-7. **Everything the ASD STIG assessment already marks Not Reviewed stays
+8. **Everything the ASD STIG assessment already marks Not Reviewed stays
    Not Reviewed here too.** Log destination and retention, host FIPS
    status, penetration-testing cadence, and the rest of
    [what-we-need-from-you.md](what-we-need-from-you.md) are organisational
@@ -1096,35 +1284,43 @@ four modes in section 1.
   gets code execution can also compute a matching approval digest and run
   `--execute` themselves, so the no-recovery-path risk (1) is one host
   compromise away rather than several infrastructure layers away. Risk 4
-  lands hardest on this mode's own review step: a human who overestimates
-  the veto's reach approves rows the veto never protected in the first
-  place.
+  lands here too, and it lands on the review step itself: the operator
+  computes a digest from the manifest and is never asked to show that the
+  endpoint and bucket on the command line are the ones that manifest was
+  derived under. Risk 5 lands on the same step from the other side: a human
+  who overestimates the veto's reach approves rows the veto never protected
+  in the first place.
 - **Mode 2, the audit in a GitLab worker.** Risk 3 is the risk that reaches
   this mode: there is no delete path here, so the only way this mode
   contributes to eventual loss is a stolen credential used outside this
   tool entirely, against whatever the IAM policy attached to the key
   allows. A manifest this mode produces can still carry the veto's
-  narrower-than-it-sounds scope (risk 4) if someone later runs the delete
+  narrower-than-it-sounds scope (risk 5) if someone later runs the delete
   tool against it in mode 1; that risk belongs to the manifest, not to
   whichever mode produced it.
-- **Mode 3, the churn rig in Kubernetes.** Risks 2, 5 and 6 belong here
+- **Mode 3, the churn rig in Kubernetes.** Risks 2, 4, 6 and 7 belong here
   specifically. The Elasticsearch transport gap (risk 2) is exercised by
   this mode's own in-cluster default endpoint, `http://`, not a
-  hypothetical one; risk 5's GitOps bypass of the schedule refusal is a
-  statement about this pipeline; and risk 6, the automated qualification
+  hypothetical one; risk 6's GitOps bypass of the schedule refusal is a
+  statement about this pipeline; and risk 7, the automated qualification
   loop exercising the approval mechanism but never human judgment,
-  describes this mode exactly and no other one. This is also the mode
+  describes this mode exactly and no other one. Risk 4 is worst here for
+  the same reason: the target comes from a values file and the approval
+  comes from a regular expression, so nothing in that loop compares them. This is also the mode
   where risk 1 is least abstract: it is the only mode where a delete can
   run unattended as intended behaviour, not as the result of a compromise.
 
 None of the above changes the conclusion that the destructive path is
-gated by a real, source-verified control (the digest-and-row approval in
-`generation_chain/reclaim/approval.py`, with dry run as the unconditional
-default). It changes what a reviewer should ask for before treating that
-gate as sufficient on its own: a closed transport gap on the Elasticsearch
-side, a scoped-down IAM policy for whichever credential the audit path
-actually uses, and an answer to the backup question, in that rough order of
-how much each one matters if every other control fails at once.
+gated by a real, source-verified control, as far as that control reaches:
+the digest-and-row approval in `generation_chain/reclaim/approval.py`, with
+dry run as the unconditional default, settles which keys and not which store.
+It changes what a reviewer should ask for before treating that gate as
+sufficient on its own: a closed transport gap on the Elasticsearch side, a
+scoped-down IAM policy for whichever credential the audit path actually uses,
+an answer to the backup question, and a check that ties the endpoint, bucket
+and prefix on the command line to the manifest being approved. Roughly in
+that order of how much each one matters if every other control fails at
+once.
 
 ## Verification
 

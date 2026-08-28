@@ -63,17 +63,23 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # tests/ is declared as tests rather than sources so its synthetic
-          # credential fixtures are not reported as committed secrets: they
-          # are planted on purpose, and tests/test_no_credentials_committed.py
-          # is what guards the real thing. evidence/ and docs/ are left out
-          # because they are captured output and prose, not code.
+          # The Helm chart, the manifests, the workflows and the shell are in
+          # scope: they are maintained code and their findings are real.
+          #
+          # evidence/ is not. It is the captured output of research runs that
+          # have already happened, and editing it to satisfy a linter would
+          # falsify the record. docs/ is prose.
+          #
+          # tests/ is declared as tests rather than sources so its credential
+          # fixtures are not reported as committed secrets: they are planted
+          # on purpose, and tests/test_no_credentials_committed.py is what
+          # guards the real thing.
           args: >
             -Dsonar.projectKey=thanatostyrannos_elasticsearch-oci-s3-workaround
             -Dsonar.organization=thanatostyrannos
             -Dsonar.projectName=elasticsearch-oci-s3-workaround
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.python.version=3.9
-            -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py
+            -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py,scripts,manifests,gitlab,.github,experiment
             -Dsonar.tests=tests
           projectBaseDir: .

@@ -78,6 +78,21 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 
+# Every small utility initContainer this chart runs shares one sizing: the
+# git clone into /workspace (rig.sourceInitContainers), the credential copy
+# (rig.credentialStagingInit), the Elasticsearch/MinIO readiness poll
+# (rig.waitForElasticsearch, minio-bucket-job's wait-for-minio). None of
+# them process the rig's actual data, so one profile covers all of them;
+# ephemeral-storage is sized for the largest of the three, the cloned repo.
+initContainerResources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+    ephemeral-storage: "128Mi"
+  limits:
+    memory: "128Mi"
+    ephemeral-storage: "256Mi"
+
 # -----------------------------------------------------------------------
 # Credentials
 # -----------------------------------------------------------------------
@@ -178,6 +193,18 @@ elasticsearch:
     # partial searchable snapshot and the churn rig's frozen phase stalls.
     # It counts against the container memory limit alongside the heap.
     sharedCacheSize: "2gb"
+    # Two cores: the JVM needs headroom for GC alongside the ingest and
+    # search work this rig drives, on top of the heap set by heapSize
+    # above. No CPU limit: see churnRig.resources below for why this chart
+    # never caps CPU on a container whose timing this rig depends on.
+    cpuRequest: "2"
+    # Data goes to the elasticsearch-data volumeClaimTemplate below, not
+    # here. This bounds the container's own writable root paths (see the
+    # readOnlyRootFilesystem comment on the elasticsearch container in
+    # elasticsearch-eck.yaml) plus JVM scratch files, with room for a
+    # partial heap dump if one is ever triggered.
+    ephemeralStorageRequest: "1Gi"
+    ephemeralStorageLimit: "4Gi"
     # The shared cache above is a FILE ON THIS VOLUME, so this has to be
     # bigger than it, with room for the indices too. ECK defaults to 1Gi,
     # which a 2gb cache cannot fit into: the node then dies at boot with
@@ -209,6 +236,29 @@ minio:
   bucket: "es-snapshots"
   storageSize: "10Gi"
   storageClassName: ""     # empty uses the cluster default StorageClass
+  # The server itself: it receives the churn rig's snapshots and holds the
+  # leaked blobs the audit finds, so it gets real headroom. Object data
+  # lands on the minio-data PVC above; ephemeral-storage here only bounds
+  # /tmp scratch (MinIO's Go runtime writes outside the erasure-coded
+  # backend there).
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+      ephemeral-storage: "128Mi"
+    limits:
+      memory: "512Mi"
+      ephemeral-storage: "256Mi"
+  # The one-shot bucket-creation job (mc alias set + mc mb): a single
+  # config-file write and a single HTTP call, sized accordingly.
+  mcResources:
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
+      ephemeral-storage: "32Mi"
+    limits:
+      memory: "64Mi"
+      ephemeral-storage: "64Mi"
 
 # -----------------------------------------------------------------------
 # Ingress (reach the rig without kubectl port-forward)
@@ -281,13 +331,20 @@ churnRig:
   reportInterval: "60s"            # --report-interval
   reportFilePath: "/state/reports.jsonl"   # --report-file
 
+  # The load generator: it issues Elasticsearch API calls at docsPerSecond
+  # above and does little local compute, so memory stays modest. No CPU
+  # limit: this container's whole job is to hold a steady rate against the
+  # wall clock, and CPU throttling would distort the timing the rest of
+  # this project measures against. Local disk use is small (the cloned
+  # source, the state file, and a report line once a minute).
   resources:
     requests:
       cpu: "250m"
       memory: "256Mi"
+      ephemeral-storage: "128Mi"
     limits:
-      cpu: "1"
       memory: "512Mi"
+      ephemeral-storage: "256Mi"
 
 # =========================================================================
 # The loop: python3 reclaim_test_protocol.py
@@ -334,13 +391,17 @@ qualify:
   # Run as a plain Job, never a CronJob. A scheduled qualify run would put the
   # delete path on a timer, and the safety property this whole split
   # depends on is that the thing on a timer cannot delete anything.
+  # Same footprint as the load generator above: mostly waiting on
+  # Elasticsearch and S3 calls, with small per-cycle exec-*.txt output on
+  # the shared state PVC. No CPU limit, for the same timing reason.
   resources:
     requests:
       cpu: "250m"
       memory: "256Mi"
+      ephemeral-storage: "128Mi"
     limits:
-      cpu: "1"
       memory: "512Mi"
+      ephemeral-storage: "256Mi"
   activeDeadlineSeconds: 21600     # 6h, matching the CI variant's job timeout
   backoffLimit: 0                   # do not silently retry a run that touches delete approvals
 
@@ -367,13 +428,18 @@ teardown:
                              # delete fails. Without this the leaked corpus survives for
                              # measurement, which is the point of a QUALIFICATION run but
                              # not of a rig you are tearing down for good
+  # A single teardown pass: lighter than the load generator or the loop,
+  # with no ongoing local output. No CPU limit, for the same timing reason
+  # (purgeBucket's single-object deletes run against the same wall clock
+  # this project measures elsewhere).
   resources:
     requests:
       cpu: "100m"
       memory: "128Mi"
+      ephemeral-storage: "64Mi"
     limits:
-      cpu: "500m"
       memory: "256Mi"
+      ephemeral-storage: "128Mi"
 
 # =========================================================================
 # The scheduled audit: python3 -m generation_chain
@@ -423,10 +489,16 @@ auditCronJob:
   persistOutput: true
   outputStorageSize: "2Gi"
 
+  # Read-only bucket listing at up to `concurrency` outstanding reads;
+  # output goes to the audit-output PVC when persistOutput is true, not
+  # here, so ephemeral-storage only needs to cover the cloned source and
+  # in-flight buffers. No CPU limit, for the same timing reason as the
+  # rest of this chart.
   resources:
     requests:
       cpu: "250m"
       memory: "256Mi"
+      ephemeral-storage: "128Mi"
     limits:
-      cpu: "1"
       memory: "1Gi"
+      ephemeral-storage: "256Mi"

@@ -37,6 +37,9 @@ spec:
       # fsGroup chowns the data PVC's group ownership so uid 1000 can write
       # to it; without it MinIO authenticates its own startup and then dies
       # unable to write its erasure-coding metadata.
+      # This deployment only serves S3 API calls; it never calls the
+      # Kubernetes API, so it does not need a service account token mounted.
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -60,6 +63,19 @@ spec:
             runAsNonRoot: true
             capabilities:
               drop: ["ALL"]
+          # An object store that actually receives the rig's traffic (the
+          # churn rig's snapshots and the leaked blobs the audit finds), so
+          # it gets real headroom, unlike the one-shot mc job above. Object
+          # data lands on the minio-data PVC; ephemeral-storage here only
+          # bounds /tmp scratch.
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 128Mi
+            limits:
+              memory: 512Mi
+              ephemeral-storage: 256Mi
           ports:
             - name: api
               containerPort: 9000

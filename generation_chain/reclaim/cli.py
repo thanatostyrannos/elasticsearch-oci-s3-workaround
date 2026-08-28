@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Sequence, TextIO, Tuple
 from ..corroboration import ElasticsearchVeto
 from ..credentials import load_elasticsearch, load_s3
 from ..errors import GenerationChainError
+from ..paths import PathRefused, checked_path
 from ..sources.s3 import S3Credentials, _refuse_plain_http
 from . import batch
 from .approval import ApprovalError, verify_approval
@@ -181,6 +182,72 @@ def _relative(store_to_manifest: Dict[str, str], key: str) -> str:
     return store_to_manifest.get(key, key)
 
 
+def _cluster_problem(args: argparse.Namespace,
+                     manifest: ManifestData) -> Optional[Tuple[str, int]]:
+    """Why the cluster forbids this run, as (message, exit code), or None.
+
+    Nothing to say when no cluster was named: `--without-elasticsearch` has
+    already been required by then, so the silence here is a stated choice
+    rather than an unasked question.
+    """
+    if not args.elasticsearch:
+        return None
+    if not args.es_repository:
+        return "--elasticsearch needs --es-repository", EXIT_USAGE
+    try:
+        veto = ElasticsearchVeto(
+            endpoint=args.elasticsearch, repository=args.es_repository,
+            credentials=load_elasticsearch(args.credentials),
+            ca_certificate=args.es_ca_cert).fetch()
+    except GenerationChainError as exc:
+        # A veto that could not be fetched is not a veto that said yes.
+        return (f"the cluster could not be asked, so nothing was deleted: "
+                f"{exc}"), EXIT_APPROVAL_REFUSED
+    problem = recheck.protection_problem(
+        recheck.newly_protected(manifest.keys, veto), len(manifest.keys))
+    if problem:
+        return problem, EXIT_APPROVAL_REFUSED
+    return None
+
+
+def _execute_problem(args: argparse.Namespace,
+                     manifest: ManifestData) -> Optional[Tuple[str, int]]:
+    """Why --execute must not proceed, as (message, exit code), or None.
+
+    In the order an operator should meet them: the approval that names this
+    exact manifest, the stated choice about a cluster, the manifest's age,
+    then the cluster itself. Nothing is sent while any of them has an answer.
+    """
+    if args.approve_digest is None or args.approve_rows is None:
+        return ("--execute needs --approve-digest and --approve-rows naming "
+                "this exact manifest; neither is optional and neither is "
+                "inferred"), EXIT_APPROVAL_REFUSED
+    try:
+        verify_approval(manifest, args.approve_digest, args.approve_rows)
+    except ApprovalError as exc:
+        return str(exc), EXIT_APPROVAL_REFUSED
+    problem = recheck.corroboration_choice_problem(
+        args.elasticsearch, args.without_elasticsearch)
+    if problem:
+        return problem, EXIT_USAGE
+    try:
+        age = time.time() - os.path.getmtime(manifest.path)
+    except OSError as exc:
+        return f"cannot read the age of {manifest.path}: {exc}", EXIT_USAGE
+    problem = recheck.staleness_problem(age, args.max_manifest_age,
+                                        manifest.path)
+    if problem:
+        return problem, EXIT_APPROVAL_REFUSED
+    return _cluster_problem(args, manifest)
+
+
+def _open_report(path: Optional[str]):
+    """The per-batch report file, opened before anything is sent, or None."""
+    if not path:
+        return None
+    return open(checked_path(path, "--report"), "a", encoding="utf-8")
+
+
 def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
          stderr: Optional[TextIO] = None) -> int:
     parser = build_parser()
@@ -210,53 +277,11 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
     if not args.execute:
         return _dry_run(manifest, batches, args, stderr)
 
-    try:
-        if args.approve_digest is None or args.approve_rows is None:
-            raise ApprovalError(
-                "--execute needs --approve-digest and --approve-rows naming "
-                "this exact manifest; neither is optional and neither is "
-                "inferred")
-        verify_approval(manifest, args.approve_digest, args.approve_rows)
-    except ApprovalError as exc:
-        stderr.write(f"{exc}\n")
-        return EXIT_APPROVAL_REFUSED
-    problem = recheck.corroboration_choice_problem(
-        args.elasticsearch, args.without_elasticsearch)
-    if problem:
-        stderr.write(f"{problem}\n")
-        return EXIT_USAGE
-
-    try:
-        age = time.time() - os.path.getmtime(manifest.path)
-    except OSError as exc:
-        stderr.write(f"cannot read the age of {manifest.path}: {exc}\n")
-        return EXIT_USAGE
-    problem = recheck.staleness_problem(age, args.max_manifest_age,
-                                        manifest.path)
-    if problem:
-        stderr.write(f"{problem}\n")
-        return EXIT_APPROVAL_REFUSED
-
-    if args.elasticsearch:
-        if not args.es_repository:
-            stderr.write("--elasticsearch needs --es-repository\n")
-            return EXIT_USAGE
-        try:
-            veto = ElasticsearchVeto(
-                endpoint=args.elasticsearch, repository=args.es_repository,
-                credentials=load_elasticsearch(args.credentials),
-                ca_certificate=args.es_ca_cert).fetch()
-        except GenerationChainError as exc:
-            # A veto that could not be fetched is not a veto that said yes.
-            stderr.write(
-                f"the cluster could not be asked, so nothing was deleted: "
-                f"{exc}\n")
-            return EXIT_APPROVAL_REFUSED
-        problem = recheck.protection_problem(
-            recheck.newly_protected(manifest.keys, veto), len(manifest.keys))
-        if problem:
-            stderr.write(f"{problem}\n")
-            return EXIT_APPROVAL_REFUSED
+    problem = _execute_problem(args, manifest)
+    if problem is not None:
+        message, code = problem
+        stderr.write(f"{message}\n")
+        return code
 
     try:
         credentials = load_s3(args.credentials, args.profile)
@@ -299,7 +324,13 @@ def _dry_run(manifest: ManifestData, batches, args: argparse.Namespace,
 def _execute(batches, store_to_manifest: Dict[str, str], scheme: str,
             host: str, args: argparse.Namespace, credentials: S3Credentials,
             stdout: TextIO, stderr: TextIO) -> int:
-    report = open(args.report, "a", encoding="utf-8") if args.report else None
+    try:
+        report = _open_report(args.report)
+    except (PathRefused, OSError) as exc:
+        # Before the first batch, so nothing has been sent. A run that cannot
+        # record what it did should not start doing it.
+        stderr.write(f"{exc}\n")
+        return EXIT_USAGE
     deleted: List[str] = []
     already_absent: List[Tuple[str, str, str]] = []
     failed: List[Tuple[str, str, str]] = []

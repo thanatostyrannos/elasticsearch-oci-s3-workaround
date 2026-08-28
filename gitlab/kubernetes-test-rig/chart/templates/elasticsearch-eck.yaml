@@ -72,6 +72,10 @@ spec:
         {{- end }}
       podTemplate:
         spec:
+          # ECK manages this pod with its own service account; nothing in
+          # this container ever calls the Kubernetes API, so it does not
+          # need one mounted.
+          automountServiceAccountToken: false
           containers:
             - name: elasticsearch
               env:
@@ -92,9 +96,12 @@ spec:
                   drop: ["ALL"]
               resources:
                 requests:
+                  cpu: {{ .Values.elasticsearch.eck.cpuRequest | quote }}
                   memory: {{ .Values.elasticsearch.eck.memoryRequest | quote }}
+                  ephemeral-storage: {{ .Values.elasticsearch.eck.ephemeralStorageRequest | quote }}
                 limits:
                   memory: {{ .Values.elasticsearch.eck.memoryLimit | quote }}
+                  ephemeral-storage: {{ .Values.elasticsearch.eck.ephemeralStorageLimit | quote }}
       volumeClaimTemplates:
         - metadata:
             name: elasticsearch-data

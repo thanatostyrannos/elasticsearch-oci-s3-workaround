@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional
 
 from .errors import GenerationChainError
+from .paths import checked_path
 
 AWS_CREDENTIALS_FILE = "~/.aws/credentials"
 OCI_CONFIG_FILE = "~/.oci/config"
@@ -59,6 +60,10 @@ ES_PASSWORD_ENV = "GENCHAIN_ES_PASSWORD"
 ES_API_KEY_ENV = "GENCHAIN_ES_API_KEY"
 
 GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
+
+# What a Secret renders as everywhere except reveal(). Named once so a
+# reader can see that every path out of the class produces the same string.
+SECRET_PLACEHOLDER = "<secret>"
 
 CREDENTIAL_SUMMARY = (
     "Credentials: none at all is a supported way to run, with --local-repo "
@@ -97,13 +102,13 @@ class Secret:
         return bool(self._value)
 
     def __repr__(self) -> str:
-        return "<secret>"
+        return SECRET_PLACEHOLDER
 
     def __str__(self) -> str:
-        return "<secret>"
+        return SECRET_PLACEHOLDER
 
     def __format__(self, spec: str) -> str:
-        return "<secret>"
+        return SECRET_PLACEHOLDER
 
 
 def as_secret(value) -> Secret:
@@ -129,7 +134,7 @@ class CredentialFile:
 
     @classmethod
     def read(cls, path: str) -> "CredentialFile":
-        resolved = os.path.expanduser(path)
+        resolved = checked_path(path, "--credentials")
         require_private(resolved)
         try:
             with open(resolved, encoding="utf-8") as handle:
@@ -232,7 +237,8 @@ def load_oci(explicit: Optional[str], profile: str = "DEFAULT"):
     from .sources.signing.rsa import RsaPrivateKey
     if explicit:
         credentials = CredentialFile.read(explicit)
-        key_path = os.path.expanduser(credentials.required("oci", "key_file"))
+        key_path = checked_path(credentials.required("oci", "key_file"),
+                                "the oci section's key_file")
         require_private(key_path)
         with open(key_path, "rb") as handle:
             pem = handle.read()

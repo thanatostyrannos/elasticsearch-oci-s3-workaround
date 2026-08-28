@@ -71,6 +71,17 @@ SNAPSHOT_SETTINGS_PREFIX = "index.store.snapshot."
 DEFAULT_TIMEOUT_SECONDS = 60.0
 USER_AGENT = "generation-chain-auditor (python-urllib)"
 
+# TLS 1.0 and 1.1 are broken, and `ssl.create_default_context` does not rule
+# them out on its own: on the Python 3.9 this project still supports it leaves
+# `minimum_version` at MINIMUM_SUPPORTED and lets the host's OpenSSL build
+# decide, which is a different answer on every machine this runs on. Naming
+# the floor here makes it a property of the tool rather than of the host.
+#
+# 1.2 rather than 1.3, because a cluster that speaks only 1.2 is ordinary and
+# refusing it would make this module fail to corroborate for a reason that has
+# nothing to do with what the cluster had to say.
+MINIMUM_TLS_VERSION = ssl.TLSVersion.TLSv1_2
+
 
 class CorroborationUnavailable(GenerationChainError):
     """Corroboration was asked for and could not be obtained.
@@ -139,6 +150,19 @@ class Veto:
         return [row for row in condemned if not self.covers(row)]
 
 
+def _tls_context(ca_certificate: Optional[str]) -> ssl.SSLContext:
+    """A verifying context with a TLS floor this tool sets itself.
+
+    Built for every run, not only for a run that named a CA file. Without a
+    context urllib falls back to its own default, which carries the same
+    unpinned floor, and the cluster credential travels over the connection
+    either way.
+    """
+    context = ssl.create_default_context(cafile=ca_certificate)
+    context.minimum_version = MINIMUM_TLS_VERSION
+    return context
+
+
 class ElasticsearchVeto:
     """Asks one cluster about one repository, or raises."""
 
@@ -151,8 +175,7 @@ class ElasticsearchVeto:
         self.repository = repository
         self.credentials = credentials
         self.timeout = timeout
-        self._context = (ssl.create_default_context(cafile=ca_certificate)
-                         if ca_certificate else None)
+        self._context = _tls_context(ca_certificate)
         self._opener = opener or urllib.request.urlopen
 
     def fetch(self) -> Veto:
@@ -172,8 +195,7 @@ class ElasticsearchVeto:
         request.add_header("User-Agent", USER_AGENT)
         try:
             with self._opener(request, timeout=self.timeout,
-                              **({"context": self._context}
-                                 if self._context else {})) as response:
+                              context=self._context) as response:
                 body = response.read()
         except urllib.error.HTTPError as exc:
             raise CorroborationUnavailable(
@@ -197,39 +219,58 @@ class ElasticsearchVeto:
         return document
 
 
-def _build_veto(endpoint: str, snapshots: Mapping[str, Any],
-                mounted: Mapping[str, Any],
-                running: Mapping[str, Any]) -> Veto:
-    """Assemble the protections from three answers that all arrived."""
-    protected_snapshots = set()
+def _entry_uuid(entry: Any, what: str) -> str:
+    """The uuid Elasticsearch attached to one entry, or a refusal.
+
+    An entry with no uuid cannot be matched against a manifest row, so it
+    would protect nothing. Silently skipping it makes the manifest longer
+    than a well-formed answer would have, which is the one direction this
+    module may never fail in.
+    """
+    if not isinstance(entry, dict) or not isinstance(entry.get("uuid"), str):
+        raise CorroborationUnavailable(
+            f"Elasticsearch reported {what} with no uuid")
+    return entry["uuid"]
+
+
+def _snapshot_uuids(snapshots: Mapping[str, Any]) -> Tuple[str, ...]:
+    """Every uuid in the repository's snapshot list, in the order reported."""
     reported = snapshots.get("snapshots")
     if not isinstance(reported, list):
         raise CorroborationUnavailable(
             "Elasticsearch's snapshot list carries no snapshots array")
-    for entry in reported:
-        if not isinstance(entry, dict) or not isinstance(entry.get("uuid"), str):
-            raise CorroborationUnavailable(
-                "Elasticsearch reported a snapshot with no uuid")
-        protected_snapshots.add(entry["uuid"])
+    return tuple(_entry_uuid(entry, "a snapshot") for entry in reported)
 
-    protected_indices = set()
-    mounted_names = []
+
+def _mounted_protections(mounted: Mapping[str, Any]):
+    """Snapshot uuids, index uuids and index names from the mount settings.
+
+    An index whose settings this cannot read is skipped rather than refused.
+    A mount carries its snapshot uuid in a setting Elasticsearch writes, and
+    an index without one is an ordinary index rather than a malformed answer.
+    """
+    snapshot_uuids = set()
+    index_uuids = set()
+    names = []
     for name, body in mounted.items():
         settings = body.get("settings") if isinstance(body, dict) else None
         if not isinstance(settings, dict):
             continue
         snapshot_uuid = settings.get(SNAPSHOT_SETTINGS_PREFIX + "snapshot_uuid")
-        index_uuid = settings.get(SNAPSHOT_SETTINGS_PREFIX + "index_uuid")
         if not isinstance(snapshot_uuid, str):
             continue
-        mounted_names.append(str(name))
-        protected_snapshots.add(snapshot_uuid)
+        names.append(str(name))
+        snapshot_uuids.add(snapshot_uuid)
+        index_uuid = settings.get(SNAPSHOT_SETTINGS_PREFIX + "index_uuid")
         if isinstance(index_uuid, str):
-            protected_indices.add(index_uuid)
+            index_uuids.add(index_uuid)
+    return snapshot_uuids, index_uuids, names
 
-    in_flight = []
-    running_snapshots = running.get("snapshots")
-    if not isinstance(running_snapshots, list):
+
+def _in_flight_protections(running: Mapping[str, Any]):
+    """Snapshot uuids being written right now, and the names to report."""
+    reported = running.get("snapshots")
+    if not isinstance(reported, list):
         # An answer this tool cannot read protects nothing, and protecting
         # nothing makes the manifest LONGER than a readable answer would have.
         # That is the whole failure mode this module exists to make impossible,
@@ -237,16 +278,26 @@ def _build_veto(endpoint: str, snapshots: Mapping[str, Any],
         raise CorroborationUnavailable(
             "Elasticsearch's in-flight snapshot status carries no snapshots "
             "array, so this run could not establish what is being written now")
-    for entry in running_snapshots:
-        if not isinstance(entry, dict) or not isinstance(entry.get("uuid"), str):
-            raise CorroborationUnavailable(
-                "Elasticsearch reported an in-flight snapshot with no uuid")
-        protected_snapshots.add(entry["uuid"])
-        in_flight.append(str(entry.get("snapshot", entry["uuid"])))
+    uuids = set()
+    names = []
+    for entry in reported:
+        uuid = _entry_uuid(entry, "an in-flight snapshot")
+        uuids.add(uuid)
+        names.append(str(entry.get("snapshot", uuid)))
+    return uuids, names
 
+
+def _build_veto(endpoint: str, snapshots: Mapping[str, Any],
+                mounted: Mapping[str, Any],
+                running: Mapping[str, Any]) -> Veto:
+    """Assemble the protections from three answers that all arrived."""
+    listed = _snapshot_uuids(snapshots)
+    mounted_uuids, index_uuids, mounted_names = _mounted_protections(mounted)
+    in_flight_uuids, in_flight_names = _in_flight_protections(running)
     return Veto(endpoint=endpoint,
-                snapshot_uuids=frozenset(protected_snapshots),
-                index_uuids=frozenset(protected_indices),
+                snapshot_uuids=frozenset(set(listed) | mounted_uuids
+                                         | in_flight_uuids),
+                index_uuids=frozenset(index_uuids),
                 mounted_indices=tuple(sorted(mounted_names)),
-                in_flight=tuple(sorted(in_flight)),
-                snapshots_reported=len(reported))
+                in_flight=tuple(sorted(in_flight_names)),
+                snapshots_reported=len(listed))

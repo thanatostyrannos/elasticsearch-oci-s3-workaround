@@ -111,8 +111,10 @@ CASES = [
     ("an-anchor-naming-no-snapshots-refuses", "derivation/chain.py",
      "    if not anchor.snapshots:", "    if False:"),
     ("an-older-generation-must-carry-our-uuid", "derivation/chain.py",
-     "            elif parsed.repository_uuid != repository_uuid:",
-     "            elif False:"),
+     "    if parsed.repository_uuid != repository_uuid:\n"
+     "        return (f\"belongs to repository {parsed.repository_uuid}, not \"",
+     "    if False:\n"
+     "        return (f\"belongs to repository {parsed.repository_uuid}, not \""),
     ("a-mixed-transition-is-not-one-operation", "derivation/chain.py",
      "        return [pair for pair, mixed in self._steps() if not mixed]",
      "        return [pair for pair, mixed in self._steps()]"),
@@ -196,8 +198,12 @@ CASES = [
      "        if False:"),
     ("a-snapshot-still-in-the-catalog-is-never-condemned",
      "derivation/garbage.py",
-     "        if operation.snapshot_uuid in final.snapshots:\n            continue",
-     "        if False:\n            continue"),
+     "        if operation.snapshot_uuid in chain.final.snapshots:\n"
+     "            continue\n"
+     "        _condemn_root_documents(operation, keys, found)",
+     "        if False:\n"
+     "            continue\n"
+     "        _condemn_root_documents(operation, keys, found)"),
     ("a-dropped-shard-contributes-no-index-metadata",
      "derivation/garbage.py",
      "        if index_uuid in unread_indices:\n            continue",
@@ -280,8 +286,8 @@ CASES = [
     # -- reclaim: a batch answering 200 is read one key at a time ---------
     ("a-per-key-error-is-never-read-as-deleted",
      "reclaim/batch.py",
-     "                failed.append((key, code, message))",
-     "                deleted.append(key)"),
+     "            failed.append((key, code, message))",
+     "            deleted.append(key)"),
     ("a-key-absent-from-the-response-is-never-deleted",
      "reclaim/batch.py",
      "    unconfirmed = tuple(key for key in requested if key not in accounted)",
@@ -294,8 +300,8 @@ CASES = [
      "    if False:"),
     ("execute-without-approval-is-refused",
      "reclaim/cli.py",
-     "        if args.approve_digest is None or args.approve_rows is None:",
-     "        if False:"),
+     "    if args.approve_digest is None or args.approve_rows is None:",
+     "    if False:"),
     ("cli-reports-a-per-key-failure-as-failed",
      "reclaim/cli.py",
      "            failed.extend(outcome.failed)",

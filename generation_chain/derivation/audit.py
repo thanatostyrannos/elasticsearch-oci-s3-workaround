@@ -145,10 +145,7 @@ def run_audit(source: RepositorySource, veto: Optional[Veto] = None,
         # trusts.
         for location in locations:
             era_names.pop(location, None)
-            prefix = f"{location.directory}/"
-            for key in [k for k, c in found.items()
-                       if c.category == CATEGORY_SEGMENT and k.startswith(prefix)]:
-                del found[key]
+            _release_segment_claims(found, location)
 
     try:
         survey = survey_shards(source, chain, keys, index, notes,
@@ -204,6 +201,21 @@ def run_audit(source: RepositorySource, veto: Optional[Veto] = None,
     )
     return AuditResult(condemned=verdict.manifest, coverage=coverage,
                        classification=verdict.placements)
+
+
+def _release_segment_claims(found: Dict[str, Condemnation],
+                            location: ShardLocation) -> None:
+    """Take back every segment claim standing on one shard directory.
+
+    Claims are made a group at a time, on that group's own evidence. When the
+    whole-run writer-uuid check later says the directory's evidence does not
+    hold together, a claim already resting on it has to come back out rather
+    than be left in a manifest the run no longer stands behind.
+    """
+    prefix = f"{location.directory}/"
+    for key in [k for k, c in found.items()
+                if c.category == CATEGORY_SEGMENT and k.startswith(prefix)]:
+        del found[key]
 
 
 def _refused(why: str, notes: List[str],

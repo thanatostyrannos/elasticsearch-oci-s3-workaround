@@ -49,6 +49,9 @@ spec:
       # fsGroup chowns the data PVC's group ownership so uid 1000 can write
       # to it; without it MinIO authenticates its own startup and then dies
       # unable to write its erasure-coding metadata.
+      # This deployment only serves S3 API calls; it never calls the
+      # Kubernetes API, so it does not need a service account token mounted.
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -74,6 +77,8 @@ spec:
                   key: root-password
           securityContext:
             {{- include "rig.securityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
           ports:
             - name: api
               containerPort: 9000

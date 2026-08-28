@@ -53,6 +53,10 @@ spec:
         s3.client.oci.disable_chunked_encoding: true
       podTemplate:
         spec:
+          # ECK manages this pod with its own service account; nothing in
+          # this container ever calls the Kubernetes API, so it does not
+          # need one mounted.
+          automountServiceAccountToken: false
           containers:
             - name: elasticsearch
               env:
@@ -80,9 +84,21 @@ spec:
                   drop: ["ALL"]
               resources:
                 requests:
+                  # Two cores: the JVM needs headroom for GC alongside the
+                  # ingest and search work this rig drives, on top of the
+                  # heap set in ES_JAVA_OPTS above.
+                  cpu: "2"
                   memory: 16Gi
+                  ephemeral-storage: 1Gi
                 limits:
                   memory: 16Gi
+                  # Data goes to the elasticsearch-data PVC, not here. This
+                  # bounds the container's own writable root paths
+                  # (config/, plugins/, jvm.options.d/ — see the comment
+                  # above on why readOnlyRootFilesystem is off) plus any JVM
+                  # scratch files, with room for a partial heap dump if one
+                  # is ever triggered.
+                  ephemeral-storage: 4Gi
       volumeClaimTemplates:
         - metadata:
             name: elasticsearch-data

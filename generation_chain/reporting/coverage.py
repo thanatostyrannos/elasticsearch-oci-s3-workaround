@@ -56,6 +56,13 @@ def _dispositions(placements: List[Placement]) -> Counter:
     return Counter(placement.disposition for placement in placements)
 
 
+# The order the report lists dispositions in. Fixed rather than derived from
+# whatever the run happened to produce, so two reports line up side by side and
+# a category with nothing in it still shows its zero.
+DISPOSITION_ORDER = ("orphaned", "protected", "live", "evidence",
+                     "unexplained", "outside-model")
+
+
 def write_report(result: AuditResult, transport: str, location: str,
                  stream: TextIO, sizes=None) -> None:
     """The human report. Coverage first, because it qualifies everything else."""
@@ -71,19 +78,35 @@ def write_report(result: AuditResult, transport: str, location: str,
               "evidence that the repository is clean.")
         return
 
-    uuid = coverage.repository_uuid
-    write(f"repository uuid: {uuid}")
+    _write_repository_identity(coverage, write)
+    write()
+    write("Coverage")
+    _write_generations(coverage, write)
+    _write_history(coverage, write)
+    write()
+    _write_corroboration(coverage, write)
+    write()
+    _write_dispositions(result.classification, sizes, write)
+    write()
+    _write_reclaimable(result.keys, sizes, write)
+    _write_notes(coverage, write)
+
+
+def _write_repository_identity(coverage, write) -> None:
+    """The repository uuid, and what matching on it does and does not prove."""
+    write(f"repository uuid: {coverage.repository_uuid}")
     if coverage.repository_uuid_is_unassigned:
         write("  This repository has never been assigned a uuid, so matching "
               "it separates nothing. Generation blobs from a co-tenant "
               "sharing this bucket would match too.")
-    else:
-        write("  The uuid is a field whoever wrote the blob controls. It "
-              "separates tenants sharing a bucket. It is not proof of "
-              "authorship.")
+        return
+    write("  The uuid is a field whoever wrote the blob controls. It "
+          "separates tenants sharing a bucket. It is not proof of "
+          "authorship.")
 
-    write()
-    write("Coverage")
+
+def _write_generations(coverage, write) -> None:
+    """Which generations this run read, and which it could not use."""
     write(f"  current root generation: {coverage.current_generation}")
     if coverage.latest_generation != coverage.current_generation:
         write(f"  index.latest names generation {coverage.latest_generation}, "
@@ -99,6 +122,10 @@ def write_report(result: AuditResult, transport: str, location: str,
           f"{_numbers(coverage.generations_missing)}")
     for generation, why in sorted(coverage.generations_rejected.items()):
         write(f"    generation {generation} was not used: {why}")
+
+
+def _write_history(coverage, write) -> None:
+    """How much of the delete history this run could account for."""
     fraction = coverage.explained_fraction
     percent = "n/a" if fraction is None else f"{fraction * 100:.0f}%"
     write(f"  history this run can explain: {percent}")
@@ -123,19 +150,7 @@ def write_report(result: AuditResult, transport: str, location: str,
         write("    Each one was left OUT of the manifest. This is not a count "
               "of keys that are gone, it is a count of questions that went "
               "unanswered.")
-    commit_oracle_seen = (coverage.commit_oracle_checked
-                         + coverage.commit_oracle_skipped)
-    if commit_oracle_seen:
-        write(f"  Lucene commit cross-check: ran on "
-              f"{coverage.commit_oracle_checked} of {commit_oracle_seen} "
-              "snapshot file lists")
-        if coverage.commit_oracle_skipped:
-            write(f"    {coverage.commit_oracle_skipped} carried no inline "
-                  "commit to compare against, so this run's independent "
-                  "check on drift between the file list and what Lucene "
-                  "needs did not run for them. They still passed the older "
-                  "presence-only gate.")
-
+    _write_commit_oracle(coverage, write)
     if (coverage.transitions_explained < coverage.transitions_total
             or coverage.operations_attributed < coverage.operations_found
             or coverage.shards_dropped):
@@ -144,36 +159,64 @@ def write_report(result: AuditResult, transport: str, location: str,
               "manifest. A key absent from it is not evidence that the key is "
               "live.")
 
-    write()
-    if coverage.corroborated_by:
-        write(f"Elasticsearch corroboration: CHECKED against "
-              f"{coverage.corroborated_by}")
-        write("  Everything it reported was removed from the manifest. What it "
-              "did not report was not thereby condemned.")
-        write("  It protects by snapshot identity, so it cannot catch a key "
-              "this tool attributed to the wrong snapshot. Corroboration is "
-              "not a check on the derivation.")
-    else:
+
+def _write_commit_oracle(coverage, write) -> None:
+    """How often the independent Lucene commit cross-check could run."""
+    seen = coverage.commit_oracle_checked + coverage.commit_oracle_skipped
+    if not seen:
+        return
+    write(f"  Lucene commit cross-check: ran on "
+          f"{coverage.commit_oracle_checked} of {seen} snapshot file lists")
+    if coverage.commit_oracle_skipped:
+        write(f"    {coverage.commit_oracle_skipped} carried no inline "
+              "commit to compare against, so this run's independent "
+              "check on drift between the file list and what Lucene "
+              "needs did not run for them. They still passed the older "
+              "presence-only gate.")
+
+
+def _write_corroboration(coverage, write) -> None:
+    """Whether a cluster was asked, and what its answer does not cover."""
+    if not coverage.corroborated_by:
         write("Elasticsearch corroboration: NOT CHECKED")
         write("  Nothing in this run established whether a mounted "
               "searchable-snapshot index depends on the keys below. That "
               "linkage lives in cluster state and repository metadata cannot "
               "see it. Pass --elasticsearch and --es-repository to ask.")
-    write()
+        return
+    write(f"Elasticsearch corroboration: CHECKED against "
+          f"{coverage.corroborated_by}")
+    write("  Everything it reported was removed from the manifest. What it "
+          "did not report was not thereby condemned.")
+    write("  It protects by snapshot identity, so it cannot catch a key "
+          "this tool attributed to the wrong snapshot. Corroboration is "
+          "not a check on the derivation.")
+
+
+def _disposition_line(name: str, count: int, measured) -> str:
+    """One `name: count` line, with bytes when the transport reported sizes.
+
+    `measured` is None when there is nothing to size, either because the
+    transport gave no sizes or because the category is empty.
+    """
+    if measured is None:
+        return f"  {name}: {count}"
+    _, total, unsized = measured
+    if unsized:
+        return (f"  {name}: {count}, at least {human_bytes(total)} "
+                f"({unsized} without a size)")
+    return f"  {name}: {count}, {human_bytes(total)}"
+
+
+def _write_dispositions(placements, sizes, write) -> None:
+    """Every key this run placed, by category, and what those sizes are not."""
     write("Dispositions")
-    counts = _dispositions(result.classification)
-    measured = bytes_by_disposition(result.classification, sizes)
-    for name in ("orphaned", "protected", "live", "evidence", "unexplained",
-                 "outside-model"):
-        n = counts.get(name, 0)
-        _, total, unsized = measured.get(name, (0, 0, 0))
-        if not sizes or n == 0:
-            write(f"  {name}: {n}")
-        elif unsized:
-            write(f"  {name}: {n}, at least {human_bytes(total)} "
-                  f"({unsized} without a size)")
-        else:
-            write(f"  {name}: {n}, {human_bytes(total)}")
+    counts = _dispositions(placements)
+    measured = bytes_by_disposition(placements, sizes)
+    for name in DISPOSITION_ORDER:
+        count = counts.get(name, 0)
+        write(_disposition_line(
+            name, count, measured.get(name) if sizes and count else None))
     if sizes:
         write("  Only `orphaned` is a list of things to delete. The sizes beside "
               "the others are there because the manifest is not the size of the "
@@ -198,19 +241,26 @@ def write_report(result: AuditResult, transport: str, location: str,
           "reclaims them. They are counted so they are not silently absent, "
           "not because they are accounted for.")
     if sizes:
-        _, evidence_bytes, _ = measured.get("evidence", (0, 0, 0))
-        _, orphaned_bytes, _ = measured.get("orphaned", (0, 0, 0))
-        # An operator reads two numbers and acts on the smaller one. Say it
-        # out loud when the category they cannot act on is the larger.
-        if evidence_bytes > orphaned_bytes > 0:
-            ratio = evidence_bytes / orphaned_bytes
-            write(f"  The `evidence` you cannot reclaim is {ratio:.1f} times "
-                  f"the size of the `orphaned` you can. Reclaiming everything "
-                  f"this run names still leaves the larger pile behind.")
+        _write_evidence_ratio(measured, write)
 
-    write()
+
+def _write_evidence_ratio(measured, write) -> None:
+    """Say it out loud when the pile nobody can reclaim is the larger one.
+
+    An operator reads two numbers and acts on the smaller one.
+    """
+    _, evidence_bytes, _ = measured.get("evidence", (0, 0, 0))
+    _, orphaned_bytes, _ = measured.get("orphaned", (0, 0, 0))
+    if evidence_bytes > orphaned_bytes > 0:
+        ratio = evidence_bytes / orphaned_bytes
+        write(f"  The `evidence` you cannot reclaim is {ratio:.1f} times "
+              f"the size of the `orphaned` you can. Reclaiming everything "
+              f"this run names still leaves the larger pile behind.")
+
+
+def _write_reclaimable(condemned_keys, sizes, write) -> None:
+    """What a delete of everything in the manifest would give back."""
     write("Reclaimable")
-    condemned_keys = result.keys
     total, unsized = reclaimable(condemned_keys, sizes)
     if not sizes:
         write(f"  {len(condemned_keys)} orphaned objects, no sizes available "
@@ -229,11 +279,14 @@ def write_report(result: AuditResult, transport: str, location: str,
           "is a different number: it is per logical Lucene file and summed per "
           "snapshot, so it counts a file shared by two snapshots twice.")
 
-    if coverage.notes:
-        write()
-        write("Notes")
-        for note in coverage.notes:
-            write(f"  {note}")
+
+def _write_notes(coverage, write) -> None:
+    if not coverage.notes:
+        return
+    write()
+    write("Notes")
+    for note in coverage.notes:
+        write(f"  {note}")
 
 
 # Decimal units, not binary. Object stores bill and display in powers of ten,
