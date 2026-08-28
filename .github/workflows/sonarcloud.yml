@@ -6,10 +6,10 @@
 # to reach a SonarCloud project. Three things are needed, none of which can
 # live in this file:
 #
-#   SONAR_TOKEN         repository secret. SonarCloud > avatar > My account >
-#                       Security, or https://sonarcloud.io/account/security/
-#   SONAR_PROJECT_KEY   repository variable. SonarCloud > Information, bottom
-#   SONAR_ORGANIZATION  repository variable. Same place
+#   SONAR_TOKEN         repository secret. SonarQube Cloud > avatar >
+#                       My account > Security, https://sonarcloud.io/account/security/
+#   SONAR_PROJECT_KEY   repository variable. The project's Information panel
+#   SONAR_ORGANIZATION  repository variable. Same panel
 #
 # Until all three are set the analysis step is skipped and the job reports
 # green, so a red check on this workflow means the analysis itself failed
@@ -67,7 +67,9 @@ jobs:
 
       - name: Analyze with SonarCloud
         if: steps.gate.outputs.ready == 'true'
-        uses: SonarSource/sonarcloud-github-action@4006f663ecaf1f8093e8e4abb9227f6041f52216
+        # sonarcloud-github-action is archived and deprecated. This is its
+        # named replacement, v8.2.1, pinned by commit.
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
