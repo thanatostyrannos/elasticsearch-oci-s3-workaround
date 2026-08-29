@@ -201,6 +201,20 @@ def path_segment(name: str) -> str:
     return urllib.parse.quote(str(name), safe="")
 
 
+def _pinned_context(ca_cert):
+    """Build the verified context, with the floor named rather than inherited.
+
+    create_default_context leaves minimum_version at MINIMUM_SUPPORTED before
+    Python 3.10, which lets the host's OpenSSL build pick the floor and gives a
+    different answer on every machine. 1.2 rather than 1.3: a cluster that
+    speaks only 1.2 is ordinary, and refusing it would break the tool for a
+    reason that has nothing to do with this.
+    """
+    context = ssl.create_default_context(cafile=ca_cert)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def checked_ca_cert(parser: argparse.ArgumentParser, path):
     """Refuse a --ca-cert that will not load, naming the path that failed.
 
@@ -212,7 +226,11 @@ def checked_ca_cert(parser: argparse.ArgumentParser, path):
     if path is None:
         return
     try:
-        ssl.create_default_context(cafile=path)
+        # Built through the same helper the real connection uses, so
+        # there is one context construction in this file and the
+        # floor below is pinned on it. A throwaway context here was
+        # a second, unpinned one that proved nothing about the first.
+        _pinned_context(path)
     except (OSError, ssl.SSLError) as problem:
         parser.error(f"--ca-cert {path!r} could not be read: "
                      f"{getattr(problem, 'strerror', None) or problem}. It "
@@ -230,14 +248,7 @@ def tls_context(args: argparse.Namespace):
     """
     if urllib.parse.urlsplit(args.es).scheme != "https":
         return None
-    ctx = ssl.create_default_context(cafile=args.ca_cert)
-    # create_default_context leaves minimum_version at MINIMUM_SUPPORTED
-    # before Python 3.10, which lets the host's OpenSSL build pick the floor
-    # and gives a different answer on every machine. 1.2 rather than 1.3: a
-    # cluster that speaks only 1.2 is ordinary, and refusing it would break
-    # the tool for a reason that has nothing to do with this.
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    return ctx
+    return _pinned_context(args.ca_cert)
 
 
 def http_get(path: str, args: argparse.Namespace) -> dict:
