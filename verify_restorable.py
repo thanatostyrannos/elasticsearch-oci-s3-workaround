@@ -24,7 +24,6 @@ import argparse
 import base64
 import json
 import os
-import re
 import ssl
 import sys
 import time
@@ -57,9 +56,6 @@ def path_segment(name):
     return urllib.parse.quote(str(name), safe="")
 
 
-PATH_GRAMMAR = re.compile(r"[A-Za-z0-9 ._/~-]{1,4096}")
-
-
 def read_secret(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
@@ -74,14 +70,6 @@ def read_secret(path, what):
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
-    # Matched whole against a grammar for a path, before anything touches the
-    # filesystem. A deny-list cannot be complete, and resolving a path is not
-    # the same as agreeing it is one: a newline, a NUL or a control character
-    # in here is never something an operator meant to type, and every one of
-    # them reads differently downstream than it looks on the command line.
-    if not PATH_GRAMMAR.fullmatch(path):
-        sys.exit(f"{what} {path!r} is not a path this tool will open. It "
-                 f"accepts letters, digits, space, and . _ - / ~ only")
     resolved = os.path.realpath(path)
     if not os.path.isfile(resolved):
         sys.exit(f"{what} {path!r} is not a regular file "

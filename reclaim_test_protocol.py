@@ -610,10 +610,12 @@ def build_parser():
     return p
 
 
-def main():
-    p = build_parser()
-    args = p.parse_args()
+def check_arguments(p, args):
+    """Refuse a combination of flags that cannot work, before anything runs.
 
+    Every refusal here goes through p.error, so the operator gets the usage
+    line and an exit code rather than a traceback from four frames down.
+    """
     if args.transport == "oci" and not args.namespace:
         p.error("--transport oci needs --namespace")
     if args.elasticsearch:
@@ -630,15 +632,18 @@ def main():
                                                 "--es-password-file")
         except ValueError as exc:
             p.error(str(exc))
-
     problem = corroboration_credential_problem(args)
     if problem:
         p.error(problem)
 
-    # Checked and resolved once, here, so every artifact path below is a join
-    # onto a directory that exists and has already been through the
-    # filesystem, and so the directory that gets created is the one a refusal
-    # here would have named.
+
+def prepare_output(p, args):
+    """Resolve --out, create it, and return the cycles file inside it.
+
+    Resolved once, here, so every artifact path is a join onto a directory
+    that exists and has been through the filesystem, and so the directory that
+    gets created is the one a refusal here would have named.
+    """
     try:
         args.out = checked_path(args.out, "--out")
     except PathRefused as refusal:
@@ -652,6 +657,14 @@ def main():
     if not os.path.exists(tsv):
         with open(tsv, "w") as fh:
             fh.write("\t".join(COLUMNS) + "\n")
+    return tsv
+
+
+def main():
+    p = build_parser()
+    args = p.parse_args()
+    check_arguments(p, args)
+    tsv = prepare_output(p, args)
 
     def log(msg):
         print(msg, flush=True)
