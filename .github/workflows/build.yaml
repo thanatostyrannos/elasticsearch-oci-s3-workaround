@@ -7,6 +7,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Least privilege. SonarQube Cloud's starter snippet leaves this out, so the
+# job inherits whatever the repository default is, which is write on many
+# repositories. The scanner reads the tree and talks to SonarQube Cloud over
+# its own token; it needs nothing from the GitHub API but the checkout.
+permissions:
+  contents: read
+  pull-requests: read  # lets the analysis decorate a pull request
+
 jobs:
   sonarqube:
     name: SonarQube
