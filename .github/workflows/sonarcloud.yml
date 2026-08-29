@@ -14,11 +14,12 @@
 # nobody has signed up yet.
 name: SonarCloud analysis
 
+# Manual only. Automatic Analysis is the analysis method for this project, and
+# SonarQube Cloud refuses a CI analysis while it is enabled: the scanner exits 3
+# and the job goes red. This workflow stays here, correct and ready, so the
+# switch back is turning Automatic Analysis off and restoring the push and
+# pull_request triggers below. Nothing else about it needs to change.
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
