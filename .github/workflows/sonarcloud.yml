@@ -82,4 +82,37 @@ jobs:
             -Dsonar.python.version=3.9
             -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py,scripts,manifests,gitlab,.github,experiment
             -Dsonar.tests=tests
+            -Dsonar.qualitygate.wait=true
           projectBaseDir: .
+
+      # The scanner writes the analysis it just submitted here. Reading the
+      # task id from the file it produced is what ties the export below to
+      # this run rather than to whatever happened to be newest.
+      - name: Export the findings this analysis produced
+        if: always() && steps.gate.outputs.ready == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mkdir -p sonar-export
+          key=thanatostyrannos_elasticsearch-oci-s3-workaround
+          curl -sS -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/issues/search?componentKeys=$key&ps=500&resolved=false" \
+            -o sonar-export/issues.json
+          curl -sS -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/measures/component?component=$key&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,ncloc,duplicated_lines_density,new_violations" \
+            -o sonar-export/measures.json
+          # Named by commit, because that is what you look it up by. The
+          # content hash goes in a sidecar so the file can still be proved
+          # unaltered, which is how the release archive is handled too.
+          for f in issues measures; do
+            sha256sum "sonar-export/$f.json" > "sonar-export/$f.json.sha256"
+          done
+          python3 -c "import json;print('unresolved issues:', json.load(open('sonar-export/issues.json'))['total'])"
+
+      - name: Keep the export with the run
+        if: always() && steps.gate.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: sonar-findings-${{ github.sha }}
+          path: sonar-export/
+          retention-days: 90
