@@ -71,17 +71,6 @@ SNAPSHOT_SETTINGS_PREFIX = "index.store.snapshot."
 DEFAULT_TIMEOUT_SECONDS = 60.0
 USER_AGENT = "generation-chain-auditor (python-urllib)"
 
-# TLS 1.0 and 1.1 are broken, and `ssl.create_default_context` does not rule
-# them out on its own: on the Python 3.9 this project still supports it leaves
-# `minimum_version` at MINIMUM_SUPPORTED and lets the host's OpenSSL build
-# decide, which is a different answer on every machine this runs on. Naming
-# the floor here makes it a property of the tool rather than of the host.
-#
-# 1.2 rather than 1.3, because a cluster that speaks only 1.2 is ordinary and
-# refusing it would make this module fail to corroborate for a reason that has
-# nothing to do with what the cluster had to say.
-MINIMUM_TLS_VERSION = ssl.TLSVersion.TLSv1_2
-
 
 class CorroborationUnavailable(GenerationChainError):
     """Corroboration was asked for and could not be obtained.
@@ -159,7 +148,17 @@ def _tls_context(ca_certificate: Optional[str]) -> ssl.SSLContext:
     either way.
     """
     context = ssl.create_default_context(cafile=ca_certificate)
-    context.minimum_version = MINIMUM_TLS_VERSION
+    # TLS 1.0 and 1.1 are broken, and `create_default_context` does not rule
+    # them out on its own: on the Python 3.9 this project still supports it
+    # leaves `minimum_version` at MINIMUM_SUPPORTED and lets the host's
+    # OpenSSL build decide, which is a different answer on every machine this
+    # runs on. Naming the floor here makes it a property of the tool rather
+    # than of the host, and it is readable from the line that sets it.
+    #
+    # 1.2 rather than 1.3, because a cluster that speaks only 1.2 is ordinary
+    # and refusing it would make this module fail to corroborate for a reason
+    # that has nothing to do with what the cluster had to say.
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
     return context
 
 

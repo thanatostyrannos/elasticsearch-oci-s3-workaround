@@ -245,8 +245,7 @@ Every argument:
 | `--es` | Cluster URL |
 | `--user` | Cluster user for the generator's own calls |
 | `--password-file` | Path to that user's password. A path, not the password, because argv is public on the host |
-| `--ca-cert` | Certificate authority file, if the cluster uses a private one |
-| `--insecure` | Skip certificate verification. For a lab cluster with a self-signed certificate |
+| `--ca-cert` | Certificate authority file. Required for a cluster with a self-signed certificate, which is most lab clusters. Under ECK, extract it with `kubectl get secret <cluster>-es-http-certs-public -o jsonpath='{.data.ca\.crt}' \| base64 -d > ca.crt` |
 | `--prefix` | Name prefix for everything the generator creates, so teardown knows what is its own |
 | `--data-stream` | Name of the data stream. Defaults to `<prefix>-stream` |
 | `--state-file` | Where the generator records what it created, so teardown can remove exactly that |

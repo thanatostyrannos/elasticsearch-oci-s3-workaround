@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 snapshot_sizes.py: per-day/week/month snapshot size report for ES 8.x/9.x.
 
 Uses GET _snapshot/<repo>/<names>/_status and aggregates:
@@ -115,6 +115,19 @@ the report tables are for humans, not for silent redirection into a file.
       --emit-classified --out snapshots.tsv
   ./snapshot_sizes.py --es https://es:9200 --repo my-repo \
       --emit-classified --class slm,other --out backups-only.tsv
+
+TLS. Verification is always on and there is no flag to turn it off. A cluster
+that serves a certificate it signed itself, which is every ECK install, is
+reached by naming the CA that signed it. ECK publishes that CA in a secret
+beside the cluster, so getting it is one line:
+
+  kubectl -n <namespace> get secret <cluster>-es-http-certs-public \
+      -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
+  ./snapshot_sizes.py --es https://es:9200 --repo my-repo --ca-cert ca.crt
+
+--ca-cert refuses a file it cannot read and says which path it tried, because
+a CA file that silently did not load is a verification failure two steps later
+that reads like a broken cluster.
 """
 
 from __future__ import annotations
@@ -123,7 +136,6 @@ import argparse
 import base64
 import collections
 import datetime as dt
-import ipaddress
 import json
 import math
 import ssl
@@ -134,54 +146,106 @@ import urllib.parse
 import urllib.request
 
 
-# Names a lab cluster answers on. Kubernetes hands out the first three to
-# in-cluster services, mDNS hands out .local, and a single-label name has no
-# public DNS to resolve it.
-LAB_HOST_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local",
-                     ".local", ".localdomain", ".internal")
+# The schemes urlopen may be handed. It also speaks file:// and ftp://, and
+# --es is typed by a person, so the set is stated rather than assumed.
+ES_SCHEMES = ("http", "https")
+
+# How an ECK operator gets the CA their cluster signed its certificate with.
+# Quoted in --help and in the refusal, so nobody has to go and find it.
+CA_CERT_EXTRACTION = (
+    r"kubectl -n <namespace> get secret <cluster>-es-http-certs-public "
+    r"-o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt")
+
+CA_CERT_EPILOG = (
+    "getting the CA for a cluster running under ECK:\n\n  "
+    + CA_CERT_EXTRACTION + "\n")
 
 
-def is_lab_host(host: str) -> bool:
-    """Is this an address only a lab or an in-cluster caller can reach?"""
-    if not host:
-        return False
-    host = host.rstrip(".")
-    if host == "localhost" or host.endswith(LAB_HOST_SUFFIXES):
-        return True
+class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter,
+                    argparse.RawDescriptionHelpFormatter):
+    """Defaults on every flag, and an epilog that is not rewrapped.
+
+    The epilog carries a shell command. Rewrapped, it breaks across a hyphen
+    in the middle of a secret name and stops being a line anyone can paste.
+    """
+
+
+def checked_endpoint(parser: argparse.ArgumentParser, raw: str) -> str:
+    """The one cluster URL every request is built on, or a refusal.
+
+    --es comes from configuration, and configuration is not the same as
+    trusted. What comes back is rebuilt from the parts that passed the check,
+    so a query string or a fragment typed into --es cannot reappear in the
+    middle of a request path further down.
+    """
+    split = urllib.parse.urlsplit(raw)
+    if split.scheme not in ES_SCHEMES:
+        parser.error(f"--es is {raw!r}; only http and https are accepted, "
+                     f"so a {split.scheme or '(no scheme)'!r} value cannot "
+                     f"be opened")
+    if not split.hostname:
+        parser.error(f"--es is {raw!r} and names no host, so there is "
+                     f"nothing to connect to")
+    return urllib.parse.urlunsplit(
+        (split.scheme, split.netloc, split.path.rstrip("/"), "", ""))
+
+
+def path_segment(name: str) -> str:
+    """One name, encoded so it can only ever be a single path segment.
+
+    Repository names come from the command line and snapshot names come back
+    from the cluster. Pasted into a URL as they are, a name holding a slash
+    or a question mark aims the request at a different API than the code
+    reads as calling.
+    """
+    return urllib.parse.quote(str(name), safe="")
+
+
+def checked_ca_cert(parser: argparse.ArgumentParser, path):
+    """Refuse a --ca-cert that will not load, naming the path that failed.
+
+    The file is loaded here rather than only opened, so a path that is
+    missing, unreadable or not a certificate all fail at the command line
+    with the path in the message. Left to the first connection, the same
+    three read as a broken cluster.
+    """
+    if path is None:
+        return
     try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        # A name with no dot has no public DNS to resolve it, so it is a
-        # service name inside a cluster or a line in someone's hosts file.
-        return "." not in host
-    return address.is_loopback or address.is_private or address.is_link_local
+        ssl.create_default_context(cafile=path)
+    except (OSError, ssl.SSLError) as problem:
+        parser.error(f"--ca-cert {path!r} could not be read: "
+                     f"{getattr(problem, 'strerror', None) or problem}. It "
+                     f"wants the PEM file holding the CA that signed the "
+                     f"cluster certificate. Under ECK: {CA_CERT_EXTRACTION}")
 
 
 def tls_context(args: argparse.Namespace):
     """The one TLS context this run uses, for the one endpoint it was given.
 
-    Verification starts on and is turned off only by --insecure, which main()
-    has already refused for anything but a lab address. Built once, here,
-    rather than per request, so the relaxed context belongs to the endpoint
-    the operator named and cannot end up on some other connection.
+    Verification is always on. A lab cluster serving a certificate it signed
+    itself is reached by naming that CA in --ca-cert, which verifies the
+    connection rather than abandoning it. Built once, here, rather than per
+    request, so every call goes out over the same checked settings.
     """
-    if not args.es.startswith("https"):
+    if urllib.parse.urlsplit(args.es).scheme != "https":
         return None
     ctx = ssl.create_default_context(cafile=args.ca_cert)
-    if args.insecure:
-        print(f"# TLS verification is OFF for "
-              f"{urllib.parse.urlsplit(args.es).hostname}, by --insecure",
-              file=sys.stderr)
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+    # create_default_context leaves minimum_version at MINIMUM_SUPPORTED
+    # before Python 3.10, which lets the host's OpenSSL build pick the floor
+    # and gives a different answer on every machine. 1.2 rather than 1.3: a
+    # cluster that speaks only 1.2 is ordinary, and refusing it would break
+    # the tool for a reason that has nothing to do with this.
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     return ctx
 
 
 def http_get(path: str, args: argparse.Namespace) -> dict:
     """GET one path from the cluster --es names.
 
-    A path, never a whole URL. The host is the one the operator gave and
-    nothing passed in here can move the request to a different one.
+    A path, never a whole URL. The endpoint was fixed once, from --es, by
+    checked_endpoint; names interpolated into the path go through
+    path_segment. Nothing passed in here can move the request to another host.
     """
     req = urllib.request.Request(args.es + path)
     if args.user:
@@ -340,7 +404,7 @@ def emit_mounted(args: argparse.Namespace) -> int:
     # names lowercase and repository names are not, which is exactly how the
     # wrong character gets typed.
     try:
-        registered = http_get(f"/_snapshot/{args.repo}", args)
+        registered = http_get(f"/_snapshot/{path_segment(args.repo)}", args)
     except FETCH_ERRORS as e:
         print(f"repository {args.repo!r} could not be resolved: {e}\n"
               f"List what exists with: GET {args.es}/_snapshot/_all\n"
@@ -363,7 +427,7 @@ def emit_mounted(args: argparse.Namespace) -> int:
         mounted = fetch_mounted_set(args)
     except FETCH_ERRORS as e:
         print(f"mounted-index discovery (_settings) failed: {e} "
-              f"(check the URL, --user/--api-key and --ca-cert/--insecure)",
+              f"(check the URL, --user/--api-key and --ca-cert)",
               file=sys.stderr)
         return 1
     try:
@@ -443,7 +507,7 @@ def fetch_slm_policies(args: argparse.Namespace) -> dict[str, str]:
     snapshots have no metadata.policy.
     """
     data = http_get(
-        f"/_snapshot/{args.repo}/*"
+        f"/_snapshot/{path_segment(args.repo)}/*"
         f"?filter_path=snapshots.snapshot,snapshots.metadata.policy", args)
     out: dict[str, str] = {}
     for s in (data or {}).get("snapshots") or []:
@@ -729,14 +793,15 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
     and its status code is the actionable half of the message.
     """
     try:
-        listing = http_get(f"/_snapshot/{args.repo}/*?verbose=false", args)
+        listing = http_get(
+            f"/_snapshot/{path_segment(args.repo)}/*?verbose=false", args)
     except urllib.error.HTTPError as e:
         print(f"ES returned HTTP {e.code} for {args.es}: {e.reason} "
               f"(check --user/--api-key and the repo name)", file=sys.stderr)
         return None
     except (urllib.error.URLError, OSError, ssl.SSLError) as e:
         print(f"cannot reach {args.es}: {e} "
-              f"(check the URL, port-forward, and --ca-cert/--insecure)",
+              f"(check the URL, port-forward, and --ca-cert)",
               file=sys.stderr)
         return None
     return [s["snapshot"] for s in listing.get("snapshots", [])]
@@ -754,7 +819,8 @@ def fetch_status_rows(args: argparse.Namespace,
         chunk = names[i : i + args.batch]
         try:
             st = http_get(
-                f"/_snapshot/{args.repo}/{','.join(chunk)}/_status", args)
+                f"/_snapshot/{path_segment(args.repo)}/"
+                f"{','.join(path_segment(n) for n in chunk)}/_status", args)
         except (urllib.error.URLError, OSError, ssl.SSLError) as e:
             print(f"_status fetch failed for batch {i//args.batch + 1}: {e} "
                   f"(partial results discarded)", file=sys.stderr)
@@ -798,7 +864,7 @@ def emit_classified(args: argparse.Namespace,
     split, split_error = build_split(args, names)
     if split_error:
         print(f"--emit-classified aborted: {split_error} "
-              f"(check the URL, --user/--api-key and --ca-cert/--insecure). "
+              f"(check the URL, --user/--api-key and --ca-cert). "
               f"An incomplete classified export is worse than none, so "
               f"nothing was written.", file=sys.stderr)
         return 1
@@ -1108,18 +1174,20 @@ def recommend(rows: list[tuple[int, str, int, int, str]],
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[1],
-                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+                                epilog=CA_CERT_EPILOG,
+                                formatter_class=HelpFormatter)
     p.add_argument("--es", required=True, help="http(s)://host:9200")
     p.add_argument("--repo", required=True)
     p.add_argument("--group", choices=["day", "week", "month"], default="day")
     p.add_argument("--user", help="basic auth user:password")
     p.add_argument("--api-key", help="ApiKey header value")
-    p.add_argument("--ca-cert", help="CA bundle for https")
-    p.add_argument("--insecure", action="store_true",
-                   help="skip TLS verification of --es, for a lab cluster "
-                        "with a self-signed certificate. Accepted only for a "
-                        "loopback, private or in-cluster address; anything "
-                        "else needs --ca-cert")
+    p.add_argument("--ca-cert", metavar="PEM",
+                   help="PEM file holding the CA that signed the cluster's "
+                        "certificate. This is how a lab cluster serving its "
+                        "own certificate is reached; verification is always "
+                        "on and there is no flag to turn it off. The line at "
+                        "the bottom of this help gets the CA out of an ECK "
+                        "cluster")
     p.add_argument("--batch", type=int, default=20,
                    help="snapshots per _status request")
     p.add_argument("--recommend", action="store_true",
@@ -1162,25 +1230,7 @@ def check_arguments(parser: argparse.ArgumentParser,
                      f"(got {args.retention_days}); site snapshot policy is "
                      f"5-10 days max")
 
-    # --es comes from configuration, and configuration is not the same as
-    # trusted: urlopen will happily open file:// or ftp://. This tool only
-    # ever reads over http or https.
-    split = urllib.parse.urlsplit(args.es)
-    if split.scheme not in ("http", "https"):
-        parser.error(f"--es is {args.es!r}; only http and https are accepted, "
-                     f"so a {split.scheme or '(no scheme)'!r} value cannot "
-                     f"be opened")
-    # --insecure is for an ECK or lab cluster serving a certificate it signed
-    # itself. Against a cluster anything can route to, an unverified
-    # connection means the numbers in this report describe whichever host
-    # answered, and the basic-auth header has already been sent to it.
-    if args.insecure and not is_lab_host(split.hostname):
-        parser.error(f"--insecure was passed for {split.hostname!r}, which is "
-                     f"not a loopback, private or in-cluster address. It "
-                     f"exists for a lab cluster serving its own certificate, "
-                     f"not for a cluster anything can route to. Pass "
-                     f"--ca-cert with the CA that certificate chains to "
-                     f"instead.")
+    checked_ca_cert(parser, args.ca_cert)
 
     if args.emit_mounted and args.emit_classified:
         parser.error("--emit-mounted and --emit-classified are mutually "
@@ -1256,7 +1306,7 @@ def period_report(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    args.es = args.es.rstrip("/")
+    args.es = checked_endpoint(parser, args.es)
     class_filter = check_arguments(parser, args)
     args.tls = tls_context(args)
 

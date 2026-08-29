@@ -1,18 +1,19 @@
 """Where TLS verification may be turned off, and where it may not.
 
-Three tools take an `--insecure` flag, and every one of them points at the
-Elasticsearch cluster under test, never at the object store. The lab cluster
-runs under ECK and serves a certificate it signed itself, so skipping
-verification against it is the intended way to use these tools. Skipping it
-against a cluster anything can route to is not: the connection then accepts
-whichever host answered, and the tool has already sent it a cluster password.
+No tool here has a flag that turns verification off. Verification is on for
+every run, and a lab cluster serving a certificate it signed itself is
+reached by naming the CA that signed it with `--ca-cert`. What replaced the
+flag is pinned in test_tls_required.py for `snapshot_sizes.py` and
+`verify_restorable.py`, and in test_churn_rig_tls.py for
+`snapshot_churn_rig.py`.
 
-So the flag is held to loopback, private and in-cluster addresses. These
-tests pin that boundary, pin that the S3 client never gets a relaxed context
-at all, and pin that the three copies of the host rule have not drifted apart.
+What is left here is the shared ground: the lab-address rule the churn rig
+uses to decide whose failed connection is worth a hint about the ECK CA, and
+the standing guarantee that the S3 client never gets a relaxed context. The
+store the rig reaches is the real Oracle endpoint on a live run, so nothing
+about the cluster's TLS settings may touch it.
 """
 
-import ast
 import os
 import subprocess
 import sys
@@ -53,31 +54,8 @@ ROUTABLE_ADDRESSES = [
 ]
 
 
-def load_verify_restorable_helpers():
-    """The helper half of verify_restorable.py, without running the script.
-
-    The file parses its arguments at import time, which is right for a script
-    and unusable from a test, so only the definitions above that point are
-    executed here.
-    """
-    with open(os.path.join(ROOT, "verify_restorable.py")) as handle:
-        source = handle.read()
-    tree = ast.parse(source)
-    cut = next(node.lineno for node in tree.body
-               if isinstance(node, ast.Assign)
-               and getattr(node.targets[0], "id", "") == "_p")
-    namespace = {}
-    exec(compile("\n".join(source.split("\n")[:cut - 1]),  # nosec B102
-                 "verify_restorable.py", "exec"), namespace)
-    return namespace
-
-
-VERIFY = load_verify_restorable_helpers()
-
 HOST_RULES = {
     "snapshot_churn_rig": rig.is_lab_host,
-    "snapshot_sizes": sizes.is_lab_host,
-    "verify_restorable": VERIFY["is_lab_host"],
 }
 
 
@@ -112,19 +90,6 @@ class RoutableAddressesAreRefused(unittest.TestCase):
                 self.assertFalse(rule(""))
 
 
-class TheThreeCopiesOfTheRuleAgree(unittest.TestCase):
-    """The tools ship as standalone files and each carries its own copy, the
-    way this repository already duplicates its S3 signer. Copies drift, so the
-    answers are compared rather than trusted."""
-
-    def test_they_answer_the_same_for_every_address(self):
-        rules = list(HOST_RULES.values())
-        for host in LAB_ADDRESSES + ROUTABLE_ADDRESSES:
-            with self.subTest(host=host):
-                answers = {rule(host) for rule in rules}
-                self.assertEqual(len(answers), 1)
-
-
 def run_tool(argv):
     """One tool, run to completion, with its two streams joined."""
     done = subprocess.run([sys.executable] + argv, cwd=ROOT, text=True,
@@ -133,81 +98,23 @@ def run_tool(argv):
     return done.returncode, done.stdout
 
 
-class InsecureIsRefusedForARoutableCluster(unittest.TestCase):
-    """The check has to be at the command line, not at the socket: by the time
-    a connection is being made the password is already on its way."""
-
-    def test_the_churn_rig_refuses(self):
-        code, out = run_tool(["snapshot_churn_rig.py", "status", "--es",
-                              "https://cluster.example.com:9200",
-                              "--insecure"])
-        self.assertNotEqual(code, 0)
-        self.assertIn("--insecure was passed", out)
-
-    def test_the_size_report_refuses(self):
-        code, out = run_tool(["snapshot_sizes.py", "--es",
-                              "https://cluster.example.com:9200",
-                              "--repo", "backups", "--insecure"])
-        self.assertNotEqual(code, 0)
-        self.assertIn("--insecure was passed", out)
-
-    def test_the_restore_check_refuses(self):
-        with tempfile.NamedTemporaryFile("w", suffix=".txt") as handle:
-            handle.write("not-a-real-password\n")
-            handle.flush()
-            code, out = run_tool([
-                "verify_restorable.py", "--elasticsearch",
-                "https://cluster.example.com:9200", "--repository", "backups",
-                "--password-file", handle.name, "--insecure"])
-        self.assertNotEqual(code, 0)
-        self.assertIn("--insecure was passed", out)
-
-    def test_the_refusal_names_the_flag_that_replaces_it(self):
-        _code, out = run_tool(["snapshot_churn_rig.py", "status", "--es",
-                               "https://cluster.example.com:9200",
-                               "--insecure"])
-        self.assertIn("--ca-cert", out)
-
-
-class InsecureStillWorksForTheLabCluster(unittest.TestCase):
-    """The point of the flag. A run against loopback gets past the guard and
-    fails on the connection instead, which is what a lab with nothing
-    listening looks like."""
-
-    def test_the_churn_rig_gets_past_the_guard(self):
-        _code, out = run_tool(["snapshot_churn_rig.py", "status", "--es",
-                               "https://127.0.0.1:1/", "--insecure"])
-        self.assertIn("TLS verification is OFF", out)
-
-    def test_the_size_report_gets_past_the_guard(self):
-        _code, out = run_tool(["snapshot_sizes.py", "--es",
-                               "https://127.0.0.1:1/", "--repo", "backups",
-                               "--insecure"])
-        self.assertIn("TLS verification is OFF", out)
-
-    def test_turning_it_off_is_announced_and_never_silent(self):
-        _code, out = run_tool(["snapshot_churn_rig.py", "status", "--es",
-                               "https://127.0.0.1:1/", "--insecure"])
-        self.assertIn("127.0.0.1", out)
-
-
 class VerificationIsOnWhenNobodyAsked(unittest.TestCase):
     def test_the_default_context_verifies(self):
         import ssl
-        made = rig.Es("https://cluster.example.com", "elastic", "p", None,
-                      False)
+        made = rig.Es("https://cluster.example.com", "elastic", "p", None)
         self.assertEqual(made.ctx.verify_mode, ssl.CERT_REQUIRED)
 
     def test_the_size_report_builds_no_context_for_plain_http(self):
         import argparse
-        args = argparse.Namespace(es="http://127.0.0.1:9200", ca_cert=None,
-                                  insecure=False)
+        args = argparse.Namespace(es="http://127.0.0.1:9200",
+                                  ca_cert=None)
         self.assertIsNone(sizes.tls_context(args))
 
 
 class TheObjectStoreClientNeverRelaxes(unittest.TestCase):
-    """--insecure names the cluster. The store it reaches is the real Oracle
-    endpoint on a live run, so nothing about that flag may touch it."""
+    """--ca-cert names the cluster's CA. The store the rig reaches is the
+    real Oracle endpoint on a live run, and it verifies against the system
+    trust store, so no cluster TLS setting may reach it."""
 
     def test_the_s3_client_takes_no_tls_context(self):
         made = rig.S3("https://s3.example.com", "us-east-1", "ak", "sk", "b")
@@ -229,8 +136,7 @@ class TheSizeReportCannotBeAimedElsewhere(unittest.TestCase):
         import argparse
         seen = {}
         args = argparse.Namespace(es="https://127.0.0.1:9200", user=None,
-                                  api_key=None, ca_cert=None, insecure=False,
-                                  tls=None)
+                                  api_key=None, ca_cert=None, tls=None)
 
         class Answer:
             def __enter__(self_inner):

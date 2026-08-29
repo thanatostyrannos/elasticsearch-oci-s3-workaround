@@ -160,6 +160,34 @@ def members():
     return sorted(found + named_members())
 
 
+def checked_directory(path, purpose):
+    """The absolute, symlink-resolved directory to write into, or a refusal.
+
+    An empty or whitespace-only path names no directory, and a path holding a
+    NUL byte makes `os.makedirs` raise a bare ValueError from underneath a
+    build that has already said where it is writing, which reads as a crash
+    rather than a decision. Both are refused here, by the flag that carried
+    them.
+
+    The same two refusals and the same resolve as
+    `generation_chain.paths.checked_path`, written out here rather than
+    imported. That helper also confines every path it returns to
+    GENCHAIN_FILE_ROOT, which is the audit's knob for a run driven by
+    something other than a person. This is the build tool and not the audit,
+    so a root set to bound what the audit may read has no business deciding
+    where a release archive lands, and honouring it here would refuse the
+    ordinary build into a temporary directory.
+    """
+    if not path or not path.strip():
+        raise ReleaseRefused(
+            f"{purpose} was given an empty path. Nothing was written.")
+    if "\0" in path:
+        raise ReleaseRefused(
+            f"{purpose} was given a path holding a NUL byte: {path!r}. "
+            "Nothing was written.")
+    return os.path.realpath(os.path.expanduser(path))
+
+
 def archive_path(destination, stem):
     """Where the archive goes, refusing a name that lands outside --out."""
     directory = os.path.realpath(destination)
@@ -202,8 +230,9 @@ def is_documentation(relative):
 def build(destination, version=None):
     """Write the archive and its checksum, and return the archive's path."""
     stem = release_stem(version)
-    os.makedirs(destination, exist_ok=True)
-    archive = archive_path(destination, stem)
+    directory = checked_directory(destination, "--out")
+    os.makedirs(directory, exist_ok=True)
+    archive = archive_path(directory, stem)
 
     bodies = {}
     for relative in members():
