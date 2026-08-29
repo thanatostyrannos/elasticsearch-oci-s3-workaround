@@ -528,7 +528,13 @@ def run_cycles(args, tsv, columns, log):
     return totals
 
 
-def main():
+def build_parser():
+    """Every option this harness takes, and what each one is for.
+
+    Split out of main so the run itself is readable. main was one
+    long argparse block with the cycle logic hidden underneath it,
+    and the two change for unrelated reasons.
+    """
     p = argparse.ArgumentParser(
         description="Exercise the metadata and segment paths of the audit "
                     "against a live repository, repeatedly.",
@@ -601,6 +607,11 @@ def main():
     p.add_argument("--timeout", type=int, default=1800)
     p.add_argument("--dry-run-only", action="store_true",
                    help="audit and dry run, never execute")
+    return p
+
+
+def main():
+    p = build_parser()
     args = p.parse_args()
 
     if args.transport == "oci" and not args.namespace:
