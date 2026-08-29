@@ -332,6 +332,16 @@ def run_case(name: str, relative: str, find: str, replace: str) -> tuple:
                         os.path.join(tree, "generation_chain"))
         shutil.copytree(os.path.join(ROOT, "tests"),
                         os.path.join(tree, "tests"))
+        # The scripts at the top of the tree come too. tests/test_security_
+        # findings.py imports reclaim_test_protocol and snapshot_churn_rig at
+        # module scope, and without them here that module raises on import.
+        # An import error reads as a failure, a failure reads as RED, and RED
+        # is what this harness reports when a guard IS pinned. So every case
+        # came back RED whether or not anything noticed the guard was gone,
+        # which is the one result this harness exists to be able to tell apart.
+        for entry in os.listdir(ROOT):
+            if entry.endswith(".py") and os.path.isfile(os.path.join(ROOT, entry)):
+                shutil.copy2(os.path.join(ROOT, entry), os.path.join(tree, entry))
         target = os.path.join(tree, "generation_chain", relative)
         with open(target, encoding="utf-8") as handle:
             source = handle.read()

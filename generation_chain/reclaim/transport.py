@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import random
+import re
 import time
 import urllib.error
 import urllib.request
@@ -41,6 +42,18 @@ RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 # request that deletes and it is the last place before the send.
 ALLOWED_SCHEMES = frozenset({"https", "http"})
 
+# What a host is allowed to look like: a name, an IPv4 address, or a bracketed
+# IPv6 literal, each with an optional port. Spelled as what is allowed rather
+# than as a list of what is not, because the characters that have to stay out
+# of a host are not a list anyone finishes. `store.example.com/../other` holds
+# none of the obvious ones and still names a different origin once urllib
+# reads the URL this host goes into.
+HOST_PATTERN = (
+    r"(?:[A-Za-z0-9_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?"
+    r"(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]*[A-Za-z0-9_])?)*"
+    r"|\[[0-9A-Fa-f:.]+\])"
+    r"(?::[0-9]{1,5})?")
+
 
 class TransportError(GenerationChainError):
     """The batch delete request could not be completed against the store."""
@@ -57,11 +70,16 @@ class RetryPolicy:
 def _refuse_unsendable_target(scheme: str, host: str) -> None:
     """Refuse a scheme or a host this module will not send a delete to.
 
-    The host is copied into the `Host` header and signed, so whitespace or a
-    control character in it would let the rest of the string be read as
-    another header. Userinfo is refused for a quieter reason: urllib strips
-    `user@` before connecting and this module would sign a Host the store
-    never sees, which fails as a bare 403 that reads like a bad credential.
+    Runs before the URL is built, and that order is the point: inside a URL a
+    host that carries a slash or a control character is no longer a host, it
+    is whatever urllib decides the whole string means.
+
+    The host is also copied into the `Host` header and signed, so whitespace
+    or a control character in it would let the rest of the string be read as
+    another header. Userinfo keeps its own refusal for a quieter reason:
+    urllib strips `user@` before connecting and this module would sign a Host
+    the store never sees, which fails as a bare 403 that reads like a bad
+    credential.
     """
     if scheme not in ALLOWED_SCHEMES:
         raise TransportError(
@@ -74,11 +92,12 @@ def _refuse_unsendable_target(scheme: str, host: str) -> None:
         raise TransportError(
             f"the endpoint host {host!r} carries userinfo, which would be "
             "signed and then dropped before the connection. Nothing was sent")
-    if any(character.isspace() or ord(character) < 0x20 for character in host):
+    if re.fullmatch(HOST_PATTERN, host) is None:
         raise TransportError(
-            f"the endpoint host {host!r} holds whitespace or a control "
-            "character, which would let the rest of it be read as another "
-            "header. Nothing was sent")
+            f"the endpoint host {host!r} is not a name, an address, or an "
+            "address and port. Anything else is read as another header once "
+            "it is signed, or as another origin once it is inside the URL. "
+            "Nothing was sent")
 
 
 def _signed_headers(host: str, amz_date: str, payload_sha256: str,

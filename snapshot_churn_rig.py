@@ -53,6 +53,17 @@ ES_PASSWORD environment variable. The S3 secret key comes from
 --s3-secret-key-file or S3_SECRET_KEY. No secret is accepted on the
 command line.
 
+TLS. Certificate verification is on for every https endpoint this script
+opens, the cluster and the object store alike, and no flag turns it off. A
+lab cluster under ECK serves a certificate signed by a CA that lives only in
+the cluster, so hand that CA to --ca-cert. One line writes it out:
+
+  kubectl get secret <cluster>-es-http-certs-public \\
+      -o jsonpath='{.data.ca\\.crt}' | base64 -d > ca.crt
+
+Then pass --ca-cert ca.crt. TLS 1.0 and 1.1 are refused, because Python
+before 3.10 still offers them.
+
 Requirements on the target cluster: Elasticsearch 8.x or 9.x with ILM and
 SLM available, a node carrying the data_frozen role, and a searchable
 snapshot shared cache larger than zero on that node. Preflight checks all
@@ -105,6 +116,14 @@ from generation_chain.sources.s3 import refuse_doctype  # noqa: E402
 
 DEFAULT_PREFIX = "churnrig"
 
+# An ECK cluster keeps the CA that signed its HTTP certificate in a secret
+# next to it. Quoted in --help and in the message a failed lab connection
+# prints, because an operator who cannot find this line goes looking for a
+# way to skip verification instead.
+ECK_CA_EXTRACTION = (
+    "kubectl get secret <cluster>-es-http-certs-public "
+    "-o jsonpath='{.data.ca\\.crt}' | base64 -d > ca.crt")
+
 # ---------------------------------------------------------------------------
 # small helpers
 
@@ -151,6 +170,79 @@ def refuse_non_http_scheme(url, what):
             f"{scheme or '(no scheme)'!r} value cannot be opened")
 
 
+# A host name or a bracketed IPv6 literal, with an optional port. An
+# authority that does not match this one is not the plain host:port an
+# endpoint should be: a user:password@ prefix is the shape that matters,
+# since it puts a credential in every URL built from it.
+_AUTHORITY_RE = re.compile(
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])"
+    r"(?::\d{1,5})?")
+
+
+def endpoint_origin(url, what):
+    """The scheme and host of a command-line endpoint, or a refusal.
+
+    An endpoint is scheme://host:port and nothing else. Whatever follows is
+    refused rather than kept, so every path this script requests is one this
+    file wrote, and a value with a path or a query in it fails at the flag
+    that carried it instead of silently redirecting later requests.
+    """
+    url = url.strip()
+    refuse_non_http_scheme(url, what)
+    parts = urllib.parse.urlsplit(url)
+    if not _AUTHORITY_RE.fullmatch(parts.netloc):
+        die(f"{what} is {url!r}; the part after the scheme has to be a host "
+            "and an optional port, with no credentials and no trailing "
+            "punctuation")
+    if parts.path.strip("/") or parts.query or parts.fragment:
+        die(f"{what} is {url!r}; write it as scheme://host:port, because "
+            "this harness supplies every path itself and would otherwise "
+            "hang yours in front of each one")
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def describe_path(path):
+    """A short phrase saying why a path is not the file it should be."""
+    if not os.path.exists(path):
+        return "does not exist"
+    if os.path.isdir(path):
+        return "is a directory"
+    return "is not a regular file"
+
+
+def resolve_input_file(path, what):
+    """The resolved path of a file this script may read, or a refusal.
+
+    Callers open what this returns rather than what they passed, so the file
+    that was checked is the file that is read.
+    """
+    resolved = os.path.realpath(path)
+    if not os.path.isfile(resolved):
+        die(f"{what} {path!r} cannot be read: it resolves to {resolved!r}, "
+            f"which {describe_path(resolved)}")
+    return resolved
+
+
+def resolve_output_file(path, what):
+    """The resolved path of a file this script may write, or a refusal.
+
+    An output path names something that does not exist yet, so there is
+    nothing to check it against beyond whether writing it can work: the
+    directory has to be there, and anything already sitting at the name has
+    to be an ordinary file. Naming the flag and the resolved path beats a
+    traceback from three frames down.
+    """
+    resolved = os.path.realpath(path)
+    directory = os.path.dirname(resolved) or "."
+    if not os.path.isdir(directory):
+        die(f"{what} {path!r} cannot be written: it resolves to {resolved!r} "
+            f"and its directory {directory!r} {describe_path(directory)}")
+    if os.path.exists(resolved) and not os.path.isfile(resolved):
+        die(f"{what} {path!r} cannot be written: it resolves to {resolved!r}, "
+            f"which {describe_path(resolved)}")
+    return resolved
+
+
 # Names a lab cluster answers on. Kubernetes hands out the first three to
 # in-cluster services, mDNS hands out .local, and a single-label name has no
 # public DNS to resolve it.
@@ -182,7 +274,7 @@ def write_state(path, state):
     after.
     """
     try:
-        with open(path, "w") as handle:
+        with open(resolve_output_file(path, "--state-file"), "w") as handle:
             json.dump(state, handle, indent=2)
     except OSError as problem:
         die(f"state file {path!r} could not be written: "
@@ -199,31 +291,30 @@ def load_state(path):
     and silently widen what teardown touches, so it refuses instead.
     """
     try:
-        with open(path) as handle:
+        with open(resolve_input_file(path, "--state-file")) as handle:
             return json.load(handle)
     except (OSError, ValueError) as problem:
         die(f"state file {path!r} exists but could not be read: "
             f"{problem.__class__.__name__}: {problem}")
 
 
-def refuse_insecure_off_lab(url, what):
-    """Refuse --insecure for an endpoint a lab cluster does not live at.
+def missing_ca_hint(args):
+    """What to try when a lab cluster will not verify, or nothing.
 
-    Skipping verification is right for an ECK cluster serving a certificate
-    it signed itself, and wrong for anything routable, where an unverified
-    connection accepts whichever host answered and this harness then hands it
-    a cluster password. Checked here, at the one place the flag is read from
-    the command line, so the endpoint the operator named is the endpoint the
-    decision is made about.
+    An ECK cluster signs its own HTTP certificate, so the first connection to
+    one fails until its CA is on disk. Printing the command that puts it
+    there is the difference between an operator fixing the trust and an
+    operator going looking for a way to skip it.
     """
-    host = urllib.parse.urlsplit(url).hostname
+    if args.ca_cert or not args.es.startswith("https:"):
+        return ""
+    host = urllib.parse.urlsplit(args.es).hostname
     if not is_lab_host(host):
-        die(f"--insecure was passed for {what} {host!r}, which is not a "
-            "loopback, private or in-cluster address. It exists for a lab "
-            "cluster serving its own certificate, not for a cluster anything "
-            "can route to. Pass --ca-cert with the CA that certificate "
-            "chains to instead.")
-    log(f"TLS verification is OFF for {what} {host}, by --insecure")
+        return ""
+    return ("\nNo --ca-cert was given for lab host %s. If this is an ECK "
+            "cluster serving a certificate it signed itself, write out the "
+            "CA that signed it and pass it:\n  %s\n  --ca-cert ca.crt"
+            % (host, ECK_CA_EXTRACTION))
 
 
 def read_secret_file(path, what):
@@ -233,7 +324,7 @@ def read_secret_file(path, what):
     are the secret.
     """
     try:
-        with open(path) as handle:
+        with open(resolve_input_file(path, what)) as handle:
             return handle.read().strip()
     except OSError as problem:
         die(f"{what} {path!r} could not be read: "
@@ -251,30 +342,57 @@ class EsError(Exception):
         self.body = body
 
 
+def tls_context(base, ca_cert):
+    """How this client verifies an https endpoint, or None for plain http.
+
+    Verification is always on. A cluster serving a certificate it signed
+    itself is handled by naming the CA that signed it, not by agreeing to
+    accept whichever host answered, so --ca-cert is the whole story. The
+    floor is TLS 1.2 because Python before 3.10 still offers 1.0 and 1.1,
+    and the ceiling is left alone: a cluster that speaks only 1.2 is
+    ordinary.
+    """
+    if not base.startswith("https:"):
+        return None
+    cafile = resolve_input_file(ca_cert, "--ca-cert") if ca_cert else None
+    try:
+        context = ssl.create_default_context(cafile=cafile)
+    except ssl.SSLError as problem:
+        die(f"--ca-cert {ca_cert!r} is not a PEM certificate bundle "
+            f"OpenSSL will load: {problem}")
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 class Es:
-    def __init__(self, base, user, password, ca_cert, insecure):
-        self.base = base.rstrip("/")
-        refuse_non_http_scheme(self.base, "--es")
+    def __init__(self, base, user, password, ca_cert):
+        self.base = endpoint_origin(base, "--es")
+        self.origin = urllib.parse.urlsplit(self.base)
         self.headers = {"Content-Type": "application/json"}
         if user and password:
             tok = base64.b64encode(
                 ("%s:%s" % (user, password)).encode()).decode()
             self.headers["Authorization"] = "Basic " + tok
-        if self.base.startswith("https"):
-            self.ctx = ssl.create_default_context(cafile=ca_cert)
-            if insecure:
-                # Reachable only when the operator passed --insecure, for a
-                # lab cluster with a self-signed certificate. Verification
-                # starts on, same as the default context above, and is
-                # turned off here rather than built off from the start.
-                self.ctx.check_hostname = False
-                self.ctx.verify_mode = ssl.CERT_NONE
-        else:
-            self.ctx = None
+        self.ctx = tls_context(self.base, ca_cert)
+
+    def url_for(self, path):
+        """The absolute URL for one of this file's request paths.
+
+        The scheme and host were settled once, from --es, and are reused
+        verbatim. Everything else comes from the path handed in here, which
+        every caller in this file writes as a literal, so no caller can move
+        a request to a host the operator did not name.
+        """
+        if not path.startswith("/"):
+            die(f"request path {path!r} does not start with /, so the host "
+                "it would reach is not the one --es named")
+        route, _, query = path.partition("?")
+        return urllib.parse.urlunsplit(
+            (self.origin.scheme, self.origin.netloc, route, query, ""))
 
     def req(self, method, path, body=None, ok=(200, 201), timeout=60,
             ndjson=None):
-        url = self.base + path
+        url = self.url_for(path)
         data = None
         headers = dict(self.headers)
         if ndjson is not None:
@@ -284,9 +402,9 @@ class Es:
             data = json.dumps(body).encode()
         r = urllib.request.Request(url, data=data, method=method,
                                    headers=headers)
-        # refuse_non_http_scheme() checked self.base in __init__; url is
-        # self.base plus a path this script builds, so only http and https
-        # ever reach this call.
+        # url_for() rebuilt this from the scheme and host endpoint_origin()
+        # accepted in __init__ plus a path written in this file, so only
+        # http and https, and only the named host, reach this call.
         try:
             with urllib.request.urlopen(  # nosec B310
                     r, timeout=timeout, context=self.ctx) as resp:
@@ -1065,7 +1183,9 @@ class RunState:
                                                 key=lambda kv: kv[1])}
         line = json.dumps(rep, sort_keys=True)
         print(line, flush=True)
-        with open(self.args.report_file, "a") as f:
+        report_file = resolve_output_file(self.args.report_file,
+                                          "--report-file")
+        with open(report_file, "a") as f:
             f.write(line + "\n")
         return rep
 
@@ -1259,23 +1379,57 @@ def cmd_teardown(es, args, n, s3, s3_reason):
         log("teardown left residue, state file kept; see the verdict above")
         return 1
     if state:
-        try:
-            os.unlink(args.state_file)
-            log("teardown verified clean; state file removed")
-        except OSError as problem:
-            log(f"teardown verified clean, but the state file "
-                f"{args.state_file!r} could not be removed "
-                f"({problem.__class__.__name__}); delete it before the next "
-                "run, which refuses to start while it exists")
+        remove_state_file(args.state_file)
     return 0
+
+
+def remove_state_file(path):
+    """Delete the state file teardown has finished with, or say why not.
+
+    The run is already done and its verdict already printed, so a state file
+    that will not go away is worth a line and not an exit code. It is
+    resolved before it is removed, and the resolved path is what gets
+    removed, so this deletes the file that was checked.
+    """
+    resolved = os.path.realpath(path)
+    if not os.path.isfile(resolved):
+        log(f"teardown verified clean, but --state-file {path!r} resolves "
+            f"to {resolved!r}, which {describe_path(resolved)}; nothing was "
+            "removed")
+        return
+    try:
+        os.unlink(resolved)
+        log("teardown verified clean; state file removed")
+    except OSError as problem:
+        log(f"teardown verified clean, but the state file {path!r} could "
+            f"not be removed ({problem.__class__.__name__}); delete it "
+            "before the next run, which refuses to start while it exists")
 
 
 # ---------------------------------------------------------------------------
 # main
 
 
+class Parser(argparse.ArgumentParser):
+    """argparse, with one extra sentence when --insecure turns up.
+
+    This harness verifies certificates and has no switch for turning that
+    off, so an operator arriving with --insecure in a saved command line
+    needs pointing at --ca-cert. A bare "unrecognized arguments" points them
+    at the source to add the flag back instead.
+    """
+
+    def error(self, message):
+        if "--insecure" in message:
+            message += (". TLS verification is always on. A lab cluster "
+                        "serving a certificate it signed itself is reached "
+                        "by trusting the CA that signed it: " +
+                        ECK_CA_EXTRACTION + " ... then --ca-cert ca.crt")
+        super().error(message)
+
+
 def build_parser():
-    p = argparse.ArgumentParser(
+    p = Parser(
         description=__doc__.splitlines()[1].strip(),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1292,10 +1446,12 @@ def build_parser():
                    help="file holding the Elasticsearch password, so the "
                         "secret stays out of the process list")
     g.add_argument("--ca-cert", metavar="PATH",
-                   help="CA bundle for an https endpoint")
-    g.add_argument("--insecure", action="store_true",
-                   help="skip TLS verification for lab clusters with "
-                        "self-signed certificates")
+                   help="PEM bundle holding the CA that signed the https "
+                        "endpoint's certificate. Verification is always on "
+                        "and there is no flag that turns it off, so this is "
+                        "how a lab cluster serving its own certificate is "
+                        "reached. Under ECK the CA comes out with: "
+                        + ECK_CA_EXTRACTION)
     g = common.add_argument_group("namespace")
     g.add_argument("--prefix", default=DEFAULT_PREFIX,
                    help="unique namespace for everything the harness "
@@ -1445,17 +1601,16 @@ def main():
     if not args.base_path_explicit:
         args.base_path = args.prefix
 
-    if args.insecure:
-        refuse_insecure_off_lab(args.es, "--es")
     if args.password_file:
         password = read_secret_file(args.password_file, "--password-file")
     else:
         password = os.environ.get("ES_PASSWORD")
-    es = Es(args.es, args.user, password, args.ca_cert, args.insecure)
+    es = Es(args.es, args.user, password, args.ca_cert)
     try:
         es.get("/")
     except EsError as e:
-        die("cannot reach Elasticsearch at %s: %s" % (args.es, e))
+        die("cannot reach Elasticsearch at %s: %s%s"
+            % (args.es, e, missing_ca_hint(args)))
 
     n = names(args.prefix, getattr(args, "data_stream", None))
     s3, s3_reason = make_s3(args)

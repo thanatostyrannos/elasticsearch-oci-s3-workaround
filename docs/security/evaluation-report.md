@@ -19,8 +19,9 @@ run rather than accumulating dated copies.
 
 **bandit went from 6 MEDIUM to 0.** Every URL is checked for an http or https
 scheme before it is opened, at the argument parser and again at the transport.
-The unverified TLS context is built only inside the branch `--insecure`
-already gated, so verification is the default rather than the fallback. The
+There is no unverified TLS context left to build. Certificate and hostname
+verification are unconditional, and a cluster with a private or self-signed
+certificate is reached with `--ca-cert` rather than by turning checking off. The
 three remaining LOW findings are a variable initialised to an empty string
 before being read from a file, and the deliberate use of subprocess to run the
 audit and the delete tool as separate processes, which is the design rather
@@ -266,10 +267,12 @@ entity expansion requires and what a real S3 response never contains. Bandit
 flags the call site regardless of the guard in front of it. Recorded as
 mitigated rather than open, and the guards are pinned by neuter cases.
 
-**MEDIUM, B323, one site.** `snapshot_churn_rig.py:142` builds an unverified
-SSL context. It sits behind `--insecure`, which is `store_true` and therefore
-off unless asked for, and its help says it is for lab clusters with
-self-signed certificates. This file now ships, which it did not at the first
+**MEDIUM, B323, one site, since removed.** `snapshot_churn_rig.py` built an
+unverified SSL context behind an `--insecure` flag. Keeping the flag meant
+keeping a code path that turns verification off, which a static analyser reads
+as a critical finding and is right to. The flag and the branch are both gone:
+every context comes from `ssl.create_default_context()` with a TLS 1.2 floor,
+and a self-signed lab is reached with `--ca-cert`. This file now ships, which it did not at the first
 scan, so the finding is disclosed rather than inherited quietly. The default
 path uses `ssl.create_default_context`.
 

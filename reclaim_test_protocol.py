@@ -160,6 +160,15 @@ import urllib.request
 # every audit then fails with "No module named generation_chain".
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
+# The path refusals the audit already applies to --manifest and
+# --credentials, applied to this harness's own paths as well. Imported
+# rather than spelled out again, on the sibling package this harness ships
+# next to in the release archive and already cannot run without: every
+# cycle shells out to `python3 -m generation_chain` in ROOT. Two copies of
+# one refusal drift, and then one bad path gets two different answers.
+sys.path.insert(0, ROOT)
+from generation_chain.paths import PathRefused, checked_path  # noqa: E402
+
 COLUMNS = ["cycle", "utc", "mode", "settle", "shards_read",
            "segments_condemned", "deleted", "failed", "unconfirmed",
            "reclaimable", "exit"]
@@ -207,14 +216,26 @@ def read_text(path):
 def read_secret_file(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
-    The message quotes the path and never the contents, because the contents
+    The path is resolved before anything opens, and the RESOLVED path is what
+    opens, so the file a refusal names is the file that was tried.
+
+    There is no directory to hold this one inside: an operator keeps their own
+    secret where they keep it. What the check can still do is refuse a path
+    that names nothing and say which flag carried it, which beats a ValueError
+    raised from inside `open` with no flag attached.
+
+    Every message quotes the path and never the contents, because the contents
     are the secret.
     """
     try:
-        with open(path) as handle:
+        resolved = checked_path(path, what)
+    except PathRefused as refusal:
+        raise ValueError(str(refusal)) from refusal
+    try:
+        with open(resolved) as handle:
             return handle.read().strip()
     except OSError as problem:
-        raise ValueError(f"{what} {path!r} could not be read: "
+        raise ValueError(f"{what} {resolved!r} could not be read: "
                          f"{problem.__class__.__name__}: "
                          f"{problem.strerror or problem}")
 
@@ -603,9 +624,14 @@ def main():
     if problem:
         p.error(problem)
 
-    # Resolved once, here, so every artifact path below is a join onto a
-    # directory that exists and has already been through the filesystem.
-    args.out = os.path.realpath(args.out)
+    # Checked and resolved once, here, so every artifact path below is a join
+    # onto a directory that exists and has already been through the
+    # filesystem, and so the directory that gets created is the one a refusal
+    # here would have named.
+    try:
+        args.out = checked_path(args.out, "--out")
+    except PathRefused as refusal:
+        p.error(str(refusal))
     try:
         os.makedirs(args.out, exist_ok=True)
     except OSError as exc:

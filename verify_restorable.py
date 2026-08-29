@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Is Elasticsearch still whole after objects were deleted underneath it?
+r"""Is Elasticsearch still whole after objects were deleted underneath it?
 
 A repository can list clean, report SUCCESS on every snapshot and pass an
 integrity check while being unrestorable. This project measured exactly that: a
@@ -9,11 +9,21 @@ mounted index with all eight of its data blobs deleted answered HTTP 200 with
 So the cheap checks run first because they are cheap, and none of them is
 believed. The answer comes from restoring a snapshot and counting what comes
 back. Exit 0 means intact, 1 means something is wrong and the caller should stop.
+
+TLS verification is always on and there is no flag to turn it off. A cluster
+that serves a certificate it signed itself, which is every ECK install, is
+reached by naming the CA that signed it. ECK publishes that CA in a secret
+beside the cluster, so getting it is one line:
+
+  kubectl -n <namespace> get secret <cluster>-es-http-certs-public \
+      -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
+  ./verify_restorable.py --elasticsearch https://es:9200 --repository my-repo \
+      --password-file pw.txt --ca-cert ca.crt
 """
 import argparse
 import base64
-import ipaddress
 import json
+import os
 import ssl
 import sys
 import time
@@ -21,37 +31,51 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# Names a lab cluster answers on. Kubernetes hands out the first three to
-# in-cluster services, mDNS hands out .local, and a single-label name has no
-# public DNS to resolve it.
-LAB_HOST_SUFFIXES = (".svc", ".svc.cluster.local", ".cluster.local",
-                     ".local", ".localdomain", ".internal")
+# How an ECK operator gets the CA their cluster signed its certificate with.
+# Quoted in --help and in the refusal, so nobody has to go and find it.
+CA_CERT_EXTRACTION = (
+    r"kubectl -n <namespace> get secret <cluster>-es-http-certs-public "
+    r"-o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt")
+
+# The epilog is printed as written. Rewrapped, the command above breaks
+# across a hyphen in the middle of a secret name and stops being a line
+# anyone can paste.
+CA_CERT_EPILOG = (
+    "getting the CA for a cluster running under ECK:\n\n  "
+    + CA_CERT_EXTRACTION + "\n")
 
 
-def is_lab_host(host):
-    """Is this an address only a lab or an in-cluster caller can reach?"""
-    if not host:
-        return False
-    host = host.rstrip(".")
-    if host == "localhost" or host.endswith(LAB_HOST_SUFFIXES):
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        # A name with no dot has no public DNS to resolve it, so it is a
-        # service name inside a cluster or a line in someone's hosts file.
-        return "." not in host
-    return address.is_loopback or address.is_private or address.is_link_local
+def path_segment(name):
+    """One name, encoded so it can only ever be a single path segment.
+
+    The repository name comes from the command line and snapshot names come
+    back from the cluster. Pasted into a URL as they are, a name holding a
+    slash or a question mark aims the request at a different API than the
+    code reads as calling.
+    """
+    return urllib.parse.quote(str(name), safe="")
 
 
 def read_secret(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
+    The path is resolved first and the resolved name is what gets opened, so
+    the file that was checked is the file that is read. Anything that is not
+    a regular file is refused before the open rather than during it: a
+    directory arrives as a crash from inside a read, and a device node or a
+    pipe hands back bytes that read as a password and fail two steps later
+    as an authentication error, which sends whoever is on call looking at
+    the cluster instead of at the flag.
+
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
+    resolved = os.path.realpath(path)
+    if not os.path.isfile(resolved):
+        sys.exit(f"{what} {path!r} is not a regular file "
+                 f"(it resolves to {resolved!r})")
     try:
-        with open(path) as handle:
+        with open(resolved) as handle:
             return handle.read().strip()
     except OSError as problem:
         sys.exit(f"{what} {path!r} could not be read: "
@@ -59,50 +83,77 @@ def read_secret(path, what):
                  f"{problem.strerror or problem}")
 
 
+def checked_ca_cert(parser, path):
+    """Refuse a --ca-cert that will not load, naming the path that failed.
+
+    The file is loaded here rather than only opened, so a path that is
+    missing, unreadable or not a certificate all fail at the command line
+    with the path in the message. Left to the first connection, the same
+    three read as a broken cluster.
+    """
+    if path is None:
+        return
+    try:
+        ssl.create_default_context(cafile=path)
+    except (OSError, ssl.SSLError) as problem:
+        parser.error(f"--ca-cert {path!r} could not be read: "
+                     f"{getattr(problem, 'strerror', None) or problem}. It "
+                     f"wants the PEM file holding the CA that signed the "
+                     f"cluster certificate. Under ECK: {CA_CERT_EXTRACTION}")
+
+
 _p = argparse.ArgumentParser(
-    description="Prove a snapshot repository is still restorable after deletion "
-                "traffic. Reads and restores under a fresh name; deletes nothing "
-                "from the repository.")
+    description="Prove a snapshot repository is still restorable after\n"
+                "deletion traffic. Reads and restores under a fresh name;\n"
+                "deletes nothing from the repository.",
+    epilog=CA_CERT_EPILOG,
+    formatter_class=argparse.RawDescriptionHelpFormatter)
 _p.add_argument("--elasticsearch", required=True, metavar="URL")
 _p.add_argument("--repository", required=True, metavar="NAME")
 _p.add_argument("--user", default="elastic")
 _p.add_argument("--password-file", required=True, metavar="PATH",
                 help="a PATH, never a value: a secret in argv is visible in ps")
-_p.add_argument("--insecure", action="store_true",
-                help="skip TLS verification of --elasticsearch, for a lab "
-                     "cluster with a self-signed certificate. Accepted only "
-                     "for a loopback, private or in-cluster address; anything "
-                     "else needs a CA the certificate chains to")
+_p.add_argument("--ca-cert", metavar="PEM",
+                help="PEM file holding the CA that signed the cluster's "
+                     "certificate. This is how a lab cluster serving its own "
+                     "certificate is reached; verification is always on and "
+                     "there is no flag to turn it off. The line at the bottom "
+                     "of this help gets the CA out of an ECK cluster")
 _a = _p.parse_args()
 
-ES, REPO = _a.elasticsearch.rstrip("/"), _a.repository
+REPO = _a.repository
 
 # --elasticsearch comes from configuration, not from the network, but
 # configuration is not the same as trusted. urlopen does not care, and will
 # happily open file:// or ftp://. This script only ever needs http or https,
-# so anything else is refused before ES is ever passed to urlopen.
-_split = urllib.parse.urlsplit(ES)
+# so anything else is refused before the value is passed to urlopen. What
+# every request is then built on is rebuilt from the parts that passed, so a
+# query string or a fragment typed into --elasticsearch cannot reappear in
+# the middle of a request path.
+_split = urllib.parse.urlsplit(_a.elasticsearch)
 if _split.scheme not in ("http", "https"):
-    _p.error(f"--elasticsearch is {ES!r}; only http and https are accepted, "
-             f"so a {_split.scheme or '(no scheme)'!r} value cannot be opened")
+    _p.error(f"--elasticsearch is {_a.elasticsearch!r}; only http and https "
+             f"are accepted, so a {_split.scheme or '(no scheme)'!r} value "
+             f"cannot be opened")
+if not _split.hostname:
+    _p.error(f"--elasticsearch is {_a.elasticsearch!r} and names no host, so "
+             f"there is nothing to connect to")
+ES = urllib.parse.urlunsplit(
+    (_split.scheme, _split.netloc, _split.path.rstrip("/"), "", ""))
 
-# Verification starts on and is turned off only for the one endpoint the
-# operator named, and only when that endpoint is somewhere a lab cluster
-# lives. The restore this script drives reads a whole index back over the
-# connection; against a routable cluster an unverified connection hands the
-# contents to whoever answered.
-CTX = ssl.create_default_context()
-if _a.insecure:
-    if not is_lab_host(_split.hostname):
-        _p.error(f"--insecure was passed for {_split.hostname!r}, which is "
-                 "not a loopback, private or in-cluster address. It exists "
-                 "for a lab cluster serving its own certificate, not for a "
-                 "cluster anything can route to. Pass the CA that "
-                 "certificate chains to instead.")
-    print(f"  TLS verification is OFF for {_split.hostname}, by --insecure",
-          file=sys.stderr)
-    CTX.check_hostname = False
-    CTX.verify_mode = ssl.CERT_NONE
+# Verification is always on. The restore this script drives reads a whole
+# index back over this connection, and the cluster password went out over it
+# first; an unverified connection hands both to whichever host answered. A
+# lab cluster serving its own certificate is reached with --ca-cert, which
+# verifies the connection rather than abandoning it.
+checked_ca_cert(_p, _a.ca_cert)
+CTX = ssl.create_default_context(cafile=_a.ca_cert)
+# create_default_context leaves minimum_version at MINIMUM_SUPPORTED before
+# Python 3.10, which lets the host's OpenSSL build pick the floor and gives a
+# different answer on every machine. 1.2 rather than 1.3: a cluster that
+# speaks only 1.2 is ordinary, and refusing it would break this script for a
+# reason that has nothing to do with the connection being safe.
+CTX.minimum_version = ssl.TLSVersion.TLSv1_2
 
 PW = read_secret(_a.password_file, "--password-file")
 AUTH = "Basic " + base64.b64encode(f"{_a.user}:{PW}".encode()).decode()
@@ -155,7 +206,8 @@ if h.get("status") == "red":
     _, rows = call("GET", "/_cat/shards?h=index,state&format=json")
     broken = sorted({r["index"] for r in (rows or [])
                      if r.get("state") != "STARTED"})
-    _, cat = call("GET", f"/_snapshot/{REPO}/_all?ignore_unavailable=true")
+    _, cat = call("GET", f"/_snapshot/{path_segment(REPO)}"
+                         f"/_all?ignore_unavailable=true")
     covered = set()
     for snap in (cat.get("snapshots", []) if isinstance(cat, dict) else []):
         covered.update(snap.get("indices", []) or [])
@@ -168,7 +220,8 @@ if h.get("status") == "red":
           "this repository did not cause and cannot fix; continuing")
 
 print("== snapshots ==")
-_, s = call("GET", f"/_snapshot/{REPO}/_all?ignore_unavailable=true")
+_, s = call("GET",
+            f"/_snapshot/{path_segment(REPO)}/_all?ignore_unavailable=true")
 snaps = s.get("snapshots", []) if isinstance(s, dict) else []
 states = {}
 for x in snaps:
@@ -202,7 +255,8 @@ if not snaps:
     sys.exit(0)
 
 print("== integrity ==")
-code, v = call("POST", f"/_snapshot/{REPO}/_verify_integrity", timeout=600)
+code, v = call("POST", f"/_snapshot/{path_segment(REPO)}/_verify_integrity",
+               timeout=600)
 anomalies = v.get("anomalies") if isinstance(v, dict) else None
 print(f"  http={code} anomalies={anomalies if anomalies is not None else v if code!=200 else 0}")
 
@@ -224,7 +278,10 @@ if target is None:
     print("  no SUCCESS snapshot holding a non-mounted index; nothing restorable this pass")
     sys.exit(0)
 stamp = str(int(time.time()))
-code, body = call("POST", f"/_snapshot/{REPO}/{target['snapshot']}/_restore?wait_for_completion=true",
+code, body = call("POST",
+                  f"/_snapshot/{path_segment(REPO)}"
+                  f"/{path_segment(target['snapshot'])}"
+                  f"/_restore?wait_for_completion=true",
                   {"indices": src, "include_aliases": False,
                    # ^(.+)$ rather than .* : `.*` also matches the empty string at the end, so
                    # Elasticsearch applies the replacement twice and the index lands under a

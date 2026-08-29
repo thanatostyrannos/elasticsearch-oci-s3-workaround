@@ -7,6 +7,7 @@ entities, and reporting it anyway would have been crying wolf.
 """
 
 import hashlib
+import inspect
 import os
 import socket
 import ssl
@@ -193,10 +194,10 @@ class ChurnRigEndpointSchemeIsValidated(unittest.TestCase):
 
     def test_es_refuses_file_scheme(self):
         with self.assertRaises(SystemExit):
-            rig.Es("file:///etc/passwd", "elastic", "p", None, False)
+            rig.Es("file:///etc/passwd", "elastic", "p", None)
 
     def test_es_accepts_http(self):
-        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None, False)
+        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None)
         self.assertEqual(es.base, "http://127.0.0.1:9200")
 
     def test_s3_refuses_ftp_scheme(self):
@@ -208,31 +209,31 @@ class ChurnRigEndpointSchemeIsValidated(unittest.TestCase):
         self.assertEqual(made.endpoint, "https://s3.example.com")
 
 
-class ChurnRigTlsVerifiesByDefault(unittest.TestCase):
-    """--insecure exists to skip verification against a lab cluster with a
-    self-signed certificate, and must keep working when an operator passes
-    it. What bandit flagged is that the context was built the same way,
-    ssl._create_unverified_context(), regardless of whether that branch was
-    reachable, which reads as insecure-by-construction in a diff. Pinned
-    here against ssl's own verification flags on both branches, not against
-    which function got called, so a future refactor that keeps the same
-    unconditional call under a different name still fails this test.
+class ChurnRigTlsAlwaysVerifies(unittest.TestCase):
+    """The rig has no switch that turns certificate checking off. A lab
+    cluster serving a certificate it signed itself is reached by naming the
+    CA that signed it, so the only TLS input is --ca-cert. Pinned against
+    ssl's own verification flags rather than against which function built
+    the context, so a rewrite that reaches the same relaxed state under a
+    different name still fails here.
     """
 
-    def test_verification_is_on_by_default(self):
-        es = rig.Es("https://cluster.example.com", "elastic", "p", None, False)
+    def test_verification_is_on(self):
+        es = rig.Es("https://cluster.example.com", "elastic", "p", None)
         self.assertEqual(es.ctx.verify_mode, ssl.CERT_REQUIRED)
         self.assertTrue(es.ctx.check_hostname)
 
-    def test_insecure_flag_still_disables_verification(self):
-        es = rig.Es("https://cluster.example.com", "elastic", "p", None, True)
-        self.assertEqual(es.ctx.verify_mode, ssl.CERT_NONE)
-        self.assertFalse(es.ctx.check_hostname)
+    def test_no_argument_can_relax_the_context(self):
+        # The client takes a CA bundle and nothing else about TLS, so there
+        # is no value a caller can pass that reaches CERT_NONE.
+        self.assertNotIn(
+            "insecure",
+            inspect.signature(rig.Es.__init__).parameters)
 
     def test_plain_http_still_needs_no_context(self):
         # The rig's other job: drive a lab cluster over plain http on
         # loopback. Guarding TLS must not touch the non-TLS path at all.
-        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None, False)
+        es = rig.Es("http://127.0.0.1:9200", "elastic", "p", None)
         self.assertIsNone(es.ctx)
 
 
