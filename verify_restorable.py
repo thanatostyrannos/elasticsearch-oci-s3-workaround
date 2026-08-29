@@ -83,6 +83,19 @@ def read_secret(path, what):
                  f"{problem.strerror or problem}")
 
 
+def _pinned_context(ca_cert):
+    """The one place this script builds a TLS context."""
+    context = ssl.create_default_context(cafile=ca_cert)
+    # create_default_context leaves minimum_version at MINIMUM_SUPPORTED and
+    # lets the host's OpenSSL decide the floor. Naming it here makes the floor
+    # a property of this tool rather than of whatever machine it runs on.
+    #
+    # 1.2 rather than 1.3, because a cluster that speaks only 1.2 is ordinary
+    # and refusing it would fail the restore check for an unrelated reason.
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def checked_ca_cert(parser, path):
     """Refuse a --ca-cert that will not load, naming the path that failed.
 
@@ -94,7 +107,11 @@ def checked_ca_cert(parser, path):
     if path is None:
         return
     try:
-        ssl.create_default_context(cafile=path)
+        # Built through the same helper the real connection uses, so
+        # there is one context construction in this file and the
+        # floor below is pinned on it. A throwaway context here was
+        # a second, unpinned one that proved nothing about the first.
+        _pinned_context(path)
     except (OSError, ssl.SSLError) as problem:
         parser.error(f"--ca-cert {path!r} could not be read: "
                      f"{getattr(problem, 'strerror', None) or problem}. It "
@@ -147,7 +164,7 @@ ES = urllib.parse.urlunsplit(
 # lab cluster serving its own certificate is reached with --ca-cert, which
 # verifies the connection rather than abandoning it.
 checked_ca_cert(_p, _a.ca_cert)
-CTX = ssl.create_default_context(cafile=_a.ca_cert)
+CTX = _pinned_context(_a.ca_cert)
 # create_default_context leaves minimum_version at MINIMUM_SUPPORTED before
 # Python 3.10, which lets the host's OpenSSL build pick the floor and gives a
 # different answer on every machine. 1.2 rather than 1.3: a cluster that
