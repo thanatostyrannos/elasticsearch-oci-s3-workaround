@@ -81,7 +81,7 @@ jobs:
             -Dsonar.projectName=elasticsearch-oci-s3-workaround
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.python.version=3.9
-            -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py,scripts,manifests,gitlab,.github,experiment
+            -Dsonar.sources=generation_chain,package.py,reclaim_test_protocol.py,verify_restorable.py,snapshot_sizes.py,snapshot_churn_rig.py,scripts,manifests,gitlab,.github
             -Dsonar.tests=tests
             -Dsonar.qualitygate.wait=true
           projectBaseDir: .
