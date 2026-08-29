@@ -1,0 +1,17 @@
+# Coverage settings for the CI measurement in .github/workflows/build.yaml.
+#
+# parallel matters more than it looks. The suite drives the top-level scripts
+# through subprocess, so a coverage run that watches only the parent process
+# never sees those lines and reports the rig scripts far lower than the tests
+# actually exercise them. With parallel on, plus COVERAGE_PROCESS_START and a
+# sitecustomize that calls coverage.process_startup, each child writes its own
+# data file and `coverage combine` merges them.
+[run]
+parallel = true
+omit =
+    tests/*
+    evidence/*
+
+[report]
+# A file that fails to import is a measurement problem, not a coverage result.
+show_missing = false
