@@ -39,8 +39,20 @@ jobs:
       - name: Measure coverage
         run: |
           pip install --quiet --only-binary :all: coverage==7.16.0
-          coverage run --omit='tests/*,evidence/*' -m unittest discover -s tests -q
-          coverage xml -o coverage.xml --omit='tests/*,evidence/*'
+          # The suite drives the top-level scripts through subprocess. Without
+          # this the children run unmeasured and those scripts report a
+          # fraction of what the tests actually exercise. sitecustomize is
+          # written to a scratch directory rather than the repository so it is
+          # not importable during ordinary development.
+          mkdir -p "$RUNNER_TEMP/covhook"
+          printf 'import coverage\ncoverage.process_startup()\n' \
+            > "$RUNNER_TEMP/covhook/sitecustomize.py"
+          export COVERAGE_PROCESS_START="$PWD/.coveragerc"
+          export PYTHONPATH="$RUNNER_TEMP/covhook:$PYTHONPATH"
+          coverage run -m unittest discover -s tests -q
+          coverage combine
+          coverage xml -o coverage.xml
+          coverage report | tail -5
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
