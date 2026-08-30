@@ -1582,8 +1582,13 @@ def build_parser():
     return p
 
 
-def main():
-    args = build_parser().parse_args()
+def check_arguments(args):
+    """Refuse a name the cluster would reject, and fill in what was omitted.
+
+    Every default here is derived from --prefix, so a run that names only its
+    prefix still keeps its state, its reports and its base path apart from
+    anyone else's.
+    """
     if not re.fullmatch(r"[a-z][a-z0-9]{2,30}", args.prefix):
         die("--prefix must be 3 to 31 lowercase letters and digits and "
             "start with a letter, so every derived name stays legal")
@@ -1601,6 +1606,28 @@ def main():
     if not args.base_path_explicit:
         args.base_path = args.prefix
 
+
+def cmd_status(es, args, n, s3, s3_reason):
+    """Report on the rig as it stands, preferring the state file's names.
+
+    A run that has already set up recorded what it created, and those names
+    are what a report should describe. Falling back to the names derived from
+    --prefix keeps status useful before setup has run.
+    """
+    base_path = args.base_path
+    if os.path.exists(args.state_file):
+        state = load_state(args.state_file)
+        n = state["names"]
+        base_path = state.get("base_path", base_path)
+    report = gather_report(Rig(es, n, s3, s3_reason, base_path))
+    print(json.dumps(report, sort_keys=True, indent=2))
+    return 0
+
+
+def main():
+    args = build_parser().parse_args()
+    check_arguments(args)
+
     if args.password_file:
         password = read_secret_file(args.password_file, "--password-file")
     else:
@@ -1617,14 +1644,7 @@ def main():
     if args.cmd == "run":
         return cmd_run(es, args, n, s3, s3_reason)
     if args.cmd == "status":
-        base_path = args.base_path
-        if os.path.exists(args.state_file):
-            state = load_state(args.state_file)
-            n = state["names"]
-            base_path = state.get("base_path", base_path)
-        rep = gather_report(Rig(es, n, s3, s3_reason, base_path))
-        print(json.dumps(rep, sort_keys=True, indent=2))
-        return 0
+        return cmd_status(es, args, n, s3, s3_reason)
     if args.cmd == "teardown":
         return cmd_teardown(es, args, n, s3, s3_reason)
     return 2
