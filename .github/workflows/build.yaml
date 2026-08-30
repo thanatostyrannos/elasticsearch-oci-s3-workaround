@@ -13,7 +13,7 @@ on:
 # its own token; it needs nothing from the GitHub API but the checkout.
 permissions:
   contents: read
-  pull-requests: read  # lets the analysis decorate a pull request
+  pull-requests: write  # read to decorate, write to post the results comment
 
 jobs:
   sonarqube:
@@ -58,3 +58,64 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Everything below runs even when the gate fails, because a failed gate
+      # is exactly when someone wants to read what it found.
+
+      - name: Collect the scan results
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p sonar-export
+          key=thanatostyrannos_elasticsearch-oci-s3-workaround
+          scope=""
+          [ -n "$PR" ] && scope="&pullRequest=$PR"
+          curl -sS -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/issues/search?componentKeys=$key&ps=500&resolved=false$scope" \
+            -o sonar-export/issues.json
+          curl -sS -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/measures/component?component=$key&metricKeys=security_rating,reliability_rating,sqale_rating,security_review_rating,coverage,bugs,vulnerabilities,code_smells,security_hotspots,ncloc,duplicated_lines_density$scope" \
+            -o sonar-export/measures.json
+          curl -sS -u "$SONAR_TOKEN:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$key$scope" \
+            -o sonar-export/gate.json
+          # Named by commit, because that is what you look one up by. The
+          # digest proves it was not edited after the fact, so it goes beside
+          # the file rather than into its name.
+          for f in issues measures gate; do
+            sha256sum "sonar-export/$f.json" > "sonar-export/$f.json.sha256"
+          done
+          python3 .github/render-scan-summary.py > sonar-export/summary.md
+          cat sonar-export/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post the results on the pull request
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # One comment, edited in place. A new comment per push turns a busy
+          # pull request into a wall of bot output nobody reads.
+          marker="<!-- sonar-scan-results -->"
+          body="$marker"$'\n'"$(cat sonar-export/summary.md)"
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq "[.[] | select(.body | startswith(\"$marker\"))] | .[0].id // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+              -f body="$body" >/dev/null
+            echo "updated comment $existing"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+              -f body="$body" >/dev/null
+            echo "posted a new comment"
+          fi
+
+      - name: Keep the results with the run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: sonar-findings-${{ github.sha }}
+          path: sonar-export/
+          retention-days: 90
