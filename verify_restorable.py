@@ -26,6 +26,7 @@ import json
 import os
 import ssl
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -78,6 +79,20 @@ def path_segment(name):
     return urllib.parse.quote(str(name), safe="")
 
 
+def _inside(candidate, root):
+    """Is candidate at or below root, comparing whole path components?
+
+    os.path.commonpath compares components, so /var/tmp-evil is not inside
+    /var/tmp. A startswith test says it is, which is the classic way a
+    containment check fails open.
+    """
+    try:
+        return os.path.commonpath([root, candidate]) == root
+    except ValueError:
+        # Different drives on Windows, or one path relative and one absolute.
+        return False
+
+
 def read_secret(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
@@ -92,7 +107,21 @@ def read_secret(path, what):
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
+    # Confined, not merely resolved. An operator names this path, so the
+    # roots are the places an operator legitimately keeps one: the directory
+    # the command was run from, their home, and the system temp directory.
+    # A path resolving outside all three is refused before anything opens it.
+    #
+    # commonpath rather than startswith: startswith says /var/tmp-evil is
+    # inside /var/tmp, and it is not.
     resolved = os.path.realpath(path)
+    roots = [os.path.realpath(r) for r in
+             (os.getcwd(), os.path.expanduser("~"), tempfile.gettempdir())]
+    if not any(_inside(resolved, root) for root in roots):
+        sys.exit(f"{what} {path!r} resolves to {resolved!r}, which is outside "
+                 f"the working directory, your home directory and the temp "
+                 f"directory. Move the file into one of those, or run from "
+                 f"the directory that holds it.")
     if not os.path.isfile(resolved):
         sys.exit(f"{what} {path!r} is not a regular file "
                  f"(it resolves to {resolved!r})")
