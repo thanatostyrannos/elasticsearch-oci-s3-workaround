@@ -19,11 +19,34 @@ jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+    # Read once here so the gate below can test it. The secrets context is
+    # not available to a job-level `if`, which is what makes a step necessary.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
     steps:
+      # Dependabot pull requests do not receive repository secrets, so the
+      # token is empty and the scan cannot run. With this check required for
+      # merge, that left every dependency bump permanently unmergeable. The
+      # job runs and reports success; only the analysis is skipped, and it
+      # says so. A red SonarQube check therefore still means the analysis
+      # failed, not that something could not reach its credentials.
+      - name: Decide whether the scan can run
+        id: gate
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No SONAR_TOKEN in this context, which is expected for a fork or a Dependabot pull request. Skipping the analysis."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        if: steps.gate.outputs.ready == 'true'
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        if: steps.gate.outputs.ready == 'true'
         with:
           python-version: "3.11"
 
@@ -37,6 +60,7 @@ jobs:
       # are invisible to this. Worth fixing separately rather than papering
       # over: the number is honest about what it saw, not about what ran.
       - name: Measure coverage
+        if: steps.gate.outputs.ready == 'true'
         run: |
           pip install --quiet --only-binary :all: coverage==7.16.0
           # The suite drives the top-level scripts through subprocess. Without
@@ -55,6 +79,7 @@ jobs:
           coverage report | tail -5
 
       - name: SonarQube Scan
+        if: steps.gate.outputs.ready == 'true'
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -63,7 +88,7 @@ jobs:
       # is exactly when someone wants to read what it found.
 
       - name: Collect the scan results
-        if: always()
+        if: always() && steps.gate.outputs.ready == 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
@@ -91,7 +116,7 @@ jobs:
           cat sonar-export/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post the results on the pull request
-        if: always() && github.event_name == 'pull_request'
+        if: always() && steps.gate.outputs.ready == 'true' && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
@@ -113,7 +138,7 @@ jobs:
           fi
 
       - name: Keep the results with the run
-        if: always()
+        if: always() && steps.gate.outputs.ready == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: sonar-findings-${{ github.sha }}
