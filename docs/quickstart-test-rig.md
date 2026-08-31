@@ -17,7 +17,7 @@ want is a number out of an existing bucket. This page is for the fuller thing.
   at production: it writes continuously, rolls indices, and snapshots on a
   cycle measured in seconds.
 - A bucket, and a prefix inside it that nothing else uses.
-- Python 3.9 or later. Nothing to install.
+- Python 3.12 or later. Nothing to install.
 - An object store that actually reproduces the fault. If yours accepts the
   batch delete, nothing leaks and the rig measures nothing. Oracle Object
   Storage does reproduce it. So does MinIO, but only up to and including

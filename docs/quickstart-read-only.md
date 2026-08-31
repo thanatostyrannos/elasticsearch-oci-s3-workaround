@@ -16,7 +16,7 @@ and a file listing every one of them.
 
 ## Before you start
 
-- Python 3.9 or later. Nothing else. The audit imports only the standard
+- Python 3.12 or later. Nothing else. The audit imports only the standard
   library and there is no dependency file to install.
 - Read access to the bucket. The audit cannot delete: its transport allows
   `GET` and `HEAD` and refuses anything else, and the package that deletes is
