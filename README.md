@@ -264,7 +264,7 @@ bucket root and makes every snapshot you have unreachable, with
 The audit and the reclaim tool read the bucket, so they need the Amazon S3
 Compatibility API credential described above. Passing `--elasticsearch` to
 the audit needs a read-only Elasticsearch credential instead, and no bucket
-credential at all. All of it needs nothing but Python 3.9 or newer.
+credential at all. All of it needs nothing but Python 3.12 or newer.
 
 ```bash
 git clone https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround
@@ -467,7 +467,7 @@ If even that is blocked, download the ZIP through a browser and copy
 If you have a clone, copy the directory somewhere, `cd` to its parent, and run
 `python3 -m generation_chain`.
 
-You also need Python 3.9 or newer, and a credentials file you write yourself.
+You also need Python 3.12 or newer, and a credentials file you write yourself.
 You do not need the tests, the evidence, the docs, or anything else in this
 repository.
 
@@ -810,7 +810,7 @@ come back is the only check that catches it.
 
 ## The tools
 
-Four, all Python 3.9+ and standard library only. Two are the working pair, an
+Four, all Python 3.12+ and standard library only. Two are the working pair, an
 audit that names what leaked and a separate tool that reclaims it. The other two
 exist to measure and to check.
 

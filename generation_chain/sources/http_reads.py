@@ -154,12 +154,15 @@ def _detail(exc: urllib.error.HTTPError) -> str:
     the exception type.
 
     So it catches everything, which the narrower `(OSError, AttributeError)`
-    did not. On Python 3.9 an HTTPError carrying no body raises
-    `KeyError('file')` here, because `addinfourl` subclassed
-    `tempfile._TemporaryFileWrapper` back then and its `__getattr__` reaches
-    for a key nobody set. Later versions return an empty bytes and the
-    problem is invisible, which is how it survived: the suite passed on 3.12
-    and errored on the 3.9 this project says it supports.
+    did not. Broad on purpose rather than by accident: nothing this helper can
+    hit is worth turning into the caller's exception.
+
+    It reads that way because of a real failure. On Python 3.9 an HTTPError
+    carrying no body raised `KeyError('file')` here, `addinfourl` having
+    subclassed `tempfile._TemporaryFileWrapper` so its `__getattr__` reached
+    for a key nobody set. The floor has moved past that interpreter and the
+    read now returns empty bytes. The specific bug is gone. The reason to
+    catch broadly is not.
     """
     try:
         return exc.read()[:200].decode("utf-8", "replace")

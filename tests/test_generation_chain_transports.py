@@ -54,13 +54,13 @@ class ErrorDetailNeverEscapes(unittest.TestCase):
         # _detail exists to put a scrap of the store's response into an error
         # message. It is decoration, and it must never become the failure.
         #
-        # On Python 3.9, which this project claims to support, reading an
-        # HTTPError built with fp=None raises KeyError('file') rather than the
-        # OSError or AttributeError this used to catch: addinfourl subclassed
-        # tempfile._TemporaryFileWrapper back then, whose __getattr__ reaches
-        # for a 'file' key nobody set. Later versions return b'' and the bug
-        # is invisible. Four tests in the suite hit exactly this and errored
-        # on 3.9 while passing on 3.12.
+        # Every supported interpreter returns b'' for a body-less HTTPError,
+        # so this passes without _detail having to catch anything. It is
+        # pinned anyway because the failure it guards was real: on Python 3.9
+        # the same read raised KeyError('file'), addinfourl having subclassed
+        # tempfile._TemporaryFileWrapper, and four tests errored there while
+        # passing on 3.12. That interpreter is below the floor now. A helper
+        # that is decoration still must not become the failure.
         detail = http_reads._detail(
             urllib.error.HTTPError("http://example.invalid/", 429, "err", {}, None))
         self.assertEqual(detail, "")

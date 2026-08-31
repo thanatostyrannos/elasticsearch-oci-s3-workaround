@@ -44,7 +44,7 @@ You need:
 - An Elasticsearch cluster at 8.19.17 or later, or 9.5.0 or later. Earlier
   versions do not send the header that causes the fault, so they will not
   reproduce it.
-- Python 3.9 or later on the machine running the tests. No other dependency.
+- Python 3.12 or later on the machine running the tests. No other dependency.
 - Roughly an hour and a half of cluster time, and about 300 MB of bucket space
   at the settings below.
 
@@ -155,6 +155,29 @@ PUT _snapshot/leaktest-repo?verify=false
 The `client` setting names an `s3.client.*` block in your Elasticsearch
 keystore and config holding the endpoint and region. That is standard S3
 repository configuration and is not specific to this tool.
+
+**One setting in that block is not standard, and without it nothing works at
+all.** Set `disable_chunked_encoding` to true:
+
+```yaml
+s3.client.oci.endpoint: <namespace>.compat.objectstorage.<region>.oraclecloud.com
+s3.client.oci.protocol: https
+s3.client.oci.path_style_access: true
+s3.client.oci.disable_chunked_encoding: true
+```
+
+Without it, registration fails before it ever reaches the delete this document
+is about:
+
+```
+AWS chunked encoding not supported. (Service: S3, Status Code: 501)
+```
+
+This is a second incompatibility between Elasticsearch's S3 client and OCI's
+S3 Compatibility API, separate from the checksum header. It blocks uploads
+rather than deletes, so you hit it first: the repository cannot be written to,
+never mind cleaned up. Elasticsearch offers the setting precisely for stores
+that do not accept `aws-chunked` content encoding, and OCI is one of them.
 
 ## Step 4: the settings we used, and what they cost
 

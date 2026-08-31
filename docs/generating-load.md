@@ -25,7 +25,7 @@ curl -sSLO https://raw.githubusercontent.com/thanatostyrannos/elasticsearch-oci-
 python3 snapshot_churn_rig.py run --help
 ```
 
-Python 3.9 or newer. Nothing else.
+Python 3.12 or newer. Nothing else.
 
 That is a deliberate contrast with the audit tool, which is a package of 49
 modules under `generation_chain/`. The rig is one file because it has to be

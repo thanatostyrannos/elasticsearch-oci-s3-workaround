@@ -7,7 +7,7 @@ their own Elasticsearch, and their own Oracle Object Storage bucket.
 |---|---|---|
 | Runs | `python3 -m generation_chain` | the load generator, the audit-and-reclaim loop, a scheduled audit |
 | Can it delete? | No. Not structurally capable of it. | Yes, once you explicitly turn deletes on. |
-| Where | Any GitLab runner with Python 3.9+ | A Kubernetes cluster, via Helm |
+| Where | Any GitLab runner with Python 3.12+ | A Kubernetes cluster, via Helm |
 | Schedule | Yes. This is the one built for a schedule. | No. Refuses to trigger from one. |
 | Start here if | you have a repository to check and want a number back | you want to prove the delete path works before trusting it on data you cannot lose |
 
