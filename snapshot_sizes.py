@@ -325,6 +325,29 @@ FROZEN_FOOTPRINT_LABEL = (
     "mounts share lineage)"
 )
 
+
+class Parser(argparse.ArgumentParser):
+    """argparse, with one extra sentence when --insecure turns up.
+
+    This tool verifies certificates and has no switch for turning that off, so
+    an operator arriving with --insecure in a saved command line needs pointing
+    at --ca-cert. A bare "unrecognized arguments" points them at the source to
+    add the flag back instead.
+
+    The churn rig carries the same class for the same reason. The three tools
+    ship separately and a stale command line reaches whichever one it names.
+    """
+
+    def error(self, message):
+        if "--insecure" in message:
+            message += (". TLS verification is always on. A lab cluster "
+                        "serving a certificate it signed itself is reached "
+                        "by trusting the CA that signed it: " +
+                        CA_CERT_EXTRACTION + " ... then --ca-cert ca.crt")
+        super().error(message)
+
+
+
 # Same shape as the existing http_get call sites, plus ValueError for a body
 # that is not JSON (json.JSONDecodeError subclasses ValueError).
 FETCH_ERRORS = (urllib.error.URLError, OSError, ssl.SSLError, ValueError)
@@ -1184,7 +1207,7 @@ def recommend(rows: list[tuple[int, str, int, int, str]],
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[1],
+    p = Parser(description=__doc__.splitlines()[1],
                                 epilog=CA_CERT_EPILOG,
                                 formatter_class=HelpFormatter)
     p.add_argument("--es", required=True, help="http(s)://host:9200")

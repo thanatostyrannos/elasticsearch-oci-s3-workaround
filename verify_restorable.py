@@ -45,6 +45,28 @@ CA_CERT_EPILOG = (
     + CA_CERT_EXTRACTION + "\n")
 
 
+class Parser(argparse.ArgumentParser):
+    """argparse, with one extra sentence when --insecure turns up.
+
+    This tool verifies certificates and has no switch for turning that off, so
+    an operator arriving with --insecure in a saved command line needs pointing
+    at --ca-cert. A bare "unrecognized arguments" points them at the source to
+    add the flag back instead.
+
+    The churn rig and the size report carry the same class for the same
+    reason. The three ship separately and a stale command line reaches
+    whichever one it names.
+    """
+
+    def error(self, message):
+        if "--insecure" in message:
+            message += (". TLS verification is always on. A lab cluster "
+                        "serving a certificate it signed itself is reached "
+                        "by trusting the CA that signed it: " +
+                        CA_CERT_EXTRACTION + " ... then --ca-cert ca.crt")
+        super().error(message)
+
+
 def path_segment(name):
     """One name, encoded so it can only ever be a single path segment.
 
@@ -119,7 +141,7 @@ def checked_ca_cert(parser, path):
                      f"cluster certificate. Under ECK: {CA_CERT_EXTRACTION}")
 
 
-_p = argparse.ArgumentParser(
+_p = Parser(
     description="Prove a snapshot repository is still restorable after\n"
                 "deletion traffic. Reads and restores under a fresh name;\n"
                 "deletes nothing from the repository.",
