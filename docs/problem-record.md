@@ -40,8 +40,7 @@ volume trains people to filter it out.
 
 ## Why monitoring does not catch it
 
-**This is the part that matters for triage.** The delete is asynchronous and
-best-effort. Elasticsearch removes the snapshot from its catalogue, asks the
+The delete is asynchronous and best-effort. Elasticsearch removes the snapshot from its catalogue, asks the
 store to remove the blobs, and reports success on the catalogue change. The
 store's refusal arrives afterwards and does not travel back to the caller.
 
@@ -82,17 +81,23 @@ Measured request and response detail:
 
 ## Impact
 
-**Cost.** Storage grows monotonically. Retention reclaims nothing, so there is
-no ceiling.
+### Cost
 
-**Deletion stops meaning destruction.** A snapshot leaves the catalogue while
-its data stays in the bucket. Anyone relying on deletion for records retention,
-data minimisation or spillage remediation no longer has that guarantee. This is
-usually the finding that matters to an auditor, not the cost.
+Storage grows monotonically. Retention reclaims nothing, so there is no
+ceiling.
 
-**Monitoring is misleading.** Alerting built on Snapshot Lifecycle Management
-reports success. Ambient `WARN` noise trains operators to ignore the log lines
-that would carry the next real failure.
+### Deletion stops meaning destruction
+
+A snapshot leaves the catalogue while its data stays in the bucket. Anyone
+relying on deletion for records retention, data minimisation or spillage
+remediation no longer has that guarantee. This is usually the finding that
+matters to an auditor, not the cost.
+
+### Monitoring is misleading
+
+Alerting built on Snapshot Lifecycle Management reports success. Ambient `WARN`
+noise trains operators to ignore the log lines that would carry the next real
+failure.
 
 What a wrong delete would cost, if a cleanup tool got it wrong:
 [docs/blast-radius.md](blast-radius.md).
@@ -111,20 +116,23 @@ A number close to zero means you are not affected or not affected yet.
 
 ## What to do
 
-**Keep the repository in service.** Re-register with `?verify=false`,
-unchanged settings. Verification itself performs a batch delete, so on an
-affected store registration fails and the repository becomes unusable. This
-takes a minute and stops the bleeding.
+### First, keep the repository in service
 
-**Move the backups.** A filesystem repository makes retention an ordinary
-unlink with no tooling in the loop. This is the fix rather than the mitigation,
-and it ends the problem for whatever moves. The frozen tier usually stays
-behind at much lower volume.
+Re-register with `?verify=false`, settings otherwise unchanged. Verification
+itself performs a batch delete, so on an affected store registration fails and
+the repository becomes unusable. This takes a minute and stops the bleeding.
 
-**Reclaim what already leaked.** The tool in this repository does it in two
-halves: an audit that reads and cannot delete, and a separate tool that removes
-only what a person approved from a written manifest. See
-[Using it](../README.md#using-it).
+### Then move the backups
+
+A filesystem repository makes retention an ordinary unlink with no tooling in
+the loop. This is the fix rather than the mitigation, and it ends the problem
+for whatever moves. The frozen tier usually stays behind at much lower volume.
+
+### Reclaim what already leaked
+
+The tool in this repository does it in two halves: an audit that reads and
+cannot delete, and a separate tool that removes only what a person approved
+from a written manifest. See [Using it](../README.md#using-it).
 
 Reclaiming is a manual loop, not a fix. Somebody reads the manifest every time,
 and the leak resumes when the loop stops.

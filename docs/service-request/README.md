@@ -20,12 +20,11 @@ in the polynomial. That rules out a malformed request, a bad credential and a
 permissions problem before anyone can propose them, which is most of what a
 first-line response would otherwise ask you to check.
 
-Note what this is not. Object Storage documents the algorithms it accepts,
-CRC32C, SHA256 and SHA384 alongside MD5, and CRC32 is not among them. The
-product is behaving as specified. This is a parity request against Amazon S3,
-which does accept CRC32, and the argument is that the AWS SDK for Java sends
-CRC32 by default and the clients built on it cannot be configured to send
-anything else.
+Object Storage documents the algorithms it accepts, CRC32C, SHA256 and SHA384
+alongside MD5, and CRC32 is not among them, so the product is behaving as
+specified. The request is for parity with Amazon S3, which does accept CRC32.
+The argument is that the AWS SDK for Java sends CRC32 by default and the
+clients built on it cannot be configured to send anything else.
 
 It targets keys that do not exist. `DeleteObjects` on an absent key succeeds on
 both S3 and OCI, so a run deletes nothing: the request is rejected before the
