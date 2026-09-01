@@ -10,8 +10,10 @@ with the message:
     x-amz-checksum-sha256 or x-amz-checksum-crc32c
 
 Amazon S3 accepts `crc32`. `crc32c` differs from it only in the polynomial, and
-OCI accepts `crc32c`. We believe `crc32` is missing from the accepted set rather
-than deliberately excluded.
+Object Storage accepts `crc32c`. The accepted set is documented and `crc32` is
+not in it, so the product is behaving as specified. We are asking for it to be
+added, because the AWS SDK for Java sends `crc32` by default and the clients
+built on it cannot be configured to send anything else.
 
 ## Impact
 
@@ -96,13 +98,35 @@ Caused by: software.amazon.awssdk.services.s3.model.InvalidRequestException: Mis
 	at software.amazon.awssdk.services.s3.model.InvalidRequestException$BuilderImpl.build(InvalidRequestException.jav
 ```
 
+## This is not a documentation gap
+
+Object Storage documents the checksum algorithms it supports: CRC32C, SHA256
+and SHA384, alongside MD5, which it has always used for integrity. CRC32 is not
+in that list, and the 400 response names the same set the documentation does.
+The product is behaving as documented.
+
+So this is a parity request, not a bug report about undocumented behaviour.
+
+Amazon S3 accepts CRC32, and CRC32C differs from it only in the polynomial. The
+gap is narrow and its consequence is not: the AWS SDK for Java defaults to
+CRC32 on checksum-required operations, so any client built on that SDK which
+issues a batch delete fails against Object Storage. Elasticsearch is one such
+client and offers no setting to change the algorithm.
+
 ## What we are asking for
 
-Accept `x-amz-checksum-crc32` on `DeleteObjects`, as Amazon S3 does, or confirm
-that its absence is deliberate and state the supported set in the S3
-Compatibility documentation. Today the error message lists the accepted
-algorithms, which is helpful, but the documentation does not say that `crc32`
-is unsupported.
+Add `x-amz-checksum-crc32` to the algorithms accepted on `DeleteObjects`, for
+parity with Amazon S3.
+
+Every client that reaches the S3 Compatibility API through the AWS SDK for Java
+v2.30.0 or later sends CRC32 by default. Supporting CRC32C but not CRC32 means
+those clients fail on an operation they cannot configure their way out of, and
+in the Elasticsearch case the failure is silent: the delete is reported as
+successful and the objects remain.
+
+If CRC32 is excluded deliberately, we would like to know the reason, so it can
+be documented as a known incompatibility with SDK-default clients rather than
+found the way we found it.
 
 ## Request IDs
 
