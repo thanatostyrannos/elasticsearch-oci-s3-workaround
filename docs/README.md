@@ -7,6 +7,10 @@ Compatibility API rejects, so the delete reports success and reclaims nothing.
 
 ## Where to start
 
+**You are holding a ticket and need to explain this to someone.**
+[problem-record.md](problem-record.md). What the symptom is, why monitoring
+stays green, who is affected, what it costs and what to do this week.
+
 **You think you have this and want to know what is in your bucket.**
 [quickstart-read-only.md](quickstart-read-only.md). It counts the orphaned
 objects, sizes them, and names every one. It cannot delete.
@@ -44,6 +48,8 @@ fit.
 | [repository-layout-and-reachability.md](repository-layout-and-reachability.md) | How a snapshot repository is laid out on the store, and what reaches what |
 | [blast-radius.md](blast-radius.md) | What every key is worth, why one object belongs to many snapshots, and what a wrong delete costs |
 | [oci-s3-compatibility.md](oci-s3-compatibility.md) | What Oracle's endpoint accepts and rejects, measured against a real bucket |
+| [problem-record.md](problem-record.md) | The problem record: symptom, root cause, blast radius, detection, workaround and vendor status, for problem management rather than engineering |
+| [service-request/](service-request/README.md) | The service request raised with Oracle, and the standalone reproduction it rests on |
 
 ## Security and compliance
 
