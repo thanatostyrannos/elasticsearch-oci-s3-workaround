@@ -17,7 +17,8 @@ alarm.
 
 Open with the storage vendor. Oracle accepts `Content-MD5`,
 `x-amz-checksum-sha256` and `x-amz-checksum-crc32c` on batch delete, and
-rejects `x-amz-checksum-crc32`, which is what Elasticsearch sends. A service
+rejects `x-amz-checksum-crc32`, which is what the AWS SDK for Java sends by
+default and what Elasticsearch therefore sends. A service
 request carries a reproduction that isolates the difference: the same request,
 same bucket, same credentials, four integrity headers, three accepted and one
 rejected within two seconds.
@@ -62,7 +63,7 @@ anything before the AWS SDK v2 migration including 9.0.x and 8.18.x. **An
 upgrade is usually the moment this appears**, which is why it often gets
 attributed to the upgrade rather than to the store.
 
-Amazon S3 itself is unaffected. It accepts the checksum Elasticsearch sends.
+Amazon S3 itself is unaffected. It accepts the checksum the SDK sends.
 
 ## Root cause
 

@@ -10,9 +10,14 @@ the same credentials, varying only the integrity header:
     x-amz-checksum-crc32    expected 400  <-- the defect
 
 Amazon S3 accepts all four. OCI accepts three and rejects crc32, whose only
-difference from crc32c is the polynomial. Elasticsearch 9.5.2 and later send
-crc32 by default, so every batch delete a snapshot repository issues against
-OCI fails, and the objects are never reclaimed.
+difference from crc32c is the polynomial.
+
+The default is the AWS SDK's, not any one application's. Since v2.30.0 the AWS
+SDK for Java sends a flexible checksum in place of Content-MD5 on operations
+that require one, and it defaults to CRC32. Anything built on that SDK inherits
+it. Elasticsearch is one such client and does not override the default, so
+every batch delete its snapshot repositories issue against OCI fails and the
+objects are never reclaimed.
 
 The keys named below do not exist. DeleteObjects on an absent key is a success
 on S3 and on OCI, so a run that reaches the store deletes nothing: the request

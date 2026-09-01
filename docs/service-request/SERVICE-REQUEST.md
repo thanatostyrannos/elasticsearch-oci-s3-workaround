@@ -17,8 +17,13 @@ built on it cannot be configured to send anything else.
 
 ## Impact
 
-Elasticsearch 9.5.2 sends `x-amz-checksum-crc32` on `DeleteObjects` by default.
-Every batch delete a snapshot repository issues against OCI therefore fails.
+The default comes from the AWS SDK for Java, not from any one application.
+Since v2.30.0 the SDK sends a flexible checksum in place of `Content-MD5` on
+operations that require one, and it defaults to CRC32. Every client built on
+that SDK inherits the default.
+
+Elasticsearch 9.5.2 is one such client and does not override it, so every batch
+delete its snapshot repositories issue against OCI fails.
 Elasticsearch reports the snapshot deletion as acknowledged, so the objects are
 never reclaimed and storage grows without bound. There is no setting in
 Elasticsearch to change the checksum algorithm.
