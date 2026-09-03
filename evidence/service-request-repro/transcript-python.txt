@@ -1,0 +1,22 @@
+endpoint : https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com
+bucket   : esprobe-probe
+region   : us-ashburn-1
+body     : 223 bytes, sha256 efedec44f57cef5387752ce6311da99207b25704d03043901b7306066488e6b6
+
+Content-MD5              200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:43.113130+00:00
+  opc-request-id  : iad-1:bIQ4McfPvWSIlJ0N27orjyPkKxa-9-bErxtvAvtDUSsO88PY9qqYZUAlTnIb_lzw
+
+x-amz-checksum-crc32c    200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:43.552189+00:00
+  opc-request-id  : iad-1:HT7pTPWNi03v7glFDrxWnEGMgDsu8IG_J06KuTKJRVTw7qqQ8ILAbeezHMzw08JQ
+
+x-amz-checksum-sha256    200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:44.027838+00:00
+  opc-request-id  : iad-1:VC2ArPNx2JMYmAr30V4X_nJdJeYRrtg0bTlVSy19hOSAMAPv4m52N7LK37t87lc0
+
+x-amz-checksum-crc32     400 REJECTED
+  sent (UTC)      : 2026-09-03T17:45:44.446040+00:00
+  opc-request-id  : iad-1:zVF6-jZLxEXibTnF51zvyx9gWZCnTvi7IJfqWhkbHZJUkUoZypEfYVOAfJ1p4tCF
+  response        : <?xml version="1.0" encoding="UTF-8"?><Error><Message>Missing required header for this request: Content-MD5 or x-amz-checksum-sha256 or x-amz-checksum-crc32c</Message><Code>InvalidRequest</Code></Error>
+

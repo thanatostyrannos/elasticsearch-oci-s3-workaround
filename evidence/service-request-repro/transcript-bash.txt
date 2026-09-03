@@ -1,0 +1,22 @@
+endpoint : https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com
+bucket   : esprobe-probe
+region   : us-ashburn-1
+body     : 223 bytes, sha256 efedec44f57cef5387752ce6311da99207b25704d03043901b7306066488e6b6
+
+Content-MD5              200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:44.961057+00:00
+  opc-request-id  : iad-1:Yu36LUSgF7jrCQ-6tdSKVC6hsSOl3FJtd0dbaw7lJkamvkG460S-QlunbgwP6zz1
+
+x-amz-checksum-crc32c    200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:45.488320+00:00
+  opc-request-id  : iad-1:G1WXqcrQNA3E03QgBIlarTdlj1_xY1hZUqbIDXm3UOH-cW_mfdxkyxZwdBfdqaiZ
+
+x-amz-checksum-sha256    200 ACCEPTED
+  sent (UTC)      : 2026-09-03T17:45:46.022104+00:00
+  opc-request-id  : iad-1:YqE_cpsVQdskAZnNxRt-Lhp9L4VTLnjYz5aCuETTUzbeOD_M9N-YySec3bYnXqpg
+
+x-amz-checksum-crc32     400 REJECTED
+  sent (UTC)      : 2026-09-03T17:45:46.464421+00:00
+  opc-request-id  : iad-1:6Euq-VAkqZkfA3zlvUwvqBzAGp0ge0CoQhLeYmkmBAsYz3cKfgIUJnX76Clqn0Fw
+  response        : <?xml version="1.0" encoding="UTF-8"?><Error><Message>Missing required header for this request: Content-MD5 or x-amz-checksum-sha256 or x-amz-checksum-crc32c</Message><Code>InvalidRequest</Code></Error>
+

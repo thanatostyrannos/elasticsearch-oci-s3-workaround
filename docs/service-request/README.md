@@ -1,7 +1,9 @@
 # The service request raised with Oracle
 
-Two files. `SERVICE-REQUEST.md` is the write-up, and
-`oci-deleteobjects-checksum-repro.py` is the evidence it rests on.
+Three files. `SERVICE-REQUEST.md` is the write-up,
+`oci-deleteobjects-checksum-repro.py` is the evidence it rests on, and
+`oci-deleteobjects-checksum-repro.sh` is the same reproduction in bash for
+sites that have a RHEL shell and no Python they are permitted to run.
 
 ## Why the reproduction matters more than the write-up
 
@@ -54,6 +56,57 @@ rather than credentials, and they are the thing Oracle looks up.
 An Elasticsearch log capture was also collected and is deliberately not here.
 It carried the cluster uuid, node id and node name on every line, none of which
 Oracle needs, and the stack trace it contained is quoted in the write-up.
+
+## The bash port
+
+`oci-deleteobjects-checksum-repro.sh` exists because the reproduction is worth
+nothing if the person able to run it cannot. A hardened RHEL host frequently
+has no interpreter the operator is cleared to run against a production tenancy,
+and asking Oracle's engineer to install one to see the defect is a request they
+can decline.
+
+It uses bash, coreutils, openssl, curl and gzip, all of which are in a base
+RHEL install. No jq, no python, no awscli. SigV4 is inlined the same way, with
+the HMAC chain done through `openssl dgst -mac HMAC -macopt hexkey:`, since the
+intermediate keys are binary and cannot be passed as strings.
+
+Two checksums have no tool in a base install:
+
+- **CRC-32** is read back out of a gzip trailer. gzip already computes it and
+  stores it little-endian in the last eight bytes of its own output, so this is
+  exact rather than a reimplementation.
+- **CRC-32C** is computed bit by bit in bash. Nothing in base RHEL knows the
+  Castagnoli polynomial, and the body is 223 bytes, so the loop costs nothing.
+
+Run it exactly as the Python one:
+
+```
+./oci-deleteobjects-checksum-repro.sh \
+    --endpoint https://<namespace>.compat.objectstorage.<region>.oraclecloud.com \
+    --region <region> --bucket <bucket> --credentials creds.json
+```
+
+### It was checked against the Python, not assumed equal to it
+
+The four integrity header values are byte-identical between the two
+implementations, which is the part that decides whether the request is the same
+request:
+
+| Header | Value both produce |
+|---|---|
+| `Content-MD5` | `IOs0m/cZIJxpX2hlh3K67w==` |
+| `x-amz-checksum-crc32c` | `jihPpg==` |
+| `x-amz-checksum-sha256` | `7+3sRPV871OHdSzmMR2pkgeyVwTQMEOQG3MGBmSI5rY=` |
+| `x-amz-checksum-crc32` | `MVGIRg==` |
+
+Both were then run back to back against the tenancy and both returned
+200/200/200/400 with the same rejection message. Their transcripts differ only
+in the two fields that cannot be equal, the send timestamp and the
+`opc-request-id` OCI mints per request; masking those two lines makes the
+output identical, sha256
+`5d23eab80619262732589294a572e3c4d673fb961cc8455c1e6d06c02decbf78` for both.
+The captured pair is in
+[../../evidence/service-request-repro/](../../evidence/service-request-repro/).
 
 ## Reading it
 
