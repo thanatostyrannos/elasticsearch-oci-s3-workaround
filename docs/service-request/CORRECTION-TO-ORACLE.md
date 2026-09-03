@@ -146,7 +146,103 @@ header values are identical, and both return 200/200/200/400 with the same
 rejection message, differing only in the send timestamp and the per-request
 `opc-request-id`.
 
-### 6. What we are asking for, restated
+### 6. Reproducing it in your own sandbox
+
+You do not need our tenancy, our bucket, or any of the identifiers this
+correction just disowned. The attached script reproduces the defect standalone
+in any tenancy, in any region, in about five seconds. It is four HTTPS requests.
+
+You also do not need Elasticsearch. Elasticsearch is how we hit this, not what
+causes it. The script talks to the S3 Compatibility API directly, so the
+reproduction is entirely inside Object Storage.
+
+**What you need**
+
+1. Any bucket you can write to. An empty scratch bucket is ideal, but any bucket
+   works, because nothing is written to it and nothing is deleted from it.
+2. A Customer Secret Key for a user with access to that bucket. In the Console:
+   Identity, Users, the user, Customer Secret Keys, Generate Secret Key. That
+   gives you an access key and a secret. The secret is shown once.
+3. Your Object Storage namespace, from the Object Storage page or
+   `oci os ns get`.
+
+**Credentials file**
+
+Put the pair in a JSON file. The script reads it from disk and never accepts
+credentials on the command line, so they do not reach shell history or a process
+listing.
+
+```json
+{
+  "s3": {
+    "access_key_id": "<the access key>",
+    "secret_access_key": "<the secret>"
+  }
+}
+```
+
+**Run it**
+
+```
+chmod +x oci-deleteobjects-checksum-repro.sh
+
+./oci-deleteobjects-checksum-repro.sh \
+    --endpoint https://<namespace>.compat.objectstorage.<region>.oraclecloud.com \
+    --region <region> --bucket <your-bucket> --credentials creds.json
+```
+
+Use the standard domain shown above. It works in every realm. The dedicated
+domain, `<namespace>.compat.objectstorage.<region>.oci.customer-oci.com`, also
+works but only in the commercial realm OC1. `--region` must be the region the
+bucket is in, because it is what SigV4 signs with.
+
+**What you should see**
+
+Three accepted and one rejected, within about a second of each other:
+
+```
+Content-MD5              200 ACCEPTED
+x-amz-checksum-crc32c    200 ACCEPTED
+x-amz-checksum-sha256    200 ACCEPTED
+x-amz-checksum-crc32     400 REJECTED
+  response        : ...<Message>Missing required header for this request:
+                    Content-MD5 or x-amz-checksum-sha256 or
+                    x-amz-checksum-crc32c</Message><Code>InvalidRequest</Code>...
+```
+
+Each attempt also prints its `opc-request-id`, so the run gives you four handles
+in your own tenancy that you can look up directly.
+
+**Why this framing is the whole argument**
+
+The four requests are byte-identical apart from the integrity header. The script
+prints the sha256 of the request body once, at the top, and every attempt sends
+that same body to the same bucket with the same credentials. So the three
+successes rule out a malformed request, a bad credential, a permissions problem
+and a wrong endpoint before any of them can be proposed. The only variable left
+is the algorithm named in the header, and CRC32C, which is accepted, differs
+from CRC32, which is not, only in the polynomial.
+
+**Safety**
+
+The keys it names, `does-not-exist/probe-a` and `does-not-exist/probe-b`, do not
+exist. `DeleteObjects` against an absent key is a success on both Amazon S3 and
+Object Storage, so the three accepted requests delete nothing, and the rejected
+one is refused before the keys are examined at all. Nothing in the bucket is
+read, written or removed. It is safe against a bucket holding real data, though
+a scratch bucket keeps it obviously so.
+
+**Dependencies**
+
+bash, coreutils, openssl, curl and gzip. All are in a base RHEL install. There
+is no Python, no `jq` and no AWS CLI. SigV4 is inlined in the script, the HMAC
+chain running through `openssl dgst -mac HMAC -macopt hexkey:`. CRC-32 is read
+out of a gzip trailer, since gzip computes it already, and CRC-32C is computed
+in the script, since no base RHEL tool knows the Castagnoli polynomial. If you
+would rather run Python, an equivalent is available on request; we verified the
+two produce identical checksum values and identical output.
+
+### 7. What we are asking for, restated
 
 Add `x-amz-checksum-crc32` to the algorithms accepted on `DeleteObjects`, for
 parity with Amazon S3. If it is excluded deliberately, we would like the reason,
