@@ -122,7 +122,7 @@ rather than the mitigation.
 
 The third answer is reclaiming what already leaked. This repository does that
 in two halves: an audit that reads and cannot delete, and a separate tool that
-deletes only what a person approved. See [Using it](docs/running-it.md#using-it).
+deletes only what a person approved. See [Using it](docs/running-it.md).
 
 If you find an older runbook for this bug, from this project or anywhere else,
 check which direction it condemns in before you run it. Deciding what to delete
@@ -146,7 +146,7 @@ nothing on the other:
 | What you can do | The API it needs | Where your backups end up |
 |---|---|---|
 | Keep the repository registered and serving, with `?verify=false` | neither; this is an Elasticsearch call | Wherever they are now. Deletes still fail silently. |
-| [Find what leaked](docs/running-it.md#using-it), with `generation_chain` | Amazon S3 Compatibility API | Unchanged. It reads and writes a manifest; it cannot delete. |
+| [Find what leaked](docs/running-it.md), with `generation_chain` | Amazon S3 Compatibility API | Unchanged. It reads and writes a manifest; it cannot delete. |
 | [Reclaim what leaked](docs/running-it.md#step-two-delete-once-you-have-read-the-manifest), with `generation_chain.reclaim` | Amazon S3 Compatibility API | Unchanged, and the bucket stops growing. Deletes only what you approved. |
 | [Move backups to shared storage](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14), the split-repo migration, minus its two cleanup steps | Object Storage API for the audit calls | **A filesystem repository.** Elasticsearch reclaims space on its own again. |
 

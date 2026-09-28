@@ -133,7 +133,7 @@ for whatever moves. The frozen tier usually stays behind at much lower volume.
 
 The tool in this repository does it in two halves: an audit that reads and
 cannot delete, and a separate tool that removes only what a person approved
-from a written manifest. See [Using it](running-it.md#using-it).
+from a written manifest. See [Using it](running-it.md).
 
 Reclaiming is a manual loop, not a fix. Somebody reads the manifest every time,
 and the leak resumes when the loop stops.
@@ -207,7 +207,7 @@ as though the leak persists.
 What this repository gives you:
 
 1. An audit and reclaim pair that measures what already leaked and removes
-   only what a human approved from a written manifest (see [Using it](running-it.md#using-it)).
+   only what a human approved from a written manifest (see [Using it](running-it.md)).
 2. [A validated runbook for getting off the broken path](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14),
    moving backups to block/NFS storage while the frozen tier stays mounted
    where it is. Its two cleanup steps are marked withdrawn in place: they drove
