@@ -123,7 +123,10 @@ hands its own credential to the audit.
 
 ## Step 3: settings on the cluster
 
-Two settings matter, and one of them will stop the run dead if it is missing.
+Two node settings matter, and either will stop the run dead if it is missing.
+Both are static: they go in `elasticsearch.yml` on every node (under ECK,
+`nodeSets[].config`), take a rolling restart, and cannot be set through the
+API.
 
 ```yaml
 xpack.searchable.snapshot.shared_cache.size: 2gb
@@ -144,6 +147,42 @@ The node we measured on ran an 8g heap in a 16Gi container. Smaller will work
 for a lower ingest rate. The audit itself runs outside the cluster and its
 memory use is discussed under storage below.
 
+The second is one line in the client block the repository will use. On
+Oracle, set `disable_chunked_encoding` to true:
+
+```yaml
+s3.client.oci.endpoint: <namespace>.compat.objectstorage.<region>.oraclecloud.com
+s3.client.oci.protocol: https
+s3.client.oci.path_style_access: true
+s3.client.oci.disable_chunked_encoding: true
+```
+
+Without it nothing can be written to the bucket. Elasticsearch's S3 client
+sends uploads with `aws-chunked` content encoding, and OCI answers:
+
+```
+AWS chunked encoding not supported. (Service: S3, Status Code: 501)
+```
+
+This is a second incompatibility between Elasticsearch's S3 client and OCI's
+S3 Compatibility API, separate from the checksum header. It blocks uploads
+rather than deletes, so you hit it first: registration fails on its test write
+before it reaches the delete this document is about. `?verify=false` does not
+get you past it. That skips the delete, not the write, so the 501 just moves to
+the first snapshot. Elasticsearch offers the setting precisely for stores that
+do not accept `aws-chunked` content encoding, and OCI is one of them.
+
+Set it on any cluster whose repository client points at OCI. We measured it on
+9.5.2. A cluster that already writes snapshots to OCI is past this, but check
+rather than assume:
+
+```
+GET _nodes/settings?filter_path=nodes.*.name,nodes.*.settings.s3.client.*.disable_chunked_encoding
+```
+
+Every node must report `"true"`. A node that reports nothing is on the default,
+`false`, and a single such data node is enough to fail its shards' uploads.
+
 Register the repository against the test bucket:
 
 ```
@@ -158,6 +197,11 @@ PUT _snapshot/leaktest-repo
 }
 ```
 
+The `client` setting names the `s3.client.*` block above. Its access key and
+secret key go in the Elasticsearch keystore as `s3.client.oci.access_key` and
+`s3.client.oci.secret_key`. That is standard S3 repository configuration and
+is not specific to this tool.
+
 **Register it with verification disabled if verification fails.** On a store
 with this fault, repository verification itself tries a batch delete and gets
 rejected. That rejection is the first evidence the fault is present, and it is
@@ -166,33 +210,6 @@ not a reason to stop:
 ```
 PUT _snapshot/leaktest-repo?verify=false
 ```
-
-The `client` setting names an `s3.client.*` block in your Elasticsearch
-keystore and config holding the endpoint and region. That is standard S3
-repository configuration and is not specific to this tool.
-
-**One setting in that block is not standard, and without it nothing works at
-all.** Set `disable_chunked_encoding` to true:
-
-```yaml
-s3.client.oci.endpoint: <namespace>.compat.objectstorage.<region>.oraclecloud.com
-s3.client.oci.protocol: https
-s3.client.oci.path_style_access: true
-s3.client.oci.disable_chunked_encoding: true
-```
-
-Without it, registration fails before it ever reaches the delete this document
-is about:
-
-```
-AWS chunked encoding not supported. (Service: S3, Status Code: 501)
-```
-
-This is a second incompatibility between Elasticsearch's S3 client and OCI's
-S3 Compatibility API, separate from the checksum header. It blocks uploads
-rather than deletes, so you hit it first: the repository cannot be written to,
-never mind cleaned up. Elasticsearch offers the setting precisely for stores
-that do not accept `aws-chunked` content encoding, and OCI is one of them.
 
 ## Step 4: the settings we used, and what they cost
 
