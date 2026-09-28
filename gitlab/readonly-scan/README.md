@@ -71,7 +71,7 @@ This pipeline cannot do it, on purpose. Take `orphans.tsv` to
 [the kubernetes-test-rig pipeline](../kubernetes-test-rig/README.md) or run
 `python3 -m generation_chain.reclaim --manifest orphans.tsv ...` by hand,
 starting with a dry run. Read
-[the test-rig quickstart](../../docs/quickstart-test-rig.md) first if you have
+[the testing guide](../../docs/testing-guide.md) first if you have
 not exercised the delete path against a repository you can afford to lose.
 
 ## CLI options this pipeline does not expose, and why

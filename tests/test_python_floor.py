@@ -25,7 +25,6 @@ DOCUMENTS = (
     "README.md",
     os.path.join("docs", "generating-load.md"),
     os.path.join("docs", "running-it.md"),
-    os.path.join("docs", "quickstart-test-rig.md"),
     os.path.join("docs", "testing-guide.md"),
     os.path.join("gitlab", "README.md"),
 )

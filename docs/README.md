@@ -34,9 +34,8 @@ fit.
 |---|---|
 | [running-it.md](running-it.md) | Report what is orphaned. Deletes nothing |
 | [testing-guide.md](testing-guide.md) | Qualify it against your own cluster and a throwaway bucket. The settings behind the published numbers, and what they cost in storage |
-| [quickstart-test-rig.md](quickstart-test-rig.md) | The short version of the same thing |
 | [generating-load.md](generating-load.md) | The load generator, and how to make a repository leak on purpose |
-| [churn-rig-methodology.md](churn-rig-methodology.md) | Why the rig is built the way it is, and which of its numbers transfer |
+| [testing-guide.md, how the rig works](testing-guide.md#how-the-rig-works-and-what-to-measure) | Why the rig is built the way it is, and which of its numbers transfer |
 | [run-proofs/README.md](run-proofs/README.md) | Where the proof for a release lives, and what one file has to cover |
 
 ## How it works

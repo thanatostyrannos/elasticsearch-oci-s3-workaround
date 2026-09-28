@@ -94,7 +94,7 @@ is the shortest path to a real answer: how many objects a failed delete has
 stranded in your bucket, how much space they occupy, and a file naming every
 one. It deletes nothing and cannot.
 
-**[Running the test rig against your own cluster](docs/quickstart-test-rig.md)**
+**[Running the test rig against your own cluster](docs/testing-guide.md)**
 is next, if you want to watch the whole thing work on a repository you can
 afford to lose before pointing it at one you cannot. It covers standing up a
 load generator that manufactures a leaking repository on purpose, and

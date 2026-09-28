@@ -147,6 +147,6 @@ Each argument this campaign settled by hand is a flag on it:
 | ILM's poll interval, which stalls every short-age phase at its 10 minute default | `--ilm-poll-interval` |
 
 Reproduction recipe and what to measure while it runs:
-[the churn rig](../../docs/churn-rig-methodology.md).
+[the churn rig](../../docs/testing-guide.md#how-the-rig-works-and-what-to-measure).
 How to choose a rate, and the poll-interval trap that wastes an hour:
 [generating load](../../docs/generating-load.md).

@@ -40,7 +40,7 @@ what has already leaked.
 2. Follow that directory's own README for the CI/CD variables or Helm
    values it needs.
 3. Read [docs/running-it.md](../docs/running-it.md) and,
-   for the test rig, [docs/quickstart-test-rig.md](../docs/quickstart-test-rig.md)
+   for the test rig, [docs/testing-guide.md](../docs/testing-guide.md)
    first. Both pipelines automate the steps those pages walk through by
    hand; they do not change what the underlying tools do.
 
