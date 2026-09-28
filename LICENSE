@@ -78,7 +78,7 @@ has no undo. The safety properties documented in this repository are real and
 tested, and they are not a guarantee about your data, your repository or your
 cluster.
 
-Read `docs/quickstart-read-only.md` before you delete anything. The audit is
+Read `docs/running-it.md` before you delete anything. The audit is
 read-only and cannot delete; that is enforced structurally, not by convention.
 Start there, keep the manifest, and satisfy yourself the answer is right before
 acting on it.

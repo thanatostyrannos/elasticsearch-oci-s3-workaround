@@ -39,7 +39,7 @@ what has already leaked.
    `snapshot_churn_rig.py` and `reclaim_test_protocol.py` too.
 2. Follow that directory's own README for the CI/CD variables or Helm
    values it needs.
-3. Read [docs/quickstart-read-only.md](../docs/quickstart-read-only.md) and,
+3. Read [docs/running-it.md](../docs/running-it.md) and,
    for the test rig, [docs/quickstart-test-rig.md](../docs/quickstart-test-rig.md)
    first. Both pipelines automate the steps those pages walk through by
    hand; they do not change what the underlying tools do.

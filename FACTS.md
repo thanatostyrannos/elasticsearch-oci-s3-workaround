@@ -54,7 +54,7 @@ itself:
 Three of four work. The batch delete is not the fault; the checksum the client
 chooses is. Reproduce this against your own bucket with
 `snapshot_churn_rig.py` and the procedure in
-[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md):
+[Testing in your own OCI environment](docs/testing-guide.md):
 register a repository, delete a batch with each checksum header in turn, and
 compare the responses.
 

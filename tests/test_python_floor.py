@@ -24,9 +24,9 @@ MATRIX = os.path.join(ROOT, ".github", "workflows", "python-matrix.yml")
 DOCUMENTS = (
     "README.md",
     os.path.join("docs", "generating-load.md"),
-    os.path.join("docs", "quickstart-read-only.md"),
+    os.path.join("docs", "running-it.md"),
     os.path.join("docs", "quickstart-test-rig.md"),
-    os.path.join("docs", "testing-in-your-oci-environment.md"),
+    os.path.join("docs", "testing-guide.md"),
     os.path.join("gitlab", "README.md"),
 )
 

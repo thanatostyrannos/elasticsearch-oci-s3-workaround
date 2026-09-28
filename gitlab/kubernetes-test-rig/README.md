@@ -81,7 +81,7 @@ shortcut.
 runs; nothing executes until you set it to `false`, and even then each
 cycle's execute step is gated by the fresh approval digest that cycle's own
 dry run printed, not by anything this chart adds. Read
-[the read-only quickstart's exit-code section](../../docs/quickstart-read-only.md#when-it-refuses)
+[the read-only quickstart's exit-code section](../../docs/running-it.md#when-it-refuses)
 and the test-rig quickstart's "Reading the output" section before your
 first live run.
 

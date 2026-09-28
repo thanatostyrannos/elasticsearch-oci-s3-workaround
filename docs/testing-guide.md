@@ -9,7 +9,7 @@ This page is the procedure for doing that. It uses a **separate bucket** that
 holds nothing you care about, so that a mistake anywhere in it costs you
 nothing.
 
-Read [the read-only quickstart](quickstart-read-only.md) first if you only want
+Read [the read-only quickstart](running-it.md) first if you only want
 a report of what is orphaned. This page is for the fuller exercise: build a
 repository that leaks on purpose, then confirm the tool finds and removes the
 leaked objects without touching anything live.

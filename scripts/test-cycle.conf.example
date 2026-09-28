@@ -43,5 +43,5 @@ SLEEP_BETWEEN=5
 SETTLE_TIMEOUT=300
 
 # yes  audit and dry run only. Nothing is deleted. Start here.
-# no   really delete. Read docs/quickstart-read-only.md first.
+# no   really delete. Read docs/running-it.md first.
 DRY_RUN_ONLY="yes"

@@ -86,7 +86,7 @@ PACKAGED_FILES = (
     # It was excluded once as lab tooling, which left a shipped document
     # instructing someone to run a file the release did not contain.
     "snapshot_churn_rig.py",      # builds a leaking repository to test against
-    # Ships because docs/testing-in-your-oci-environment.md tells the reader
+    # Ships because docs/testing-guide.md tells the reader
     # to use it. Same reason as the load generator above.
     ".gitlab-ci.yml",             # runs the audit on a schedule, the rig on demand
     # The standalone reproduction of the checksum rejection, in Python and

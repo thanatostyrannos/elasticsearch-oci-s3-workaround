@@ -463,7 +463,7 @@ of green, unrestorable backups, and the segments only stop being wrong when they
 are rewritten by a merge.
 
 This one is derived from the source rather than measured on the rig, from the
-deduplication mechanism above. It is why [Testing in your own OCI environment](testing-in-your-oci-environment.md)
+deduplication mechanism above. It is why [Testing in your own OCI environment](testing-guide.md)
 calls for a repository verification after every reclaim run rather than once
 at the end.
 
@@ -800,5 +800,5 @@ codec now shipped read-only in [`generation_chain/formats/`](../generation_chain
 
 Reproduce a campaign of your own, with the object and byte breakdown by
 verdict reason that a real audit report gives you, using
-[Testing in your own OCI environment](testing-in-your-oci-environment.md) and
+[Testing in your own OCI environment](testing-guide.md) and
 `snapshot_churn_rig.py`.

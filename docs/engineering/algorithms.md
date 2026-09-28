@@ -672,7 +672,7 @@ protection is `plan_shard_batches`'s per-group bounding and
 `ShardDirectoryTooLarge`'s refusal of one oversized directory; the whole-run
 overhead the docstring warns about (the listing, the key index, the chain)
 is not bounded by `--memory-mb` or `--max-ram` at all. This gap is the one
-[testing-in-your-oci-environment.md](../testing-in-your-oci-environment.md)
+[testing-guide.md](../testing-guide.md)
 tracks as a real, open limitation, upstream issue 7: memory use scales with
 object count, and `--memory-mb` today only makes the shard-batching refuse
 before it reads rather than fail partway through, not the run as a whole.

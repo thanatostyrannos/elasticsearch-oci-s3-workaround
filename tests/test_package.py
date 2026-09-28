@@ -106,7 +106,7 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
                         "the raw scan artifacts did not ship")
 
     def test_both_quickstarts_ship(self):
-        self.assertTrue(self._member("docs/quickstart-read-only.md"))
+        self.assertTrue(self._member("docs/running-it.md"))
         self.assertTrue(self._member("docs/quickstart-test-rig.md"))
 
     def test_the_documentation_ships(self):

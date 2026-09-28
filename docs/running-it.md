@@ -6,7 +6,7 @@ unreachable: the transport refuses any other method rather than trusting a
 caller to behave. Listing a bucket is a `GET`.
 
 When you want the space back, read
-[testing in your own OCI environment](testing-in-your-oci-environment.md) and
+[testing in your own OCI environment](testing-guide.md) and
 run the loop against a bucket holding nothing you care about first. The delete
 path has been exercised against a live Oracle bucket, but it has not been
 exercised against yours.

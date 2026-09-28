@@ -310,7 +310,7 @@ flowchart LR
 
 Nothing here is provisioned; both processes exit when the run finishes.
 `creds.json` is the one piece of durable state on the host, and both
-`docs/quickstart-read-only.md` and the top-level `README.md` are explicit
+`docs/running-it.md` and the top-level `README.md` are explicit
 that it must be `chmod 600` or the tool refuses to start rather than read
 it. The manifest file is the trust boundary between the two processes: the
 audit writes it, a human is expected to read it, and the reclaim tool

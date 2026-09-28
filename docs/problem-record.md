@@ -108,7 +108,7 @@ What a wrong delete would cost, if a cleanup tool got it wrong:
 Two checks, both read-only.
 
 Check the version boundary above. Then run the audit in
-[docs/quickstart-read-only.md](quickstart-read-only.md). It reads the
+[docs/running-it.md](running-it.md). It reads the
 repository and reports what is present that no live snapshot references. It
 permits `GET` and `HEAD` only and has no delete path, so it is safe to run
 against production.
@@ -140,7 +140,7 @@ and the leak resumes when the loop stops.
 
 ## Reproducing it
 
-[docs/testing-in-your-oci-environment.md](testing-in-your-oci-environment.md)
+[docs/testing-guide.md](testing-guide.md)
 walks through standing up a separate bucket and confirming the fault in your
 own tenancy before trusting anything here.
 

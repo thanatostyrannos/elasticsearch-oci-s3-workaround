@@ -89,7 +89,7 @@ Two programs, and the difference matters more than the word:
 
 ## Start here
 
-**[Reading a leaking repository, without deleting anything](docs/quickstart-read-only.md)**
+**[Reading a leaking repository, without deleting anything](docs/running-it.md)**
 is the shortest path to a real answer: how many objects a failed delete has
 stranded in your bucket, how much space they occupy, and a file naming every
 one. It deletes nothing and cannot.
@@ -101,7 +101,7 @@ load generator that manufactures a leaking repository on purpose, and
 `scripts/run-test-cycle.sh`, which drives the audit-and-reclaim loop from a
 config file and checks the things that otherwise fail confusingly later.
 
-**[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md)**
+**[Testing in your own OCI environment](docs/testing-guide.md)**
 is the full procedure against Oracle Object Storage specifically, using a
 separate bucket that holds nothing you care about. It carries the exact ILM and
 snapshot settings behind the published results, what they cost in bucket space
@@ -428,7 +428,7 @@ sweeper's module docstring has the drain procedure.
 > tenancy, one bucket and one cluster. Yours is a different one, and no result
 > of ours tells you what will happen in it.
 >
-> [Testing in your own OCI environment](docs/testing-in-your-oci-environment.md)
+> [Testing in your own OCI environment](docs/testing-guide.md)
 > is the procedure for finding out. It builds a repository that leaks on
 > purpose, in a bucket holding nothing you care about, and runs the same loop
 > against it. It takes about ninety minutes and it tells you whether this tool
@@ -816,7 +816,7 @@ exist to measure and to check.
 
 | Tool | Purpose |
 |---|---|
-| [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/quickstart-read-only.md#when-it-refuses) in the read-only quickstart. |
+| [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/running-it.md#when-it-refuses) in the read-only quickstart. |
 | [`generation_chain/reclaim/`](generation_chain/reclaim/) | Deletes the keys in an approved manifest, in batches, with `Content-MD5`. Dry run by default. `--execute` requires `--approve-digest` and `--approve-rows` from that dry run, so an edited manifest cannot be executed. It contains no reference to Elasticsearch: the veto is applied when the manifest is derived. |
 | [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [generating load](docs/generating-load.md). |
 | [`verify_restorable.py`](verify_restorable.py) | Restores an index from the repository and counts documents. The only check that survives the others passing. |
@@ -972,7 +972,7 @@ Elasticsearch 9.5.2 cluster and a fault-reproducing object store, including a
 campaign against a real Oracle bucket: 58 reclaim cycles, 888 objects deleted,
 zero failed and zero unconfirmed (see [Campaign results](FACTS.md#campaign-results-2026-08-27-against-a-real-oracle-bucket)
 in FACTS.md). Reproduce it against your own cluster with
-[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md).
+[Testing in your own OCI environment](docs/testing-guide.md).
 
 ## Root cause and upstream status
 
@@ -1341,7 +1341,7 @@ Validation: 363 unit tests (`python3 -m unittest discover -s tests`), two
 live-rig campaigns against a real Oracle bucket, and adversarial review; see
 [Campaign results](FACTS.md#campaign-results-2026-08-27-against-a-real-oracle-bucket)
 in FACTS.md for the raw numbers. Reproduce a campaign of your own with
-[Testing in your own OCI environment](docs/testing-in-your-oci-environment.md).
+[Testing in your own OCI environment](docs/testing-guide.md).
 
 ## Why it condemns on presence
 

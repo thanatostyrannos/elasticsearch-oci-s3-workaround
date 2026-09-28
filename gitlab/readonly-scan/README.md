@@ -6,7 +6,7 @@ point: the audit's HTTP transport permits `GET` and `HEAD` and nothing else,
 and refuses any other method. Listing a bucket is a `GET`. It does not import
 the package that deletes. There is no way to make this pipeline remove an object.
 
-If you have not read it yet, [the read-only quickstart](../../docs/quickstart-read-only.md)
+If you have not read it yet, [the read-only quickstart](../../docs/running-it.md)
 explains what the audit reports and how to read `orphans.tsv`.
 
 ## Set this up

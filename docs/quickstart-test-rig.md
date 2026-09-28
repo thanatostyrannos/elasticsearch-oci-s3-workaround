@@ -8,7 +8,7 @@ on purpose, and a loop that audits it and reclaims what it finds, over and
 over. You need the first only if you have no leaking repository to hand, which
 most people testing this do not.
 
-**Read [the read-only quickstart](quickstart-read-only.md) first** if all you
+**Read [the read-only quickstart](running-it.md) first** if all you
 want is a number out of an existing bucket. This page is for the fuller thing.
 
 ## What you need

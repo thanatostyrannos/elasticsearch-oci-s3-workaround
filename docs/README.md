@@ -12,11 +12,11 @@ Compatibility API rejects, so the delete reports success and reclaims nothing.
 stays green, who is affected, what it costs and what to do this week.
 
 **You think you have this and want to know what is in your bucket.**
-[quickstart-read-only.md](quickstart-read-only.md). It counts the orphaned
+[running-it.md](running-it.md). It counts the orphaned
 objects, sizes them, and names every one. It cannot delete.
 
 **You want the space back.** Read [blast-radius.md](blast-radius.md) first,
-then [testing-in-your-oci-environment.md](testing-in-your-oci-environment.md).
+then [testing-guide.md](testing-guide.md).
 Do not start with the delete path.
 
 **You are reviewing this before it goes near production.**
@@ -32,8 +32,8 @@ fit.
 
 | | |
 |---|---|
-| [quickstart-read-only.md](quickstart-read-only.md) | Report what is orphaned. Deletes nothing |
-| [testing-in-your-oci-environment.md](testing-in-your-oci-environment.md) | Qualify it against your own cluster and a throwaway bucket. The settings behind the published numbers, and what they cost in storage |
+| [running-it.md](running-it.md) | Report what is orphaned. Deletes nothing |
+| [testing-guide.md](testing-guide.md) | Qualify it against your own cluster and a throwaway bucket. The settings behind the published numbers, and what they cost in storage |
 | [quickstart-test-rig.md](quickstart-test-rig.md) | The short version of the same thing |
 | [generating-load.md](generating-load.md) | The load generator, and how to make a repository leak on purpose |
 | [churn-rig-methodology.md](churn-rig-methodology.md) | Why the rig is built the way it is, and which of its numbers transfer |
