@@ -97,9 +97,13 @@ def body_for(keys):
 
 def variants(body):
     """The four integrity headers, keyed by the name reported to Oracle."""
+    # Content-MD5 is an S3 integrity checksum, not a security hash. Unmarked,
+    # hashlib.md5 raises under OpenSSL in FIPS mode, which a hardened RHEL
+    # host may well be running. Same call as generation_chain/reclaim.
+    md5 = hashlib.md5(body, usedforsecurity=False).digest()
     return {
         "Content-MD5":
-            ("Content-MD5", base64.b64encode(hashlib.md5(body).digest()).decode()),
+            ("Content-MD5", base64.b64encode(md5).decode()),
         "x-amz-checksum-crc32c":
             ("x-amz-checksum-crc32c",
              base64.b64encode(crc32c(body).to_bytes(4, "big")).decode()),
