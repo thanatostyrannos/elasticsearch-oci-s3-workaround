@@ -105,8 +105,9 @@ in the two fields that cannot be equal, the send timestamp and the
 `opc-request-id` OCI mints per request; masking those two lines makes the
 output identical, sha256
 `5d23eab80619262732589294a572e3c4d673fb961cc8455c1e6d06c02decbf78` for both.
-The captured pair is in
-[../../evidence/service-request-repro/](../../evidence/service-request-repro/).
+The captured pair, both transcripts and their checksums, is kept with the
+rest of the evidence in the source repository. It is not part of the release
+archive.
 
 ## Reading it
 
