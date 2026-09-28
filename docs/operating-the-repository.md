@@ -25,6 +25,37 @@ with `GET /_snapshot/<repo>?filter_path=*.settings` first, and check
 `_cat/snapshots/<repo>` afterwards to confirm the same snapshots are still listed.
 See [base_path](#base_path-the-value-that-decides-what-your-repository-can-see).
 
+**It applies to that one request and nothing afterwards, and nothing records
+that you used it.** `verify` is a query parameter on the `PUT`, not a
+repository setting. There is no field for it on `RepositoryMetadata`, so it is
+not stored, and there is no status to read back. Measured on a repository
+registered exactly this way, both `GET /_snapshot/<repo>` and the repository's
+entry in cluster state return only `type`, `uuid` and your settings:
+
+```json
+{"my-repo": {"type": "s3", "uuid": "...",
+  "settings": {"bucket": "...", "client": "...", "base_path": "..."}}}
+```
+
+Nothing there says verification was skipped. `POST /_snapshot/<repo>/_verify`
+does not help either, because it is an action rather than a status: it runs
+verification, which on an affected store fails and leaks the test blobs it
+just wrote.
+
+Three consequences an operator actually meets:
+
+- **Re-register and you must pass it again.** `PUT` without `?verify=false`
+  fails and rolls back, so the repository disappears. Anything that
+  re-registers counts, including changing a non-dynamic setting such as
+  `delete_objects_max_size`.
+- **The flag is not a property of the repository, so nothing carries it across
+  a cluster restart.** Automation that registers repositories at boot needs it
+  written into that automation, not assumed.
+- **A colleague reading the repository definition cannot tell.** The one place
+  the decision is visible is wherever you wrote the `PUT`.
+
+Treat `?verify=false` as something you re-apply, not something you set.
+
 Mechanically it skips the registration-time check only, where Elasticsearch
 writes a few test blobs and then deletes them. That cleanup delete is what
 returns the 400. Runtime behavior does not change, because the SDK puts the same

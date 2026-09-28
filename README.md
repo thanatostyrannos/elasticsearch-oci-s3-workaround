@@ -66,8 +66,9 @@ the error never reaches the API response at all. The delete returns
 java.io.IOException: Failed to delete blobs [ObjectIdentifier(Key=<base-path>/indices/<index-uuid>/<shard>/__<blob-id>), ...]
 ```
 
-If that is you, keep reading. The affected version boundary, the mechanism and the upstream history are in
-[The failure in detail](docs/problem-record.md#the-failure-in-detail) below.
+If that is you, keep reading. The affected version boundary, the mechanism and
+the upstream history are in
+[the problem record](docs/problem-record.md#the-failure-in-detail).
 
 ## What "audit" means here
 
@@ -89,25 +90,13 @@ Two programs, and the difference matters more than the word:
 
 ## Start here
 
-**[Reading a leaking repository, without deleting anything](docs/running-it.md)**
-is the shortest path to a real answer: how many objects a failed delete has
-stranded in your bucket, how much space they occupy, and a file naming every
-one. It deletes nothing and cannot.
-
-**[Running the test rig against your own cluster](docs/testing-guide.md)**
-is next, if you want to watch the whole thing work on a repository you can
-afford to lose before pointing it at one you cannot. It covers standing up a
-load generator that manufactures a leaking repository on purpose, and
-`scripts/run-test-cycle.sh`, which drives the audit-and-reclaim loop from a
-config file and checks the things that otherwise fail confusingly later.
-
-**[Testing in your own OCI environment](docs/testing-guide.md)**
-is the full procedure against Oracle Object Storage specifically, using a
-separate bucket that holds nothing you care about. It carries the exact ILM and
-snapshot settings behind the published results, what they cost in bucket space
-and cluster storage, an explanation of every argument the tools take, and what
-a good result looks like so you can tell whether yours is one. Do this before
-you point the delete path at anything you would miss.
+- **Find out what leaked, without deleting anything:**
+  [running it](docs/running-it.md), step one. It counts the orphaned objects,
+  sizes them, and names every one in a file. Nothing in that step can delete.
+- **Watch the whole thing work on a repository you can afford to lose:**
+  [the testing guide](docs/testing-guide.md). Do this before you point the
+  delete path at anything you would miss.
+- **Keep your repository in service today:** step 1 below.
 
 ## The fix
 
@@ -122,13 +111,99 @@ rather than the mitigation.
 
 The third answer is reclaiming what already leaked. This repository does that
 in two halves: an audit that reads and cannot delete, and a separate tool that
-deletes only what a person approved. See [Using it](docs/running-it.md).
+deletes only what a person approved.
 
-If you find an older runbook for this bug, from this project or anywhere else,
-check which direction it condemns in before you run it. Deciding what to delete
-by absence from a list the tool built itself puts every failed read on the
-deleting side. This one decides by presence in a deleted snapshot's file list,
-which is the direction Elasticsearch uses.
+### 1. Keep the repository in service
+
+**On Oracle, check one client setting first.** Elasticsearch cannot write a
+single object to Oracle's Amazon S3 Compatibility API until
+`s3.client.<name>.disable_chunked_encoding` is `true`; every upload is answered
+`AWS chunked encoding not supported` with a 501 (measured on 9.5.2). It is a
+static setting in `elasticsearch.yml` on every node, so it needs a rolling
+restart. A cluster that already writes snapshots to Oracle is past this, but
+confirm rather than assume:
+
+```text
+GET _nodes/settings?filter_path=nodes.*.name,nodes.*.settings.s3.client.*.disable_chunked_encoding
+```
+
+Every node must report `"true"`. Setting it up from scratch is Step 3 of
+[the testing guide](docs/testing-guide.md#step-3-settings-on-the-cluster). It
+does nothing for the delete failure, which is a different header on a different
+request.
+
+Then re-register the repository with verification skipped, settings otherwise
+unchanged. This is the one thing to do now if you read nothing else.
+
+```text
+PUT /_snapshot/<your_repository_name>?verify=false
+{
+  "type": "s3",
+  "settings": {
+    <your existing repository settings>
+  }
+}
+```
+
+That restores registration, snapshots, mounting, reads and restore. It does
+**not** make deletes work, and it is not optional: without it you cannot
+register the repository at all. What it fixes and what it does not, measured
+operation by operation, is in
+[operating the repository](docs/operating-the-repository.md#keeping-the-repository-operational-in-detail).
+
+`verify` is a query parameter on that one request. It is not stored, nothing
+reports it back, and every later re-registration needs it again, including
+automation that registers repositories at boot.
+
+`<your existing repository settings>` is literal. `PUT` replaces the settings
+block rather than merging into it, so `GET /_snapshot/<repo>` first and copy every
+key across. Dropping `base_path` in particular repoints the repository at the
+bucket root and makes every snapshot you have unreachable, with
+`{"acknowledged":true}` returned either way. See
+[base_path](docs/operating-the-repository.md#base_path-the-value-that-decides-what-your-repository-can-see).
+
+> **Searchable-snapshot warning that applies to everyone, not just this bug:**
+> Elasticsearch does **not** block deleting a snapshot that backs a mounted
+> searchable-snapshot index. On a repository with working deletes, that destroys
+> the index. Here it leaves the index serving from leaked blobs. Mount clones,
+> never policy snapshots. Always pass `--elasticsearch` and `--es-repository`
+> to the audit: it asks the cluster which snapshots have a mounted index and
+> removes every one of them from the manifest before the reclaim tool ever
+> sees it. Treat that set as the list nobody may delete from, by any means.
+
+### 2. Move the backups off the broken delete path
+
+A filesystem repository makes retention an ordinary unlink, with no tooling in
+the loop. [The split-repo migration](https://gist.github.com/thanatostyrannos/cb7ccafece8d74be125edc9b7fa77f14)
+moves backups to block or NFS storage while the frozen tier stays mounted where
+it is. Its two cleanup steps are marked withdrawn in place: they drove an
+earlier tool that no longer exists, and step 3 replaces them.
+
+Leaving backups on a repository whose deletes fail carries real risks, and they
+compound:
+
+- **Storage grows monotonically between sweeps.** Retention reclaims nothing on
+  its own, so cost has no natural ceiling.
+- **Deletion stops meaning destruction.** A snapshot leaves the catalog while
+  its data stays in the bucket. If anyone relies on deletion for records
+  retention, data minimisation or spillage remediation, that guarantee is gone.
+- **Your monitoring lies.** SLM reports success. Dashboards and alerts built on
+  it are green while nothing is reclaimed, and the ambient WARN noise trains
+  people to ignore the log lines that would carry the next real failure.
+- **You depend on the tooling indefinitely.** If the cron breaks or drifts
+  behind an Elasticsearch format change, growth resumes silently.
+- **Reclaiming is a manual loop, not a fix.** `generation_chain` finds what
+  leaked and `generation_chain.reclaim` removes it, but somebody reads the
+  manifest and approves it every time. The leak resumes the moment the loop
+  stops. The migration is what ends it, by moving deletion traffic
+  somewhere deletes work.
+
+Move the backups and all of that ends for them. Retention becomes filesystem
+unlinks, deletion means destruction again, and no tooling sits in the loop. The
+risks persist only for whatever stays behind, which is usually the frozen tier,
+at far lower volume than daily backups.
+
+### 3. Reclaim what already leaked
 
 Which credential you hold still decides what you can reach, so settle that
 first. The two APIs take different credentials, and holding one gets you
@@ -161,105 +236,11 @@ versions. The S3 surface cannot, and a version id nobody can discover is not a
 recovery path. See
 [Blast radius](docs/blast-radius.md#there-is-no-recovery-path-through-the-amazon-s3-compatibility-api).
 
-The sweepers aim at orphans, meaning blobs no live snapshot references, and a
-backup that classifies LIVE is never touched. Be precise about what that
-guarantee rests on, because it is not absolute. Both reachability sweepers
-decide what is LIVE by reimplementing Elasticsearch's on disk format. A decode
-that *fails* degrades the affected scope to PROTECTED, and nothing is deleted. A
-decode that *succeeds and returns a wrong file list* is the expensive case: one
-renamed field in an Elasticsearch upgrade deleted 96.4% of a repository in the
-test lab (henceforth **the rig**: Elasticsearch 9.5.2 under ECK in Rancher
-Desktop against a MinIO pinned to the last release that reproduces this fault) by
-bytes. No amount of guarding the decode closes that case, because a wrong file
-list that keeps the entry count right passes every check you can write against
-the decode itself. The decision underneath has to change: compute the difference
-the way Elasticsearch computes it, inside one shard directory, and give the
-half that reads nothing to delete with.
-
-Leaving backups on a repository whose deletes fail carries real risks, and they
-compound:
-
-- **Storage grows monotonically between sweeps.** Retention reclaims nothing on
-  its own, so cost has no natural ceiling.
-- **Deletion stops meaning destruction.** A snapshot leaves the catalog while
-  its data stays in the bucket. If anyone relies on deletion for records
-  retention, data minimisation or spillage remediation, that guarantee is gone.
-- **Your monitoring lies.** SLM reports success. Dashboards and alerts built on
-  it are green while nothing is reclaimed, and the ambient WARN noise trains
-  people to ignore the log lines that would carry the next real failure.
-- **You depend on the tooling indefinitely.** If the cron breaks or drifts
-  behind an Elasticsearch format change, growth resumes silently.
-- **Reclaiming is a manual loop, not a fix.** `generation_chain` finds what
-  leaked and `generation_chain.reclaim` removes it, but somebody reads the
-  manifest and approves it every time. The leak resumes the moment the loop
-  stops. The migration below is what ends it, by moving deletion traffic
-  somewhere deletes work.
-
-Move the backups and all of that ends for them. Retention becomes filesystem
-unlinks, deletion means destruction again, and no tooling sits in the loop. The
-risks persist only for whatever stays behind, which is usually the frozen tier,
-at far lower volume than daily backups.
-
-There is no upstream fix to wait for. Elastic declined one and considers this
-the storage vendor's problem.
-
-The first thing to do, and the one thing to do now if you read nothing else:
-re-register the repository with verification skipped,
-settings otherwise unchanged.
-
-```text
-PUT /_snapshot/<your_repository_name>?verify=false
-{
-  "type": "s3",
-  "settings": {
-    <your existing repository settings>
-  }
-}
-```
-
-That restores registration, snapshots, mounting, reads and restore. It does
-**not** make deletes work, and it is not optional: without it you cannot
-register the repository at all. Full breakdown of what it fixes and what it
-does not is in
-[the detail below](docs/operating-the-repository.md#keeping-the-repository-operational-in-detail).
-
-**It applies to that one request and nothing afterwards, and nothing records
-that you used it.** `verify` is a query parameter on the `PUT`, not a
-repository setting. There is no field for it on `RepositoryMetadata`, so it is
-not stored, and there is no status to read back. Measured on a repository
-registered exactly this way, both `GET /_snapshot/<repo>` and the repository's
-entry in cluster state return only `type`, `uuid` and your settings:
-
-```json
-{"my-repo": {"type": "s3", "uuid": "...",
-  "settings": {"bucket": "...", "client": "...", "base_path": "..."}}}
-```
-
-Nothing there says verification was skipped. `POST /_snapshot/<repo>/_verify`
-does not help either, because it is an action rather than a status: it runs
-verification, which on an affected store fails and leaks the test blobs it
-just wrote.
-
-Three consequences an operator actually meets:
-
-- **Re-register and you must pass it again.** `PUT` without `?verify=false`
-  fails and rolls back, so the repository disappears. Anything that
-  re-registers counts, including changing a non-dynamic setting such as
-  `delete_objects_max_size`.
-- **The flag is not a property of the repository, so nothing carries it across
-  a cluster restart.** Automation that registers repositories at boot needs it
-  written into that automation, not assumed.
-- **A colleague reading the repository definition cannot tell.** The one place
-  the decision is visible is wherever you wrote the `PUT`.
-
-Treat `?verify=false` as something you re-apply, not something you set.
-
-`<your existing repository settings>` is literal. `PUT` replaces the settings
-block rather than merging into it, so `GET /_snapshot/<repo>` first and copy every
-key across. Dropping `base_path` in particular repoints the repository at the
-bucket root and makes every snapshot you have unreachable, with
-`{"acknowledged":true}` returned either way. See
-[base_path](docs/operating-the-repository.md#base_path-the-value-that-decides-what-your-repository-can-see).
+If you find an older runbook for this bug, from this project or anywhere else,
+check which direction it condemns in before you run it. Deciding what to delete
+by absence from a list the tool built itself puts every failed read on the
+deleting side. This one decides by presence in a deleted snapshot's file list,
+which is the direction Elasticsearch uses.
 
 The audit and the reclaim tool read the bucket, so they need the Amazon S3
 Compatibility API credential described above. Passing `--elasticsearch` to
@@ -272,14 +253,15 @@ cd elasticsearch-oci-s3-workaround
 python3 -m unittest discover -s tests     # no network needed
 ```
 
-> **Searchable-snapshot warning that applies to everyone, not just this bug:**
-> Elasticsearch does **not** block deleting a snapshot that backs a mounted
-> searchable-snapshot index. On a repository with working deletes, that destroys
-> the index. Here it leaves the index serving from leaked blobs. Mount clones,
-> never policy snapshots. Always pass `--elasticsearch` and `--es-repository`
-> to the audit: it asks the cluster which snapshots have a mounted index and
-> removes every one of them from the manifest before the reclaim tool ever
-> sees it. Treat that set as the list nobody may delete from, by any means.
+The commands, the output, and what each disposition means are in
+[running it](docs/running-it.md).
+
+### Upstream
+
+There is no upstream fix to wait for. Elastic declined one and considers this
+the storage vendor's problem. The version boundary, the mechanism, what was
+proposed upstream and why it was declined are in
+[the problem record](docs/problem-record.md#root-cause-and-upstream-status).
 
 ## The tools
 
@@ -289,7 +271,21 @@ exist to measure and to check.
 
 | Tool | Purpose |
 |---|---|
-| [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/running-it.md#when-it-refuses) in the read-only quickstart. |
+| [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/running-it.md#when-it-refuses) in the guide to running it. |
 | [`generation_chain/reclaim/`](generation_chain/reclaim/) | Deletes the keys in an approved manifest, in batches, with `Content-MD5`. Dry run by default. `--execute` requires `--approve-digest` and `--approve-rows` from that dry run, so an edited manifest cannot be executed. It contains no reference to Elasticsearch: the veto is applied when the manifest is derived. |
 | [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [generating load](docs/generating-load.md). |
 | [`verify_restorable.py`](verify_restorable.py) | Restores an index from the repository and counts documents. The only check that survives the others passing. |
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/running-it.md](docs/running-it.md) | Audit, reclaim, verify. The credentials file, the output, the exit codes, and a read-only Elasticsearch API key |
+| [docs/testing-guide.md](docs/testing-guide.md) | Qualify the tool on a throwaway repository, on Oracle or MinIO. The settings behind the published numbers, what they cost, and how the rig works |
+| [docs/operating-the-repository.md](docs/operating-the-repository.md) | What `?verify=false` does and does not change, checking a repository after deletion traffic, and `base_path` |
+| [docs/problem-record.md](docs/problem-record.md) | The problem for whoever holds the ticket, then the root cause and upstream status in full |
+| [docs/blast-radius.md](docs/blast-radius.md) | What a wrong delete costs, and why there is no undo |
+| [docs/oci-s3-compatibility.md](docs/oci-s3-compatibility.md) | What Oracle's endpoint accepts and rejects, measured against a real bucket |
+| [docs/generating-load.md](docs/generating-load.md) | The load generator, flag by flag |
+| [FACTS.md](FACTS.md) | What was measured, against what, on which day |
+| [docs/README.md](docs/README.md) | Everything else: security review, engineering, the service request to Oracle |

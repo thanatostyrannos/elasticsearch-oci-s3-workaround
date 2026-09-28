@@ -751,6 +751,21 @@ the audit produced and a person has read. Dry run is the default and `--execute`
 needs the digest and row count that dry run printed, so an edited manifest
 invalidates its own approval.
 
+The retired reachability sweepers show what the other direction costs. They
+aimed at orphans, meaning blobs no live snapshot references, and a backup that
+classified LIVE was never touched. That guarantee was not absolute. Both
+decided what was LIVE by reimplementing Elasticsearch's on disk format. A decode
+that *failed* degraded the affected scope to PROTECTED, and nothing was deleted.
+A decode that *succeeded and returned a wrong file list* was the expensive case:
+one renamed field in an Elasticsearch upgrade deleted 96.4% of a repository in the
+test lab (the rig: Elasticsearch 9.5.2 under ECK in Rancher
+Desktop against a MinIO pinned to the last release that reproduces this fault) by
+bytes. No amount of guarding the decode closes that case, because a wrong file
+list that keeps the entry count right passes every check you can write against
+the decode itself. The decision underneath has to change: compute the difference
+the way Elasticsearch computes it, inside one shard directory, and give the
+half that reads nothing to delete with.
+
 Snapshots share segment blobs, so a `__<blobid>` object is usually reachable
 from more than one snapshot and its key tells you nothing about how many.
 [Blast radius](../blast-radius.md) works through what that sharing costs when
