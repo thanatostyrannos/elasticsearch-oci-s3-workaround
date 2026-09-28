@@ -4,7 +4,7 @@
 > This is an account of what a wrong delete costs in an Elasticsearch snapshot
 > repository. It is Elasticsearch and Lucene format behaviour, so it holds
 > whatever tool does the deleting, including
-> [`generation_chain.reclaim`](../README.md#step-two-delete-once-you-have-read-the-manifest).
+> [`generation_chain.reclaim`](running-it.md#step-two-delete-once-you-have-read-the-manifest).
 > Read it before you approve a manifest.
 
 Every question an operator asks about a delete tool comes down to one thing. If
@@ -333,7 +333,7 @@ documents unrestorable can round to `0.0%` in both of the messages written to
 make an operator stop. `generation_chain`'s own report
 prints both the object share and the byte share, then the breakdown by
 disposition, on every run, with no threshold gating it (see the sample report
-in [Using it](../README.md#what-the-output-looks-like) in the README).
+in [Using it](running-it.md#what-the-output-looks-like) in the README).
 
 ### One delete, every snapshot in the chain
 
@@ -599,7 +599,7 @@ times. `generation_chain` built it anyway:
 [`formats/lucene_segments.py`](../generation_chain/formats/lucene_segments.py)
 decodes the commit point, and the [audit](../README.md#what-audit-means-here)'s report line
 `Lucene commit cross-check (issue #1)` runs it against every snapshot file
-list on every audit (see [the sample report](../README.md#what-the-output-looks-like)
+list on every audit (see [the sample report](running-it.md#what-the-output-looks-like)
 in the README). A file list that under-references what the commit point
 requires is now drift this reader detects with no cluster contact, closing
 the realistic case: an upstream format change nobody staged, where the two
@@ -723,7 +723,7 @@ Short, and none of it is optional on a repository you care about.
 These six questions are about the repository rather than about any tool, and
 `generation_chain` is built to answer all six: items 2 and 4 are both
 `--elasticsearch`/`--es-repository`, item 3 is the disposition breakdown in
-[its report](../README.md#what-the-output-looks-like), item 5 is the manifest
+[its report](running-it.md#what-the-output-looks-like), item 5 is the manifest
 `--approve-digest` and `--approve-rows` bind to, and item 6 is
 `verify_restorable.py`, shipped alongside it for exactly this step.
 
