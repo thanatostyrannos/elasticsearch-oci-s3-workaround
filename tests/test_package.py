@@ -11,6 +11,7 @@ scanner finds in this repository lives in `tests/`, and none of it ships.
 
 import hashlib
 import os
+import posixpath
 import re
 import sys
 import tempfile
@@ -81,6 +82,12 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
                 body = zf.read(doc).decode("utf-8", "replace")
                 named.update(re.findall(r"python3 ([a-z_]+\.py)", body))
                 named.update(re.findall(r"(scripts/[a-z-]+\.sh)", body))
+                # `./name.sh` in a code block runs a file beside the document,
+                # which is how the Oracle service request's reproducers are
+                # invoked. The two patterns above never saw that form.
+                here = posixpath.dirname(doc.split("/", 1)[1])
+                for name in re.findall(r"(?m)^\s*\./([A-Za-z0-9_.-]+\.(?:sh|py))\b", body):
+                    named.add(posixpath.normpath(posixpath.join(here, name)))
         missing = {n for n in named if n not in shipped}
         self.assertEqual(missing, set(),
                          "documents tell the reader to run these, and they "

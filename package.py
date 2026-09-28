@@ -89,6 +89,11 @@ PACKAGED_FILES = (
     # Ships because docs/testing-in-your-oci-environment.md tells the reader
     # to use it. Same reason as the load generator above.
     ".gitlab-ci.yml",             # runs the audit on a schedule, the rig on demand
+    # The standalone reproduction of the checksum rejection, in Python and
+    # in bash. docs/service-request/README.md tells the reader to run both,
+    # and the docs tree only ships its Markdown and scan data.
+    "docs/service-request/oci-deleteobjects-checksum-repro.py",
+    "docs/service-request/oci-deleteobjects-checksum-repro.sh",
     "README.md",                  # how to run all of it
     "FACTS.md",                   # what was measured, and against what
     "LICENSE",                    # who may use this, and the warranty that is not given
