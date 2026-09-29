@@ -125,6 +125,20 @@ Then reload, cluster wide:
 curl -XPOST "$ES/_nodes/reload_secure_settings"
 ```
 
+It also needs one setting that is not in the keystore, and it needs it before
+you register, or it cannot write to Oracle at all. In `elasticsearch.yml` on
+every node, followed by a rolling restart, since the reload above covers
+keystore settings only:
+
+```yaml
+s3.client.default.disable_chunked_encoding: true
+```
+
+Without it every upload gets `AWS chunked encoding not supported. (Service:
+S3, Status Code: 501)`. `?verify=false` does not help with that: it skips the
+delete, not the write. See
+[Step 3 of the testing guide](../../docs/testing-guide.md#step-3-settings-on-the-cluster).
+
 ### Keeping it away from real data
 
 This matters if the cluster holds anything you care about. `snapshot_churn_rig.py`

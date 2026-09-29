@@ -7,13 +7,24 @@ Compatibility API rejects, so the delete reports success and reclaims nothing.
 
 ## Where to start
 
+**You are holding a ticket and need to explain this to someone.**
+[problem-record.md](problem-record.md). What the symptom is, why monitoring
+stays green, who is affected, what it costs and what to do this week.
+
 **You think you have this and want to know what is in your bucket.**
-[quickstart-read-only.md](quickstart-read-only.md). It counts the orphaned
-objects, sizes them, and names every one. It cannot delete.
+[running-it.md](running-it.md), step one. It counts the orphaned objects, sizes
+them, and names every one. Nothing in that step can delete.
 
 **You want the space back.** Read [blast-radius.md](blast-radius.md) first,
-then [testing-in-your-oci-environment.md](testing-in-your-oci-environment.md).
-Do not start with the delete path.
+then [testing-guide.md](testing-guide.md). Do not start with the delete path.
+
+**You need the repository working again today.**
+[The README's step 1](../README.md#1-keep-the-repository-in-service), then
+[operating-the-repository.md](operating-the-repository.md) for what
+`?verify=false` does and does not change and what to check after any deletion
+traffic. On Oracle, nothing can be written until the client setting in
+[step 3 of the testing guide](testing-guide.md#step-3-settings-on-the-cluster)
+is in place.
 
 **You are reviewing this before it goes near production.**
 [security/threat-model.md](security/threat-model.md), then
@@ -28,11 +39,10 @@ fit.
 
 | | |
 |---|---|
-| [quickstart-read-only.md](quickstart-read-only.md) | Report what is orphaned. Deletes nothing |
-| [testing-in-your-oci-environment.md](testing-in-your-oci-environment.md) | Qualify it against your own cluster and a throwaway bucket. The settings behind the published numbers, and what they cost in storage |
-| [quickstart-test-rig.md](quickstart-test-rig.md) | The short version of the same thing |
+| [running-it.md](running-it.md) | Audit, reclaim, verify. Only step two deletes, and only what an approved manifest names. Also the read-only Elasticsearch API key |
+| [testing-guide.md](testing-guide.md) | Qualify it against your own cluster and a throwaway bucket, on Oracle or MinIO. The settings behind the published numbers, what they cost in storage, and how the rig works |
+| [operating-the-repository.md](operating-the-repository.md) | Keeping a repository whose deletes fail in service: `?verify=false` measured operation by operation, `delete_objects_max_size`, checking after deletion traffic, and `base_path` |
 | [generating-load.md](generating-load.md) | The load generator, and how to make a repository leak on purpose |
-| [churn-rig-methodology.md](churn-rig-methodology.md) | Why the rig is built the way it is, and which of its numbers transfer |
 | [run-proofs/README.md](run-proofs/README.md) | Where the proof for a release lives, and what one file has to cover |
 
 ## How it works
@@ -44,6 +54,8 @@ fit.
 | [repository-layout-and-reachability.md](repository-layout-and-reachability.md) | How a snapshot repository is laid out on the store, and what reaches what |
 | [blast-radius.md](blast-radius.md) | What every key is worth, why one object belongs to many snapshots, and what a wrong delete costs |
 | [oci-s3-compatibility.md](oci-s3-compatibility.md) | What Oracle's endpoint accepts and rejects, measured against a real bucket |
+| [problem-record.md](problem-record.md) | The problem record: symptom, root cause, blast radius, detection, workaround and vendor status, for problem management. Then the failure, the root cause and the upstream history in full, for engineers |
+| [service-request/](service-request/README.md) | The service request raised with Oracle, and the standalone reproduction it rests on |
 
 ## Security and compliance
 

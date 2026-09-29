@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in. That file is gitignored, so nothing
+# identifying your tenancy is ever committed.
+
+tenancy_ocid     = "ocid1.tenancy.oc1..REPLACE"
+user_ocid        = "ocid1.user.oc1..REPLACE"
+fingerprint      = "aa:bb:cc:REPLACE"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-ashburn-1"
+compartment_ocid = "ocid1.compartment.oc1..REPLACE"
+
+# `oci iam availability-domain list --compartment-id <tenancy>` prints these.
+# The name carries a tenancy-specific prefix, so it cannot be defaulted here.
+availability_domain = "abcd:US-ASHBURN-AD-2"
+
+prefix = "esrig"

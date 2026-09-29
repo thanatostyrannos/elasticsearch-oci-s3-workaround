@@ -11,6 +11,7 @@ scanner finds in this repository lives in `tests/`, and none of it ships.
 
 import hashlib
 import os
+import posixpath
 import re
 import sys
 import tempfile
@@ -70,7 +71,7 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
 
     def test_every_tool_the_docs_tell_you_to_run_ships(self):
         # A shipped document naming a file the release does not carry is a
-        # broken instruction, and that happened: quickstart-test-rig.md walks
+        # broken instruction, and that happened: the test-rig guide walks
         # through snapshot_churn_rig.py, which was excluded as lab tooling.
         import re
         with zipfile.ZipFile(self.archive) as zf:
@@ -81,6 +82,12 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
                 body = zf.read(doc).decode("utf-8", "replace")
                 named.update(re.findall(r"python3 ([a-z_]+\.py)", body))
                 named.update(re.findall(r"(scripts/[a-z-]+\.sh)", body))
+                # `./name.sh` in a code block runs a file beside the document,
+                # which is how the Oracle service request's reproducers are
+                # invoked. The two patterns above never saw that form.
+                here = posixpath.dirname(doc.split("/", 1)[1])
+                for name in re.findall(r"(?m)^\s*\./([A-Za-z0-9_.-]+\.(?:sh|py))\b", body):
+                    named.add(posixpath.normpath(posixpath.join(here, name)))
         missing = {n for n in named if n not in shipped}
         self.assertEqual(missing, set(),
                          "documents tell the reader to run these, and they "
@@ -98,9 +105,9 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
         self.assertTrue({n for n in self.names if "/security/scans/" in n},
                         "the raw scan artifacts did not ship")
 
-    def test_both_quickstarts_ship(self):
-        self.assertTrue(self._member("docs/quickstart-read-only.md"))
-        self.assertTrue(self._member("docs/quickstart-test-rig.md"))
+    def test_both_operator_guides_ship(self):
+        self.assertTrue(self._member("docs/running-it.md"))
+        self.assertTrue(self._member("docs/testing-guide.md"))
 
     def test_the_documentation_ships(self):
         self.assertTrue(self._member("README.md"))

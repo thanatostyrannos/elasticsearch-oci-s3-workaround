@@ -9,10 +9,15 @@ This page is the procedure for doing that. It uses a **separate bucket** that
 holds nothing you care about, so that a mistake anywhere in it costs you
 nothing.
 
-Read [the read-only quickstart](quickstart-read-only.md) first if you only want
-a report of what is orphaned. This page is for the fuller exercise: build a
-repository that leaks on purpose, then confirm the tool finds and removes the
-leaked objects without touching anything live.
+Read [running it](running-it.md) first if you only want a report of what is
+orphaned. This page is for the fuller exercise: build a repository that leaks
+on purpose, then confirm the tool finds and removes the leaked objects without
+touching anything live.
+
+The rig is two pieces. A load generator that manufactures a leaking repository
+on purpose, and a loop that audits it and reclaims what it finds, over and
+over. You need the first only if you have no leaking repository to hand, which
+most people testing this do not.
 
 ## Words used here
 
@@ -41,9 +46,19 @@ You need:
 - An OCI tenancy where you can create a bucket you do not mind destroying.
 - A customer secret key for Object Storage, which is what the S3 Compatibility
   API authenticates with. This is not your API signing key.
-- An Elasticsearch cluster at 8.19.17 or later, or 9.5.0 or later. Earlier
-  versions do not send the header that causes the fault, so they will not
-  reproduce it.
+- An Elasticsearch cluster at 8.19.17 or later, or 9.5.0 or later, that you
+  can throw away. Earlier versions do not send the header that causes the
+  fault, so they will not reproduce it. Do not point the load generator at
+  production: it writes continuously, rolls indices, and snapshots on a cycle
+  measured in seconds. If you have no cluster to spare, the source
+  repository carries a Terraform module that builds a disposable one on OKE.
+  It is not part of the release archive.
+- An object store that actually reproduces the fault. If yours accepts the
+  batch delete, nothing leaks and the rig measures nothing. Oracle Object
+  Storage does reproduce it. So does MinIO, but only up to and including
+  `RELEASE.2025-01-18T00-31-37Z`; the next release accepts the request and the
+  fault disappears. On MinIO, the Oracle-specific parts of steps 1 and 3 do not
+  apply.
 - Python 3.12 or later on the machine running the tests. No other dependency.
 - Roughly an hour and a half of cluster time, and about 300 MB of bucket space
   at the settings below.
@@ -108,7 +123,10 @@ hands its own credential to the audit.
 
 ## Step 3: settings on the cluster
 
-Two settings matter, and one of them will stop the run dead if it is missing.
+Two node settings matter, and either will stop the run dead if it is missing.
+Both are static: they go in `elasticsearch.yml` on every node (under ECK,
+`nodeSets[].config`), take a rolling restart, and cannot be set through the
+API.
 
 ```yaml
 xpack.searchable.snapshot.shared_cache.size: 2gb
@@ -129,6 +147,42 @@ The node we measured on ran an 8g heap in a 16Gi container. Smaller will work
 for a lower ingest rate. The audit itself runs outside the cluster and its
 memory use is discussed under storage below.
 
+The second is one line in the client block the repository will use. On
+Oracle, set `disable_chunked_encoding` to true:
+
+```yaml
+s3.client.oci.endpoint: <namespace>.compat.objectstorage.<region>.oraclecloud.com
+s3.client.oci.protocol: https
+s3.client.oci.path_style_access: true
+s3.client.oci.disable_chunked_encoding: true
+```
+
+Without it nothing can be written to the bucket. Elasticsearch's S3 client
+sends uploads with `aws-chunked` content encoding, and OCI answers:
+
+```
+AWS chunked encoding not supported. (Service: S3, Status Code: 501)
+```
+
+This is a second incompatibility between Elasticsearch's S3 client and OCI's
+S3 Compatibility API, separate from the checksum header. It blocks uploads
+rather than deletes, so you hit it first: registration fails on its test write
+before it reaches the delete this document is about. `?verify=false` does not
+get you past it. That skips the delete, not the write, so the 501 just moves to
+the first snapshot. Elasticsearch offers the setting precisely for stores that
+do not accept `aws-chunked` content encoding, and OCI is one of them.
+
+Set it on any cluster whose repository client points at OCI. We measured it on
+9.5.2. A cluster that already writes snapshots to OCI is past this, but check
+rather than assume:
+
+```
+GET _nodes/settings?filter_path=nodes.*.name,nodes.*.settings.s3.client.*.disable_chunked_encoding
+```
+
+Every node must report `"true"`. A node that reports nothing is on the default,
+`false`, and a single such data node is enough to fail its shards' uploads.
+
 Register the repository against the test bucket:
 
 ```
@@ -143,6 +197,11 @@ PUT _snapshot/leaktest-repo
 }
 ```
 
+The `client` setting names the `s3.client.*` block above. Its access key and
+secret key go in the Elasticsearch keystore as `s3.client.oci.access_key` and
+`s3.client.oci.secret_key`. That is standard S3 repository configuration and
+is not specific to this tool.
+
 **Register it with verification disabled if verification fails.** On a store
 with this fault, repository verification itself tries a batch delete and gets
 rejected. That rejection is the first evidence the fault is present, and it is
@@ -151,33 +210,6 @@ not a reason to stop:
 ```
 PUT _snapshot/leaktest-repo?verify=false
 ```
-
-The `client` setting names an `s3.client.*` block in your Elasticsearch
-keystore and config holding the endpoint and region. That is standard S3
-repository configuration and is not specific to this tool.
-
-**One setting in that block is not standard, and without it nothing works at
-all.** Set `disable_chunked_encoding` to true:
-
-```yaml
-s3.client.oci.endpoint: <namespace>.compat.objectstorage.<region>.oraclecloud.com
-s3.client.oci.protocol: https
-s3.client.oci.path_style_access: true
-s3.client.oci.disable_chunked_encoding: true
-```
-
-Without it, registration fails before it ever reaches the delete this document
-is about:
-
-```
-AWS chunked encoding not supported. (Service: S3, Status Code: 501)
-```
-
-This is a second incompatibility between Elasticsearch's S3 client and OCI's
-S3 Compatibility API, separate from the checksum header. It blocks uploads
-rather than deletes, so you hit it first: the repository cannot be written to,
-never mind cleaned up. Elasticsearch offers the setting precisely for stores
-that do not accept `aws-chunked` content encoding, and OCI is one of them.
 
 ## Step 4: the settings we used, and what they cost
 
@@ -209,6 +241,18 @@ every directory. One refused document drops its whole shard directory, and that
 shortens its snapshot's declared extent, which drops that snapshot's other
 directories too. Holding rollover back stops the poison being produced. This is
 a change to the test rig and never to what the audit will condemn.
+
+### The two flags people get wrong
+
+`--ilm-poll-interval 10s` matters more than it looks. Elasticsearch checks
+lifecycle policies every ten minutes by default, so a policy with a one minute
+`min_age` does nothing for ten. Without this the rig is fast only on paper.
+
+`--snapshot-interval` and `--retention` together decide whether anything leaks
+at all. Retention has to expire snapshots inside your observation window: a
+five minute retention with a one minute snapshot cycle starts orphaning blobs
+within about six minutes. A one hour retention on a twenty minute test
+produces nothing, and a clean-looking result that measured nothing.
 
 ### What it costs in storage
 
@@ -309,7 +353,24 @@ not have this fault and there is nothing here for you to reclaim.
 
 Wait for `first_snapshot_expired` to appear in the report file. Until a
 snapshot has expired, nothing has leaked and the audit will correctly find
-nothing.
+nothing. With `--report-file` set, the latest report shows the count directly:
+
+```bash
+tail -1 rig-reports.jsonl | python3 -m json.tool | grep -E 'expired|taken|object_count'
+```
+
+`expired_total` must climb above zero.
+
+The generator creates `<prefix>-repo`, `<prefix>-ilm`, `<prefix>-stream`,
+`<prefix>-template` and `<prefix>-slm`, and refuses to start if that prefix
+already matches anything.
+
+### Pointing it at a specific index instead
+
+If you already have a data stream or index you want snapshotted, skip the load
+generator and register the repository yourself, then run the loop against it.
+The rig is only a way to manufacture the condition. Nothing downstream depends
+on the data having come from it.
 
 ## Step 6: look before you touch anything
 
@@ -372,6 +433,12 @@ Then:
 ./scripts/run-test-cycle.sh my.conf
 ```
 
+The script checks before it starts: that the config and credentials files are
+not readable by other users, that the credentials file has the sections the
+run needs, that the cluster answers, and that the endpoint is not plain http
+to somewhere off your machine. Each of those otherwise fails later with less
+to go on.
+
 > [!CAUTION]
 > **Everything past this point can delete objects from your bucket, and they do
 > not come back.**
@@ -402,6 +469,12 @@ invocation happens at all. Setting it to `no` does not delete anything by
 itself; it permits the step that does, and that step still has to satisfy the
 approval gate. The dry run is not skippable even when you do want deletes,
 because the approval does not exist until it runs.
+
+With `DRY_RUN_ONLY="no"` the script says what it is about to do and waits ten
+seconds. Each cycle then audits, dry runs, and executes against the digest
+that dry run printed. If the manifest changed in between, the approval no
+longer matches and the cycle fails rather than deleting under a stale
+approval.
 
 Every setting in that file:
 
@@ -454,17 +527,36 @@ happened.
 `cycles.tsv` has one row per cycle. The columns that tell you whether the run
 was healthy:
 
-- **shards_read** should read `2/2`, or however many shard directories your
-  configuration has. Anything less means a shard directory was dropped and the
-  segment path condemned less than it could have.
+- **shards_read** should read `2/2` at the settings above. Anything less means
+  a shard directory was dropped and the segment path condemned less than it
+  could have. On a busier configuration a reading like `16 of 52` is normal:
+  a shard directory whose current document cannot be read is dropped whole,
+  and so are the rest of that snapshot's directories. Fewer directories read
+  means a shorter manifest, never a wrong one.
 - **failed** and **unconfirmed** should be zero. An unconfirmed delete is one
   the store accepted without the object actually going away, which is the fault
-  itself showing up in the delete path.
-- **exit** should be zero on every row.
+  itself showing up in the delete path. Either one above zero stops the run.
+  That is the safety stop.
+- **exit** should be zero on every row. Anything else means the audit did not
+  run, and the loop stops on it. The reason is in `derive-<n>.txt`.
 
 For comparison, the published run: 58 cycles, 888 objects deleted, no failures,
 no unconfirmed deletes, every cycle reading 2 of 2, and no non-zero exits.
 Metadata cycles took 26 seconds on average and segment cycles 124 seconds.
+
+### Expect it to get slower
+
+The audit reads one shard document per shard directory per generation, and
+nothing ever removes a generation, so a repository that has been leaking for a
+while costs more to read than a fresh one. A run that starts at ten seconds a
+cycle can reach ten minutes a cycle by cycle fifty.
+
+That is issue #9 and it is a property of the fault, not of the tool. It is
+also why a hundred-cycle run should start from a repository you just created
+rather than one carried over from yesterday: starting fresh keeps the
+generation count, and so the per-cycle cost, comparable across runs. A rig
+inherited from a previous session already carries whatever generations it
+built up, so its timings are not a clean baseline for the next comparison.
 
 ## Step 9: tear it down
 
@@ -485,6 +577,15 @@ oci os object bulk-delete --namespace <namespace> --bucket-name es-leak-test --p
 ```
 
 Then delete the bucket.
+
+Teardown can also empty the prefix itself: add `--purge-bucket`, which removes
+the leaked objects under `--base-path` with single-object deletes, the call the
+store does accept. If the bucket is Terraform-managed, `terraform destroy`
+empties it as part of the destroy rather than one object at a time.
+
+Teardown is the end of a test, not something to do at the start of the next
+one. A cycle that cleans up after itself leaves the next run nothing to wait
+for.
 
 ## Running this from GitLab CI
 
@@ -576,3 +677,101 @@ there and nowhere else.
 If any of those do not hold, please
 [open an issue](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues)
 with the `cycles.tsv` and the execute file from the cycle that went wrong.
+
+## How the rig works, and what to measure
+
+`snapshot_churn_rig.py` stands up an Elasticsearch snapshot repository that
+churns continuously, so that tooling which classifies and reclaims leaked
+objects can be measured against something that behaves like production. The
+script is the reproduction recipe: anyone with an Elasticsearch cluster that
+has a frozen-capable node and an S3 style bucket can rebuild the same
+environment from a copy of the file and take the same measurements.
+
+### What it builds
+
+Everything lives under one namespace prefix (default `churnrig`) and one
+`base_path` in the bucket, so the rig can share a cluster and a bucket with
+other work and teardown can remove exactly what it created.
+
+* A data stream that the script feeds continuously at a configurable rate
+  and document size. A data stream rather than an alias with a write index,
+  because it is what production log ingestion creates, and rollover needs no
+  bootstrap step that the script would have to fabricate by hand.
+* An ILM policy that rolls backing indices out of hot, converts them to
+  partial searchable snapshots in the frozen tier, and later deletes both
+  the index and its backing snapshot.
+* An SLM policy that snapshots the stream on a schedule (default every 15
+  minutes) and expires snapshots past a retention window (default one
+  hour), with the retention check itself rescheduled to run every few
+  minutes instead of the cluster default of once a day.
+
+Elasticsearch manufactures every object in the repository and issues every
+delete. The script never places or removes a blob during the
+run. Against a store that rejects the batch `DeleteObjects` call, every
+expiry and every ILM cleanup silently leaves its blobs behind, so the
+lifecycle becomes a generator that produces one leak per snapshot interval,
+indefinitely. The store's rejection usually shows up before the first
+snapshot: repository registration verifies itself by writing test blobs and
+batch-deleting them, and when that delete fails the script records the
+rejection and re-registers with `verify=false`, the same registration
+Elastic support prescribes for frozen repositories on such stores.
+
+### Why churn instead of a fixture
+
+A hand-built fixture proves the tool handles the bytes somebody thought to
+put in it. A churning repository proves it handles the states Elasticsearch
+actually passes through, including the ones nobody thought of: a snapshot
+mid-write during a listing, a generation chain that grows while the tool
+walks it, a mounted searchable snapshot whose source snapshot has already
+been expired, stale root generations accumulating next to the live one.
+Several of those states are exactly the hazards the reclaim tooling exists
+around, and the rig produces them on a clock rather than by luck. When one
+appears (a mount pinning a snapshot that is gone, for instance) the rig
+reports it as a hazard event rather than preventing it, so a measurement can
+be tied to the state that was live while it ran.
+
+Reproducibility is the other half. A measurement taken against an
+environment nobody can rebuild is an anecdote. This script, its arguments,
+and its report file are the environment's full description.
+
+### What to measure while it runs
+
+The rig emits one JSON report per interval (and on demand via `status`) to
+stdout and a JSONL file. A measurement campaign should cite these fields:
+
+* `repository.object_count` and `bytes`: what actually exists in the store,
+  from a signed listing, not from what Elasticsearch believes.
+* `repository.root_generation_count`: stale `index-N` roots pile up beside
+  the live one when deletes leak. On a healthy store this stays at 1.
+* `repository.expired_snapshot_metadata_still_present`: `snap-*.dat` blobs
+  whose snapshot Elasticsearch already deleted. Each one is a leaked delete.
+* `snapshots.expired_total` against the repository counts above: the gap
+  between what Elasticsearch removed and what the store gave back is the
+  leak, measured from both sides.
+* `snapshots.observed_start_deltas_s`: the snapshot cadence as observed,
+  which is the check that the schedule fires at the rate intended.
+* `mounted_searchable.hazards`: mounted indices whose source snapshot no
+  longer exists. Run the classifier while one is live and record whether it
+  protects those blobs.
+
+Teardown removes only what the script created, restores the cluster
+settings it changed, verifies both, and reports what it could not remove:
+the leaked blobs themselves, which survive on purpose unless
+`--purge-bucket` removes them with single-object deletes (the call the
+store does accept). Keeping them is the point; a classification campaign
+runs against exactly that corpus.
+
+The state file written by `run` is what makes that first sentence true.
+It records the names and the base path, so teardown deletes things this
+harness is known to have made rather than things that happen to answer
+to `--prefix`. Without it every name is a guess: the repository would be
+`<prefix>-repo`, which is an ordinary name someone else may already have
+taken. Teardown therefore refuses to run without a state file and prints
+the names it would have used, and `--derive-from-prefix` is the opt-in
+for the case where the state file is genuinely lost.
+
+Purging the bucket is held to a stricter rule and stays refused even
+under that opt-in, unless `--base-path` states the path outright. A
+wrong index or repository can be rebuilt from the cluster. Objects
+deleted out of this store cannot, which is the reason this repository
+exists.

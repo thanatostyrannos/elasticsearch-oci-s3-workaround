@@ -672,7 +672,7 @@ protection is `plan_shard_batches`'s per-group bounding and
 `ShardDirectoryTooLarge`'s refusal of one oversized directory; the whole-run
 overhead the docstring warns about (the listing, the key index, the chain)
 is not bounded by `--memory-mb` or `--max-ram` at all. This gap is the one
-[testing-in-your-oci-environment.md](../testing-in-your-oci-environment.md)
+[testing-guide.md](../testing-guide.md)
 tracks as a real, open limitation, upstream issue 7: memory use scales with
 object count, and `--memory-mb` today only makes the shard-batching refuse
 before it reads rather than fail partway through, not the run as a whole.
@@ -703,3 +703,70 @@ of 30,938 keys behind a 100-percent-coverage report. Keeping `Unanswered`
 separate does not change which keys reach the manifest, since only `Confirmed`
 does either way. It changes whether an operator reading the coverage report can
 tell a clean repository from one this run could not finish asking about.
+
+## Why it condemns on presence
+
+The obvious way to build this tool is the wrong way, and it is worth saying why
+before you write your own or run someone else's.
+
+The obvious way is to classify every object LIVE or ORPHAN by reading the whole
+repository, then delete the orphans. That condemns a blob by its absence from a
+list the tool built itself, which puts every failed read and every unparseable
+document on the deleting side of the decision. Built that way, this project
+deleted a live segment blob in the lab, following its own documented path.
+
+`generation_chain` reproduces what Elasticsearch does when it deletes a
+snapshot: a set difference inside one shard directory, between the segment blobs
+present there and the ones the new shard file list names. Nothing outside that
+directory takes part, so a read failure elsewhere cannot condemn anything.
+
+That is checked against Elasticsearch's source rather than inferred. Their rule
+is in [`package-info.java`](https://github.com/elastic/elasticsearch/blob/main/server/src/main/java/org/elasticsearch/repositories/blobstore/package-info.java);
+the same difference is [`derivation/shards.py`](../../generation_chain/derivation/shards.py),
+`frozenset(present_blobs - live_blobs)`, and the narrowing to blobs a observed
+delete actually named is [`derivation/garbage.py`](../../generation_chain/derivation/garbage.py),
+`named & history.collectable`. Elasticsearch also deletes the superseded shard
+generation documents; this tool never names them
+([`derivation/classification.py`](../../generation_chain/derivation/classification.py)),
+because its own derivation reads them.
+
+The direction of the test is what makes it safe. Elasticsearch condemns a blob
+on its ABSENCE from the current file list. This condemns on its PRESENCE in a
+deleted snapshot's file list, so what it names is a subset of what Elasticsearch
+itself would collect, and a read that fails makes the manifest shorter rather
+than longer. That is the whole difference from the obvious approach, and it is
+why a failure here costs coverage instead of data.
+
+It also gives Elasticsearch a veto. Two facts live in cluster state and appear
+nowhere in the bucket: which snapshots have searchable-snapshot indices mounted
+on them, and nothing stops you deleting one that is load bearing. Pass
+`--elasticsearch` and `--es-repository` and the cluster can remove keys from the
+manifest. It can never add one.
+
+The audit itself has no delete path. Its HTTP layer allows GET and HEAD and
+nothing else, refused at the transport, so no change to it can quietly add one.
+
+Reclaiming is a separate tool, `generation_chain.reclaim`, run against a manifest
+the audit produced and a person has read. Dry run is the default and `--execute`
+needs the digest and row count that dry run printed, so an edited manifest
+invalidates its own approval.
+
+The retired reachability sweepers show what the other direction costs. They
+aimed at orphans, meaning blobs no live snapshot references, and a backup that
+classified LIVE was never touched. That guarantee was not absolute. Both
+decided what was LIVE by reimplementing Elasticsearch's on disk format. A decode
+that *failed* degraded the affected scope to PROTECTED, and nothing was deleted.
+A decode that *succeeded and returned a wrong file list* was the expensive case:
+one renamed field in an Elasticsearch upgrade deleted 96.4% of a repository in the
+test lab (the rig: Elasticsearch 9.5.2 under ECK in Rancher
+Desktop against a MinIO pinned to the last release that reproduces this fault) by
+bytes. No amount of guarding the decode closes that case, because a wrong file
+list that keeps the entry count right passes every check you can write against
+the decode itself. The decision underneath has to change: compute the difference
+the way Elasticsearch computes it, inside one shard directory, and give the
+half that reads nothing to delete with.
+
+Snapshots share segment blobs, so a `__<blobid>` object is usually reachable
+from more than one snapshot and its key tells you nothing about how many.
+[Blast radius](../blast-radius.md) works through what that sharing costs when
+a delete is wrong.

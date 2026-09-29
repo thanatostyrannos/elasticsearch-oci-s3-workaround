@@ -82,13 +82,18 @@ PACKAGED_TREES = (
 PACKAGED_FILES = (
     "reclaim_test_protocol.py",   # exercises the audit against a live repository
     "verify_restorable.py",       # turns "we did not break it" into a number
-    # Ships because docs/quickstart-test-rig.md tells the reader to run it.
+    # Ships because docs/testing-guide.md tells the reader to run it.
     # It was excluded once as lab tooling, which left a shipped document
     # instructing someone to run a file the release did not contain.
     "snapshot_churn_rig.py",      # builds a leaking repository to test against
-    # Ships because docs/testing-in-your-oci-environment.md tells the reader
+    # Ships because docs/testing-guide.md tells the reader
     # to use it. Same reason as the load generator above.
     ".gitlab-ci.yml",             # runs the audit on a schedule, the rig on demand
+    # The standalone reproduction of the checksum rejection, in Python and
+    # in bash. docs/service-request/README.md tells the reader to run both,
+    # and the docs tree only ships its Markdown and scan data.
+    "docs/service-request/oci-deleteobjects-checksum-repro.py",
+    "docs/service-request/oci-deleteobjects-checksum-repro.sh",
     "README.md",                  # how to run all of it
     "FACTS.md",                   # what was measured, and against what
     "LICENSE",                    # who may use this, and the warranty that is not given

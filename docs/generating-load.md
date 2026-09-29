@@ -179,4 +179,4 @@ python3 snapshot_churn_rig.py run --help
 
 The methodology behind the design, including why the load runs *during* the
 tests rather than only before them, is in
-[the churn rig methodology](churn-rig-methodology.md).
+[how the rig works](testing-guide.md#how-the-rig-works-and-what-to-measure).

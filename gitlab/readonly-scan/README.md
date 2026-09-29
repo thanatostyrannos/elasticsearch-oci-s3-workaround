@@ -6,7 +6,7 @@ point: the audit's HTTP transport permits `GET` and `HEAD` and nothing else,
 and refuses any other method. Listing a bucket is a `GET`. It does not import
 the package that deletes. There is no way to make this pipeline remove an object.
 
-If you have not read it yet, [the read-only quickstart](../../docs/quickstart-read-only.md)
+If you have not read it yet, [the read-only quickstart](../../docs/running-it.md)
 explains what the audit reports and how to read `orphans.tsv`.
 
 ## Set this up
@@ -71,7 +71,7 @@ This pipeline cannot do it, on purpose. Take `orphans.tsv` to
 [the kubernetes-test-rig pipeline](../kubernetes-test-rig/README.md) or run
 `python3 -m generation_chain.reclaim --manifest orphans.tsv ...` by hand,
 starting with a dry run. Read
-[the test-rig quickstart](../../docs/quickstart-test-rig.md) first if you have
+[the testing guide](../../docs/testing-guide.md) first if you have
 not exercised the delete path against a repository you can afford to lose.
 
 ## CLI options this pipeline does not expose, and why

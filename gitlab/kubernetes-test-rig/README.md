@@ -6,7 +6,7 @@ finds what you expect on [the read-only scan](../readonly-scan/README.md)
 and want to exercise the delete path against a repository you can afford to
 lose.
 
-**Read [the test-rig quickstart](../../docs/quickstart-test-rig.md) first.**
+**Read [the testing guide](../../docs/testing-guide.md) first.**
 This chart automates exactly the steps that page walks through by hand: it
 does not change what the tools do, only how they are deployed.
 
@@ -23,7 +23,7 @@ does not change what the tools do, only how they are deployed.
 `values.yaml` exposes every flag every one of these commands accepts,
 grouped by tool, with a comment on each taken from that tool's own `--help`
 text. Nothing is hidden behind a chart-level abstraction; if you have read
-`docs/quickstart-test-rig.md`, every value maps to a flag you already know.
+`docs/testing-guide.md`, every value maps to a flag you already know.
 
 ## Why the audit is a CronJob and the loop is not
 
@@ -81,7 +81,7 @@ shortcut.
 runs; nothing executes until you set it to `false`, and even then each
 cycle's execute step is gated by the fresh approval digest that cycle's own
 dry run printed, not by anything this chart adds. Read
-[the read-only quickstart's exit-code section](../../docs/quickstart-read-only.md#when-it-refuses)
+[the read-only quickstart's exit-code section](../../docs/running-it.md#when-it-refuses)
 and the test-rig quickstart's "Reading the output" section before your
 first live run.
 

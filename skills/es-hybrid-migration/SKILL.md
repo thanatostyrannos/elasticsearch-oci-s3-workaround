@@ -46,7 +46,7 @@ comfortable with the delete step, stopping after Step 7 is a coherent position.
   `--credentials` and never a value, because a secret in argv is visible in `ps`
   to every user on the host, and a file other users can read is refused rather
   than used. `chmod 600` it. The shape is in
-  [README.md](../../README.md#the-credentials-file).
+  [README.md](../../docs/running-it.md#the-credentials-file).
 - Shorthand used below:
   `ES='curl -s --cacert /path/to/ca.crt -u "$ES_ADMIN" https://es.example.com:9200'`
 - Placeholders: `my-repo` is the existing S3-compatible repository, `backups-fs` is
@@ -292,7 +292,7 @@ should differ from what 4a printed only where you intend it to.
 the single most consequential value in this toolkit: it decides which blobs the
 repository can see, and it is the same value Step 9 passes to both the audit and
 the reclaim command as `--prefix`. Copy it from 4a and use it verbatim there. See
-[base_path](../../README.md#base_path-the-value-that-decides-what-your-repository-can-see).
+[base_path](../../docs/operating-the-repository.md#base_path-the-value-that-decides-what-your-repository-can-see).
 
 ### 4c. Acceptance
 

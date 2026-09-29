@@ -25,3 +25,7 @@ credentials.json
 
 # Release archives are published on the release page, not carried in history.
 dist/
+
+# Agent worktrees nested in the checkout. Each is a whole second copy of
+# the repository on another branch, never content for this one.
+.claude/worktrees/
