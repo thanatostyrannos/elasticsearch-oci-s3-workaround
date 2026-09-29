@@ -78,3 +78,19 @@ terraform destroy
 Everything here is created by this configuration and named from `prefix`, so a
 destroy leaves nothing behind. Object Storage buckets are not part of this
 module; the bucket the rig writes into lives in `../oci-probe`.
+
+## Tearing down a whole run
+
+[`../teardown-oci-run.sh`](../teardown-oci-run.sh) takes down a run across
+both modules in the order that works. It refuses while a rig process of yours
+is still running, hands anything after `--` to `snapshot_churn_rig.py
+teardown` to restore the cluster and unregister the repository, destroys
+`oke-test-cluster` and then `oci-probe` for whichever has state, and exits
+non-zero if terraform still tracks anything afterwards:
+
+```
+terraform/teardown-oci-run.sh -- \
+    --es https://localhost:9200 --password-file ./espw --ca-cert ./ca.crt \
+    --prefix leaktest --state-file ./rig-state.json \
+    --repo-type s3 --bucket es-leak-test --base-path leaktest
+```

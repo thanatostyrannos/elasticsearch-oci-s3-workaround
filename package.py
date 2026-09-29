@@ -232,6 +232,25 @@ def is_documentation(relative):
     return relative.startswith(DOCUMENTATION_PREFIXES)
 
 
+def zip_entry(name, body):
+    """The zip header for one member, fixed except for what the body decides.
+
+    A body starting with `#!` is a script the documentation runs as
+    `./name`, so it unpacks executable. Anything else is 0644. Deciding by
+    content rather than by the file's mode on disk keeps two builds of one
+    commit identical, including from a checkout that has lost its
+    permission bits. `create_system` is pinned to Unix because unzip only
+    restores permissions from an archive that says it was made on Unix,
+    and zipfile's default depends on the OS doing the build.
+    """
+    info = zipfile.ZipInfo(name, date_time=FIXED_TIMESTAMP)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = 3
+    mode = 0o755 if body.startswith(b"#!") else 0o644
+    info.external_attr = (0o100000 | mode) << 16
+    return info
+
+
 def build(destination, version=None):
     """Write the archive and its checksum, and return the archive's path."""
     stem = release_stem(version)
@@ -261,15 +280,8 @@ def build(destination, version=None):
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED,
                          compresslevel=9) as zf:
         for name, body in sorted(bodies.items()):
-            info = zipfile.ZipInfo(f"{stem}/{name}", date_time=FIXED_TIMESTAMP)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            zf.writestr(info, body)
-        info = zipfile.ZipInfo(f"{stem}/MANIFEST.sha256",
-                               date_time=FIXED_TIMESTAMP)
-        info.compress_type = zipfile.ZIP_DEFLATED
-        info.external_attr = 0o644 << 16
-        zf.writestr(info, manifest)
+            zf.writestr(zip_entry(f"{stem}/{name}", body), body)
+        zf.writestr(zip_entry(f"{stem}/MANIFEST.sha256", manifest), manifest)
 
     with open(archive, "rb") as handle:
         digest = hashlib.sha256(handle.read()).hexdigest()

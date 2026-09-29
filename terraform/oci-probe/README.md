@@ -268,6 +268,22 @@ skips it leaves the next run to discover tens of thousands of leaked blobs and
 clear them before it can even begin measuring, which is how a teardown turns
 into a startup cost. The `known-state-test-cycle` skill has the full ordering.
 
+## Tearing down a whole run
+
+[`../teardown-oci-run.sh`](../teardown-oci-run.sh) takes down a run across
+both modules in the order that works. It refuses while a rig process of yours
+is still running, hands anything after `--` to `snapshot_churn_rig.py
+teardown` to restore the cluster and unregister the repository, destroys
+`oke-test-cluster` and then `oci-probe` for whichever has state, and exits
+non-zero if terraform still tracks anything afterwards:
+
+```
+terraform/teardown-oci-run.sh -- \
+    --es https://localhost:9200 --password-file ./espw --ca-cert ./ca.crt \
+    --prefix leaktest --state-file ./rig-state.json \
+    --repo-type s3 --bucket es-leak-test --base-path leaktest
+```
+
 ## What has been checked, and what has not
 
 `terraform fmt`, `init` and `validate` pass against the real Oracle provider.

@@ -57,7 +57,17 @@ hmac_hex() { openssl dgst -sha256 -mac HMAC -macopt "hexkey:$1" | sed 's/.*= *//
 # taken over a file, the canonical request digest over a pipe.
 sha256_hex() { openssl dgst -sha256 ${1+"$1"} | sed 's/.*= *//'; }
 sha256_b64() { openssl dgst -sha256 -binary "$1" | openssl base64 -A; }
-md5_b64()    { openssl dgst -md5    -binary "$1" | openssl base64 -A; }
+
+# MD5 through coreutils rather than openssl. OpenSSL in FIPS mode refuses MD5
+# outright, "Error setting digest ... unsupported", and a hardened RHEL host is
+# the likeliest place for this to run. Content-MD5 is the integrity checksum
+# S3 requires on this request, not a security use. md5sum computes it without
+# asking OpenSSL, and its hex goes back to bytes through printf's \x escapes.
+md5_b64() {
+    local h
+    h=$(md5sum "$1" | cut -c1-32)
+    printf "$(printf '%s' "$h" | sed 's/../\\x&/g')" | openssl base64 -A
+}
 
 # A big-endian uint32, as base64. This is how S3 frames every x-amz-checksum-*.
 hex32_to_b64() {
