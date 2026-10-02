@@ -21,6 +21,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Iterable, List, Set, TYPE_CHECKING
 
+from ..errors import ForbiddenMethod
+
 if TYPE_CHECKING:  # pragma: no cover
     from ..sources import RepositorySource
 
@@ -87,6 +89,8 @@ class KeyIndex:
     def _ask(self, key: str) -> str:
         try:
             return CONFIRMED if self._source.exists(key) else DENIED
+        except ForbiddenMethod:
+            raise
         except Exception:
             # A store that raised did not say no. Recording it as a denial is
             # what made the coverage report claim keys it had silently dropped.

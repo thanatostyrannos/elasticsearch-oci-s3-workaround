@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import genchain_fixtures as fx
 import s3rig
 from generation_chain import run_audit
+from generation_chain.errors import ForbiddenMethod
 from generation_chain.sources import http_reads
 from generation_chain.sources.http_reads import HttpReader
 from generation_chain.sources.local import LocalMirrorSource
@@ -295,11 +296,11 @@ class Transports(unittest.TestCase):
         # says why not.
         with s3rig.S3Rig(root=self.root) as rig:
             source = self.s3_source(rig)
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ForbiddenMethod):
                 source._request("DELETE", "/es-snapshots/index-0", {})
         with _OciRig(self.root) as rig:
             source = self.oci_source(rig)
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ForbiddenMethod):
                 source._request("DELETE", "/n/ns/b/b/o/index-0")
 
 

@@ -27,7 +27,7 @@ from . import selftest
 from .corroboration import (CorroborationUnavailable,
                             ElasticsearchVeto, Veto)
 from .derivation.audit import run_audit
-from .errors import GenerationChainError
+from .errors import ForbiddenMethod, GenerationChainError
 from .paths import PathRefused, checked_path
 from .model import AuditResult
 from .reporting import coverage as coverage_report
@@ -56,7 +56,8 @@ EXIT_TOO_BIG = 5      # Not on this host. The same command fits on a larger one.
 EXIT_CODES = """Exit codes
   0  the run completed and wrote a manifest
   2  the run refused for a settled reason, such as an unsupported repository
-     format or a catalog it could not anchor. Retrying changes nothing
+     format, a catalog it could not anchor, or a request the tool must never
+     send. Retrying changes nothing
   3  the invocation or a credential is wrong. Fix it and run again. This
      covers a store that answers 401 or 403, a bucket or --prefix with no
      index.latest (404), and an output path that is refused or cannot be
@@ -422,9 +423,15 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
 
-    result = run_audit(
-        source, veto, budget_bytes=budget_bytes,
-        progress=None if args.quiet else _progress_writer(stderr))
+    try:
+        result = run_audit(
+            source, veto, budget_bytes=budget_bytes,
+            progress=None if args.quiet else _progress_writer(stderr))
+    except ForbiddenMethod as exc:
+        # A refusal retrying cannot change, so it takes the settled code and
+        # never the transport code a scheduler retries on.
+        stderr.write(f"refused to send a forbidden request: {exc}\n")
+        return EXIT_REFUSED
     try:
         _write(result, transport, source.describe(), args, stdout, stderr,
                sizes=_reported_sizes(source))

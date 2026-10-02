@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ..credentials import Secret, as_secret
-from ..errors import RunRefused, SourceReadError
+from ..errors import ForbiddenMethod, RunRefused, SourceReadError
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader
 from .signing import sigv4
 
@@ -247,9 +247,10 @@ class S3CompatibleSource:
     def _request(self, method: str, canonical_uri: str,
                  params: Dict[str, Optional[str]],
                  critical: bool = False) -> bytes:
-        assert method in ALLOWED_METHODS, (
-            f"{method} is not a method this package may send; version one "
-            "reads and never deletes")
+        if method not in ALLOWED_METHODS:
+            raise ForbiddenMethod(
+                f"{method} is not a method this package may send; it reads "
+                "and never deletes")
         now = dt.datetime.now(dt.timezone.utc)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         query = sigv4.canonical_query(params)

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Protocol, runtime_checkable
 
-from ..errors import GenerationChainError, SourceReadError
+from ..errors import ForbiddenMethod, GenerationChainError, SourceReadError
 from . import overlap
 from .readahead import CriticalReads, ReadAhead
 
@@ -134,6 +134,10 @@ class GuardedSource:
     def _guard(what: str, call, *args):
         try:
             return call(*args)
+        except ForbiddenMethod:
+            # Not a failed read. The package built a request it promises never
+            # to send, and the operator has to see that, not a coverage note.
+            raise
         except GenerationChainError:
             # A decision this package made on purpose, such as a refusal or a
             # malformed document. Dressing one up as a store failure would
