@@ -1264,6 +1264,9 @@ def check_arguments(parser: argparse.ArgumentParser,
                      f"(got {args.retention_days}); site snapshot policy is "
                      f"5-10 days max")
 
+    if args.batch < 1:
+        parser.error(f"--batch must be at least 1 (got {args.batch})")
+
     checked_ca_cert(parser, args.ca_cert)
 
     if args.emit_mounted and args.emit_classified:
