@@ -64,9 +64,8 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
         self.assertTrue(self._member("verify_restorable.py"))
 
     def test_scripts_unpack_executable_and_nothing_else_does(self):
-        # The docs run `./scripts/run-test-cycle.sh` and the service request's
-        # `./oci-deleteobjects-checksum-repro.sh` straight out of the unpacked
-        # archive. Stored as 0644 they fail with "Permission denied" before
+        # The docs run `./scripts/run-test-cycle.sh` straight out of the
+        # unpacked archive. Stored as 0644 they fail with "Permission denied" before
         # doing anything. The mode comes from the content, a leading `#!`,
         # so two builds of one commit still produce the same bytes.
         with zipfile.ZipFile(self.archive) as zf:
@@ -78,8 +77,6 @@ class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
                 if mode == 0o755:
                     executable.add(info.filename.split("/", 1)[1])
         self.assertIn("scripts/run-test-cycle.sh", executable)
-        self.assertIn("docs/service-request/oci-deleteobjects-checksum-repro.sh",
-                      executable)
 
     def test_the_loop_runner_ships(self):
         # Whoever runs this has a shell and may have nothing else. A test

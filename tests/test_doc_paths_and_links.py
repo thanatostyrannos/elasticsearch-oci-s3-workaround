@@ -773,14 +773,9 @@ class TestRepoInventory(unittest.TestCase):
         # The `docs` floor in TestGuardsAreNotVacuous catches discovery that
         # stops at the repo root. It does not catch discovery that stops one
         # level down: root plus the evidence write-ups plus two README files
-        # already clears the floor with every SKILL.md runbook silently
-        # unchecked, and the runbooks are where the copy-and-run commands
-        # live. Naming a file at each depth is what closes that gap.
-        #
-        # The named skill is es-snapshot-audit because it is the one that
-        # survived the sweeper retirement. It drives snapshot_sizes.py, which
-        # is read-only and has no delete path, so it is not going anywhere for
-        # the reason the others went.
+        # already clears the floor with every nested guide silently
+        # unchecked, and the nested guides are where the copy-and-run
+        # commands live. Naming a file at each depth is what closes that gap.
         #
         # Only structurally stable docs are named. The narrative write-ups
         # get reorganised, and this test is about discovery reaching every
@@ -789,8 +784,8 @@ class TestRepoInventory(unittest.TestCase):
         for expected in (
             "README.md",
             os.path.join("manifests", "README.md"),
-            os.path.join("skills", "README.md"),
-            os.path.join("skills", "es-snapshot-audit", "SKILL.md"),
+            os.path.join("docs", "engineering", "architecture.md"),
+            os.path.join("gitlab", "kubernetes-test-rig", "README.md"),
         ):
             self.assertIn(expected, found)
         self.assertGreaterEqual(
