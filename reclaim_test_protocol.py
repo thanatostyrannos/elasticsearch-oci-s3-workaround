@@ -168,6 +168,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # one refusal drift, and then one bad path gets two different answers.
 sys.path.insert(0, ROOT)
 from generation_chain.paths import PathRefused, checked_path  # noqa: E402
+from generation_chain.redirects import refusing_urlopen  # noqa: E402
 
 COLUMNS = ["cycle", "utc", "mode", "settle", "shards_read",
            "segments_condemned", "deleted", "failed", "unconfirmed",
@@ -276,8 +277,9 @@ def es_call(args, path):
         f"{args.es_user}:{args.es_password}".encode()).decode()
     req.add_header("Authorization", "Basic " + token)
     # refuse_non_http_scheme() above already confirmed only http or https
-    # reaches this call.
-    with urllib.request.urlopen(req, timeout=60) as r:  # nosec B310
+    # reaches this call. A redirect raises RedirectRefused rather than
+    # carrying the Basic credential to another host.
+    with refusing_urlopen(req, timeout=60) as r:  # nosec B310
         return json.loads(r.read())
 
 

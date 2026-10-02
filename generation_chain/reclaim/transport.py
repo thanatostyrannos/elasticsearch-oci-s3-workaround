@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Tuple
 
 from ..errors import GenerationChainError
+from ..redirects import RedirectRefused, refusing_urlopen
 from ..sources.s3 import S3Credentials
 from ..sources.signing import sigv4
 
@@ -121,7 +122,7 @@ def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
                       credentials: S3Credentials, body: bytes,
                       checksum: Tuple[str, str], timeout: float,
                       policy: RetryPolicy = RetryPolicy(),
-                      opener: Callable = urllib.request.urlopen,
+                      opener: Callable = refusing_urlopen,
                       sleep: Callable[[float], None] = time.sleep,
                       jitter: Callable[[], float] = random.random) -> bytes:
     """POST the batch delete `body` and return the store's response bytes.
@@ -151,6 +152,9 @@ def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
         try:
             with opener(request, timeout=timeout) as response:
                 return response.read()
+        except RedirectRefused as exc:
+            # The POST was answered, so there is nothing to retry.
+            raise TransportError(f"{url}: {exc}") from exc
         except urllib.error.HTTPError as exc:
             detail = _detail(exc)
             last_detail = f"{exc.code} from {url}: {detail}"

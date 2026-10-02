@@ -66,6 +66,7 @@ from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 from .credentials import as_secret
 from .errors import GenerationChainError
 from .model import Condemnation
+from .redirects import RedirectRefused, refusing_urlopen
 
 SNAPSHOT_SETTINGS_PREFIX = "index.store.snapshot."
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -175,7 +176,7 @@ class ElasticsearchVeto:
         self.credentials = credentials
         self.timeout = timeout
         self._context = _tls_context(ca_certificate)
-        self._opener = opener or urllib.request.urlopen
+        self._opener = opener or refusing_urlopen
 
     def fetch(self) -> Veto:
         """The protections, or CorroborationUnavailable. Never an empty veto."""
@@ -196,6 +197,9 @@ class ElasticsearchVeto:
             with self._opener(request, timeout=self.timeout,
                               context=self._context) as response:
                 body = response.read()
+        except RedirectRefused as exc:
+            raise CorroborationUnavailable(
+                f"Elasticsearch for {path}: {exc}") from exc
         except urllib.error.HTTPError as exc:
             raise CorroborationUnavailable(
                 f"Elasticsearch answered {exc.code} for {path}. Corroboration "
