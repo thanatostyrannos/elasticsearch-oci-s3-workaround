@@ -273,10 +273,14 @@ going overnight at these settings would leave about 1.5 GB behind.
 
 The audit holds the repository listing in memory while it works, so its own
 memory use scales with object count rather than object size. `--max-ram`, or
-the older `--memory-mb`, does not refuse the whole run up front: it sizes how
-many shard directories are read at once. Only a single shard directory too
-large to hold even on its own refuses before it is read, with exit code 5. This
-is a real limit and it is tracked as
+the older `--memory-mb`, refuses a listing whose object count, at 1,900 bytes
+per object, exceeds the ceiling, before any shard document is read, with exit
+code 5. It also sizes how many shard directories are read at once, and a single
+shard directory too large to hold on its own refuses before it is read, with
+the same exit code. The 1,900 bytes per object is the old estimate and issue #7
+measured more, so the ceiling is lenient and a run near it can still exhaust
+memory. The per-shard-directory redesign in issue #7 is still open, and the
+limit is tracked as
 [issue #7](https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/issues/7).
 
 ## Step 5: start the load generator

@@ -107,8 +107,8 @@ class MemoryBudget:
             f"about {_megabytes(needed)} MB of memory to hold, and only "
             f"{_megabytes(self.limit_bytes)} MB is available to it. Nothing "
             "was read. Run it on a host with more memory, narrow it with "
-            "--prefix, or raise the ceiling with --memory-mb if this host "
-            "really has more than it reports")
+            "--prefix, or raise the ceiling with --max-ram (or --memory-mb) "
+            "if this host really has more than it reports")
 
 
 def _megabytes(value: int) -> int:
