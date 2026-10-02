@@ -24,7 +24,9 @@ from generation_chain.corroboration import (Credentials, CorroborationUnavailabl
 from generation_chain.credentials import (CredentialError, Secret,
                                           load_elasticsearch, load_s3,
                                           require_private)
+from generation_chain.sources.oci import OciConfigError, OciCredentials
 from generation_chain.sources.s3 import S3Credentials
+from generation_chain.sources.signing.rsa import RsaPrivateKey
 
 PASSWORD = "hunter2-do-not-print-me"
 API_KEY = "VnVhQ2ZHY0JDZGJrUW0tZTVhT3g6dWkybHAyYXhUTm1zeWFrdzl0dk5udw=="
@@ -129,6 +131,78 @@ class WhereCredentialsComeFrom(unittest.TestCase):
         # refusing everything.
         path = write(os.path.join(self.dir, "ok.json"), {})
         require_private(path)
+
+
+VECTOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures",
+                      "genchain-oci-signing-vector.json")
+
+
+def test_pem():
+    with open(VECTOR, encoding="utf-8") as handle:
+        return json.load(handle)["private_key_pkcs1"]
+
+
+class OciProfileFiles(unittest.TestCase):
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="genchain-oci-profile-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.key = os.path.join(self.dir, "key.pem")
+        self.config = os.path.join(self.dir, "config")
+        self.put(self.key, test_pem(), 0o600)
+        self.put(self.config,
+                 "[DEFAULT]\nuser=u\nfingerprint=f\ntenancy=t\n"
+                 f"key_file={self.key}\n", 0o600)
+
+    @staticmethod
+    def put(path, text, mode):
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(path, mode)
+
+    def test_private_profile_and_key_load(self):
+        # Use case, so the refusals below cannot pass by refusing everything.
+        # If this broke, no operator with a standard ~/.oci/config could run.
+        loaded = OciCredentials.from_profile(self.config)
+        self.assertEqual(loaded.key_id, "t/u/f")
+
+    def test_a_config_others_can_read_is_refused(self):
+        # Abuse case. A config that arrived by scp at 0644 names the key file
+        # and tenancy to every user on the host, and the JSON credentials
+        # path already refuses the same mode.
+        os.chmod(self.config, 0o644)
+        with self.assertRaises(CredentialError):
+            OciCredentials.from_profile(self.config)
+
+    def test_a_key_file_others_can_read_is_refused(self):
+        # Abuse case. A world-readable API signing key lets any local user
+        # sign requests as the operator's principal.
+        os.chmod(self.key, 0o644)
+        with self.assertRaises(CredentialError):
+            OciCredentials.from_profile(self.config)
+
+    def test_a_missing_key_file_keeps_its_own_error(self):
+        # A missing file is a different fix from a loose one, and the message
+        # must say which, or the operator chmods a file that does not exist.
+        os.unlink(self.key)
+        with self.assertRaises(OciConfigError):
+            OciCredentials.from_profile(self.config)
+
+
+class KeyMaterialDoesNotPrint(unittest.TestCase):
+
+    def test_repr_and_str_hold_no_key_integers(self):
+        # If the key's repr printed its integers, any log line, traceback or
+        # debugger paste that formatted the credentials would hand out the
+        # private exponent.
+        key = RsaPrivateKey.from_pem(test_pem().encode())
+        credentials = OciCredentials(key_id="t/u/f", private_key=key)
+        for text in (repr(key), str(key), repr(credentials), str(credentials),
+                     f"{credentials!r}", f"{key}"):
+            for number in (key.private_exponent, key.modulus):
+                self.assertNotIn(str(number), text)
+                self.assertNotIn(hex(number)[2:], text)
+        self.assertIn("RsaPrivateKey", repr(key))
 
 
 class NoSecretsInArgv(unittest.TestCase):

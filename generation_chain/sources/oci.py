@@ -22,6 +22,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from ..credentials import require_private
 from ..errors import GenerationChainError, SourceReadError
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader, Response
 from .signing import oci_signature
@@ -81,6 +82,8 @@ class OciCredentials:
         """Read an api-key profile out of an `~/.oci/config`-style file."""
         location = os.path.expanduser(
             path or os.environ.get(CONFIG_ENV_VAR) or DEFAULT_CONFIG)
+        if os.path.exists(location):
+            require_private(location)
         parser = configparser.ConfigParser()
         if not parser.read(location):
             raise OciConfigError(f"cannot read the OCI config at {location}")
@@ -94,6 +97,8 @@ class OciCredentials:
                 f"profile {profile!r} in {location} is missing "
                 f"{', '.join(missing)}")
         key_path = os.path.expanduser(section["key_file"])
+        if os.path.exists(key_path):
+            require_private(key_path)
         try:
             with open(key_path, "rb") as handle:
                 pem = handle.read()

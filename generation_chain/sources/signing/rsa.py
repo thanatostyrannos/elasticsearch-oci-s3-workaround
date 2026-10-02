@@ -40,6 +40,12 @@ class RsaPrivateKey:
     modulus: int
     private_exponent: int
 
+    def __repr__(self) -> str:
+        # The public modulus identifies the key without exposing the exponent.
+        digest = hashlib.sha256(
+            self.modulus.to_bytes(self.size_in_bytes, "big")).hexdigest()
+        return f"RsaPrivateKey(sha256_of_modulus={digest[:16]})"
+
     @property
     def size_in_bytes(self) -> int:
         return (self.modulus.bit_length() + 7) // 8
