@@ -35,13 +35,87 @@ this chart creates from values.credentials.*, or an operator-supplied one.
 
 {{/*
 The Elasticsearch endpoint every tool points at: the external URL, or the
-in-cluster ECK service when elasticsearch.external is false.
+in-cluster ECK service when elasticsearch.external is false. The ECK service
+speaks https unless elasticsearch.eck.disableTls is true.
 */}}
 {{- define "rig.esUrl" -}}
 {{- if .Values.elasticsearch.external -}}
 {{- .Values.elasticsearch.url -}}
-{{- else -}}
+{{- else if .Values.elasticsearch.eck.disableTls -}}
 {{- printf "http://%s-es-http.%s.svc:9200" (include "rig.fullname" .) (include "rig.namespace" .) -}}
+{{- else -}}
+{{- printf "https://%s-es-http.%s.svc:9200" (include "rig.fullname" .) (include "rig.namespace" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+"true" when the pods have a CA file for Elasticsearch at /es-ca-cert/ca.crt:
+the PEM an operator set for an external cluster, or the CA the ECK operator
+publishes for an in-cluster cluster with TLS on. Empty otherwise.
+*/}}
+{{- define "rig.hasEsCa" -}}
+{{- if .Values.elasticsearch.external -}}
+{{- if .Values.elasticsearch.caCert -}}true{{- end -}}
+{{- else if not .Values.elasticsearch.eck.disableTls -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/* The mount that puts that CA file in place. Include only when rig.hasEsCa. */}}
+{{- define "rig.esCaMount" -}}
+- name: es-ca-cert
+  mountPath: /es-ca-cert
+  readOnly: true
+{{- end -}}
+
+{{/*
+The volume behind rig.esCaMount. ECK keeps the CA of an in-cluster cluster in
+the Secret <cluster>-es-http-certs-public; only its ca.crt key is mounted, not
+the certificate.
+*/}}
+{{- define "rig.esCaVolume" -}}
+- name: es-ca-cert
+  {{- if .Values.elasticsearch.external }}
+  configMap:
+    name: {{ include "rig.fullname" . }}-es-ca-cert
+  {{- else }}
+  secret:
+    secretName: {{ include "rig.fullname" . }}-es-http-certs-public
+    items:
+      - key: ca.crt
+        path: ca.crt
+  {{- end }}
+{{- end -}}
+
+{{/*
+Refuse to render a combination that would give a read-only job the cluster
+superuser or send its key in the clear. Included once from validate.yaml.
+
+The audit's creds.json and the loop's creds.json carry an Elasticsearch
+section for the repository veto. The chart never writes the ECK elastic user
+into it. For an in-cluster cluster the operator supplies a read-only key (or a
+read-only user) through values or existingSecret, and it must not be the
+placeholder or the elastic user.
+*/}}
+{{- define "rig.validate" -}}
+{{- $asks := or (and .Values.auditCronJob.enabled .Values.auditCronJob.askElasticsearch) (and .Values.qualify.enabled .Values.qualify.askElasticsearch) -}}
+{{- if and (not .Values.elasticsearch.external) $asks (not .Values.credentials.existingSecret) -}}
+{{- $es := .Values.credentials.elasticsearch -}}
+{{- if eq $es.authMethod "apiKey" -}}
+{{- if or (not $es.apiKey) (hasPrefix "CHANGEME" ($es.apiKey | toString)) -}}
+{{- fail "elasticsearch.external is false and a job asks Elasticsearch for the repository, so credentials.elasticsearch.apiKey must be a read-only API key for that cluster. The chart does not substitute the ECK elastic superuser. Set credentials.elasticsearch.apiKey, or set credentials.existingSecret." -}}
+{{- end -}}
+{{- else -}}
+{{- if eq ($es.username | toString) "elastic" -}}
+{{- fail "credentials.elasticsearch.username is the elastic superuser; the audit must use a read-only user. Set credentials.elasticsearch.username to a read-only user, or use authMethod apiKey with credentials.elasticsearch.apiKey." -}}
+{{- end -}}
+{{- if or (not $es.password) (hasPrefix "CHANGEME" ($es.password | toString)) -}}
+{{- fail "elasticsearch.external is false and a job asks Elasticsearch for the repository, so credentials.elasticsearch.password must be the read-only user's password. Set credentials.elasticsearch.password, or set credentials.existingSecret." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if and (not .Values.elasticsearch.external) .Values.auditCronJob.enabled .Values.auditCronJob.askElasticsearch .Values.elasticsearch.eck.disableTls -}}
+{{- fail "the audit would send its Elasticsearch credential to the in-cluster cluster over plain http. Set elasticsearch.eck.disableTls to false so the audit uses https with the ECK CA, or set auditCronJob.askElasticsearch to false." -}}
 {{- end -}}
 {{- end -}}
 
@@ -119,10 +193,16 @@ runs as uid 1001, so the tools cannot open their own credential.
 This copies each file into an emptyDir, owned by the runtime user and still
 0600. It is the only container here that runs as root, it runs before anything
 else, and it does nothing but the copy.
+
+Called with a dict: root is the chart context, keys is the list of Secret keys
+this pod's command reads. Only those keys are mounted (see
+rig.credentialVolumes), so only those keys are copied.
 */}}
 {{- define "rig.credentialStagingInit" -}}
+{{- $root := .root -}}
+{{- $eck := and (not $root.Values.elasticsearch.external) (has $root.Values.credentials.keys.esPassword .keys) -}}
 - name: stage-credentials
-  image: {{ .Values.image.python | quote }}
+  image: {{ $root.Values.image.python | quote }}
   # The deliberate exception: this step exists only because a Secret volume
   # is owned by root at mode 0600 and the UBI image's runtime user (uid
   # 1001) cannot read it, so something has to run as root to copy it out.
@@ -137,7 +217,7 @@ else, and it does nothing but the copy.
     capabilities:
       drop: ["ALL"]
   resources:
-    {{- toYaml .Values.initContainerResources | nindent 4 }}
+    {{- toYaml $root.Values.initContainerResources | nindent 4 }}
   env:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
@@ -145,9 +225,9 @@ else, and it does nothing but the copy.
     - python3
     - -c
     - |
-      import json, os, pathlib, shutil
+      import os, pathlib, shutil
       raw, out = pathlib.Path("/secrets-raw"), pathlib.Path("/secrets")
-      uid, gid = {{ .Values.securityContext.runAsUser | int64 }}, {{ .Values.securityContext.runAsGroup | int64 }}
+      uid, gid = {{ $root.Values.securityContext.runAsUser | int64 }}, {{ $root.Values.securityContext.runAsGroup | int64 }}
 
       for src in sorted(raw.iterdir()):
           if src.is_file():
@@ -155,38 +235,29 @@ else, and it does nothing but the copy.
               shutil.copyfile(src, dst)
               os.chown(dst, uid, gid)
               os.chmod(dst, 0o600)
+      {{- if $eck }}
 
-      # An in-cluster cluster does not use the password from values: ECK
-      # generates its own for the elastic user and rotates it whenever the
-      # cluster is rebuilt. Take it from there, or every tool authenticates
-      # with a password nothing ever set.
+      # An in-cluster cluster does not use the harness password from values:
+      # ECK generates its own for the elastic user and rotates it whenever
+      # the cluster is rebuilt. Take it from there, or the harness
+      # authenticates with a password nothing ever set. Only the harness
+      # login file is replaced. creds.json is left alone, so the read-only
+      # veto never runs as the superuser.
       eck = pathlib.Path("/eck-elastic-user/elastic")
       if eck.exists():
-          password = eck.read_text().strip()
-          for name, write in (
-                  ({{ .Values.credentials.keys.esPassword | quote }},
-                   lambda p: p.write_text(password)),
-                  ({{ .Values.credentials.keys.credentialsJson | quote }},
-                   None)):
-              path = out / name
-              if write is not None:
-                  write(path)
-              else:
-                  doc = json.loads(path.read_text())
-                  section = doc.setdefault("elasticsearch", {})
-                  section.pop("api_key", None)
-                  section["username"], section["password"] = "elastic", password
-                  path.write_text(json.dumps(doc))
-              os.chown(path, uid, gid)
-              os.chmod(path, 0o600)
-          print("elastic user password taken from the ECK-generated secret")
+          path = out / {{ $root.Values.credentials.keys.esPassword | quote }}
+          path.write_text(eck.read_text().strip())
+          os.chown(path, uid, gid)
+          os.chmod(path, 0o600)
+          print("harness login password taken from the ECK-generated secret")
+      {{- end }}
   volumeMounts:
     - name: credentials-raw
       mountPath: /secrets-raw
       readOnly: true
     - name: credentials
       mountPath: /secrets
-    {{- if not .Values.elasticsearch.external }}
+    {{- if $eck }}
     - name: eck-elastic-user
       mountPath: /eck-elastic-user
       readOnly: true
@@ -195,21 +266,41 @@ else, and it does nothing but the copy.
 
 {{/*
 The Secret as mounted, and the emptyDir the staging step writes into. Tools
-read /secrets and never see /secrets-raw.
+read /secrets and never see /secrets-raw. Called with a dict (root, keys): the
+Secret volume lists exactly those keys, so a pod cannot read a credential its
+command does not use. A key missing from the Secret stops the pod at start
+instead of mounting less than the command expects.
 */}}
 {{- define "rig.credentialVolumes" -}}
+{{- $root := .root -}}
 - name: credentials-raw
   secret:
-    secretName: {{ include "rig.credentialsSecretName" . }}
+    secretName: {{ include "rig.credentialsSecretName" $root }}
     defaultMode: 0600
+    items:
+      {{- range .keys }}
+      - key: {{ . | quote }}
+        path: {{ . | quote }}
+      {{- end }}
 - name: credentials
   emptyDir: {}
-{{- if not .Values.elasticsearch.external }}
+{{- if and (not $root.Values.elasticsearch.external) (has $root.Values.credentials.keys.esPassword .keys) }}
 - name: eck-elastic-user
   secret:
-    secretName: {{ include "rig.fullname" . }}-es-elastic-user
+    secretName: {{ include "rig.fullname" $root }}-es-elastic-user
     defaultMode: 0600
 {{- end }}
+{{- end -}}
+
+{{/*
+Secret keys the load generator and teardown read: the harness login password
+file, plus the store secret file when the bucket listing is on. The loop and
+the audit pass their own lists, since they read creds.json.
+*/}}
+{{- define "rig.keysHarness" -}}
+{{- $k := list .Values.credentials.keys.esPassword -}}
+{{- if .Values.churnRig.listing.enabled -}}{{- $k = append $k .Values.credentials.keys.s3SecretAccessKey -}}{{- end -}}
+{{- toJson $k -}}
 {{- end -}}
 
 {{/*
@@ -264,7 +355,7 @@ the two can never drift apart.
 - {{ .Values.credentials.harnessEsUser | quote }}
 - --password-file
 - /secrets/{{ .Values.credentials.keys.esPassword }}
-{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+{{- if include "rig.hasEsCa" . }}
 - --ca-cert
 - /es-ca-cert/ca.crt
 {{- end }}
@@ -327,10 +418,8 @@ rig.sourceVolumes needs.
 - name: credentials
   mountPath: /secrets
   readOnly: true
-{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
-- name: es-ca-cert
-  mountPath: /es-ca-cert
-  readOnly: true
+{{- if include "rig.hasEsCa" . }}
+{{ include "rig.esCaMount" . }}
 {{- end }}
 {{- end -}}
 
@@ -339,11 +428,9 @@ rig.sourceVolumes needs.
 - name: state
   persistentVolumeClaim:
     claimName: {{ include "rig.fullname" . }}-state
-{{ include "rig.credentialVolumes" . }}
-{{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
-- name: es-ca-cert
-  configMap:
-    name: {{ include "rig.fullname" . }}-es-ca-cert
+{{ include "rig.credentialVolumes" (dict "root" . "keys" (include "rig.keysHarness" . | fromJsonArray)) }}
+{{- if include "rig.hasEsCa" . }}
+{{ include "rig.esCaVolume" . }}
 {{- end }}
 {{- end -}}
 
@@ -358,8 +445,17 @@ start, and gives up loudly.
 
 Any HTTP answer counts, including 401. The point is that something is
 listening, not that this container can authenticate.
+
+Over https the probe verifies the certificate with the CA the tools use
+(/es-ca-cert/ca.crt) or, when none is configured, the image's own trust store.
+When elasticsearch.insecureTls is true and no CA is configured, nothing could
+verify the certificate, so the probe only opens a TCP connection and sends no
+request.
 */}}
 {{- define "rig.waitForElasticsearch" -}}
+{{- $hasCa := include "rig.hasEsCa" . -}}
+{{- $https := hasPrefix "https://" (include "rig.esUrl" .) -}}
+{{- $tcpOnly := and $https .Values.elasticsearch.insecureTls (not $hasCa) -}}
 - name: wait-for-elasticsearch
   image: {{ .Values.image.python | quote }}
   env:
@@ -373,22 +469,34 @@ listening, not that this container can authenticate.
     {{- include "rig.securityContext" . | nindent 4 }}
   resources:
     {{- toYaml .Values.initContainerResources | nindent 4 }}
+  {{- if $hasCa }}
+  volumeMounts:
+    {{- include "rig.esCaMount" . | nindent 4 }}
+  {{- end }}
   command:
     - python3
     - -c
     - |
-      import os, ssl, time, urllib.request, urllib.error
+      import os, socket, ssl, time, urllib.error, urllib.parse, urllib.request
       url, deadline = os.environ["ES_URL"], time.time() + int(os.environ["WAIT_SECONDS"])
-      ctx = ssl.create_default_context()
-      ctx.check_hostname = False
-      ctx.verify_mode = ssl.CERT_NONE
+      {{- if $tcpOnly }}
+      parts = urllib.parse.urlsplit(url)
+      address = (parts.hostname, parts.port or 443)
+      {{- else }}
+      ctx = ssl.create_default_context({{ if $hasCa }}cafile="/es-ca-cert/ca.crt"{{ end }})
+      {{- end }}
       last = "no attempt made"
       while time.time() < deadline:
           try:
+              {{- if $tcpOnly }}
+              socket.create_connection(address, timeout=5).close()
+              print(f"{url} accepts connections (certificate not checked)"); raise SystemExit(0)
+              {{- else }}
               urllib.request.urlopen(url, timeout=5, context=ctx)
               print(f"{url} is answering"); raise SystemExit(0)
           except urllib.error.HTTPError as exc:
               print(f"{url} is answering (HTTP {exc.code})"); raise SystemExit(0)
+              {{- end }}
           except Exception as exc:
               last = f"{type(exc).__name__}: {exc}"
           time.sleep(5)

@@ -32,7 +32,7 @@ spec:
         fsGroup: {{ .Values.securityContext.fsGroup | int64 }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
-        {{- include "rig.credentialStagingInit" . | nindent 8 }}
+        {{- include "rig.credentialStagingInit" (dict "root" . "keys" (include "rig.keysHarness" . | fromJsonArray)) | nindent 8 }}
         {{- include "rig.waitForElasticsearch" . | nindent 8 }}
         {{- include "rig.teardownStaleStateInit" . | nindent 8 }}
       containers:
@@ -53,7 +53,7 @@ spec:
             - {{ .Values.credentials.harnessEsUser | quote }}
             - --password-file
             - /secrets/{{ .Values.credentials.keys.esPassword }}
-            {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
+            {{- if include "rig.hasEsCa" . }}
             - --ca-cert
             - /es-ca-cert/ca.crt
             {{- end }}
@@ -140,20 +140,16 @@ spec:
             - name: credentials
               mountPath: /secrets
               readOnly: true
-            {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
-            - name: es-ca-cert
-              mountPath: /es-ca-cert
-              readOnly: true
+            {{- if include "rig.hasEsCa" . }}
+            {{- include "rig.esCaMount" . | nindent 12 }}
             {{- end }}
       volumes:
         {{- include "rig.sourceVolumes" . | nindent 8 }}
         - name: state
           persistentVolumeClaim:
             claimName: {{ include "rig.fullname" . }}-state
-        {{- include "rig.credentialVolumes" . | nindent 8 }}
-        {{- if and .Values.elasticsearch.external .Values.elasticsearch.caCert }}
-        - name: es-ca-cert
-          configMap:
-            name: {{ include "rig.fullname" . }}-es-ca-cert
+        {{- include "rig.credentialVolumes" (dict "root" . "keys" (include "rig.keysHarness" . | fromJsonArray)) | nindent 8 }}
+        {{- if include "rig.hasEsCa" . }}
+        {{- include "rig.esCaVolume" . | nindent 8 }}
         {{- end }}
 {{- end }}

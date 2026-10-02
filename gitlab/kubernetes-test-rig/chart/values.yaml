@@ -131,6 +131,9 @@ credentials:
     # creds.json's "elasticsearch" section. Defaults to an API key: a leaked
     # key can be scoped and revoked on its own, a leaked password takes the
     # whole account with it.
+    # With elasticsearch.external false the chart never substitutes the ECK
+    # elastic superuser here: set a read-only key (or read-only user) or the
+    # chart refuses to render when the audit or the loop asks Elasticsearch.
     authMethod: apiKey        # apiKey | usernamePassword
     apiKey: "CHANGEME-es-api-key"
     username: "elastic"
@@ -211,7 +214,10 @@ elasticsearch:
     # went unnoticed here until the chart met one that does.
     storageSize: "10Gi"
     storageClassName: ""    # empty uses the cluster default StorageClass
-    disableTls: true        # matches this project's lab manifest for Elasticsearch: plain HTTP on 9200
+    # true: plain HTTP on 9200, as this project's lab manifest does. false: ECK's
+    # https endpoint, and every tool verifies the operator CA. The audit
+    # refuses to render over plain HTTP when it asks this cluster questions.
+    disableTls: true
     # The OCI S3-compatibility client Elasticsearch itself uses to register
     # a repository with --s3-client oci. Leave namespace/region empty if you
     # are not registering an OCI-backed repository from the in-cluster ES.

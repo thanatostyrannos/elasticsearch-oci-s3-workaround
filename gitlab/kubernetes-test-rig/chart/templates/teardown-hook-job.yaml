@@ -45,7 +45,7 @@ spec:
         fsGroup: {{ .Values.securityContext.fsGroup | int64 }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
-        {{- include "rig.credentialStagingInit" . | nindent 8 }}
+        {{- include "rig.credentialStagingInit" (dict "root" . "keys" (include "rig.keysHarness" . | fromJsonArray)) | nindent 8 }}
         {{- include "rig.waitForElasticsearch" . | nindent 8 }}
       containers:
         - name: teardown
