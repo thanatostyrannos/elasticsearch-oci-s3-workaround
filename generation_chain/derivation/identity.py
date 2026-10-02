@@ -144,10 +144,36 @@ def check_snapshot_names(document: ShardDocument, where: str,
         f"referenced by {_listed(expected)}")
 
 
+class WriterUuidSightings:
+    """Every directory a parsed shard document claimed each writer uuid under.
+
+    `shards._read` records here the moment a document parses, before any
+    identity check runs and whatever happens to the document afterwards. A
+    document a later check rejects, or whose directory a later check drops,
+    still claimed its writers under the key it arrived at, and that claim is
+    the evidence `writer_uuid_collisions` needs.
+    """
+
+    def __init__(self) -> None:
+        self._directories: Dict[object, Set[str]] = {}
+
+    def record(self, directory: str, document: ShardDocument) -> None:
+        for writer in document.writer_uuids:
+            self._directories.setdefault(writer, set()).add(directory)
+
+    def directories_claiming(self, writer: object) -> Set[str]:
+        return self._directories.get(writer, set())
+
+
 def writer_uuid_collisions(
-        by_directory: Mapping[str, Iterable[ShardDocument]]
-) -> Dict[str, Set[str]]:
-    """Directories whose documents claim a Lucene writer another directory owns.
+        believed: Mapping[str, Iterable[object]],
+        sightings: WriterUuidSightings) -> Dict[str, Set[str]]:
+    """Directories whose believed writer uuids another directory's documents claim.
+
+    `believed` maps each directory still standing to the writer uuids of
+    the documents this run accepted for it. `sightings` holds every
+    directory any parsed document claimed each writer under, including
+    documents that a check rejected and directories that a check dropped.
 
     WHAT WAS MEASURED. Two Elasticsearch 9.5.2 repositories, both captured
     whole and kept as fixtures in this project's own test suite.
@@ -180,24 +206,34 @@ def writer_uuid_collisions(
     all this function tests, and they are not far apart. So this is a set
     membership check and never a distance or a prefix check.
 
-    THE DIRECTION. A writer uuid seen under two directories is a positive
-    contradiction: one of the two reads returned the other's document. Both
-    directories are named, because there is no way to tell which read was
-    wrong. A MATCHING writer uuid never blesses anything, so this function can
-    only ever add a directory to the dropped set. Elasticsearch treats the
-    field the same way in `StoreFileMetadata.isSame`, where a mismatch decides
-    and a match falls through to the other comparisons.
+    THE RULE. A directory is named when a writer uuid it believes was also
+    claimed under some OTHER directory by any document this run parsed. When
+    every read returned its own key's document, each writer is claimed under
+    one directory only, so a healthy store names nothing, and a directory's
+    own documents, rejected or not, never count against it. A claim under a
+    second directory is a positive contradiction: one of those reads returned
+    the other directory's document. When both directories believe the shared
+    writer, both are named, because there is no way to tell which read was
+    wrong. A directory whose only claim to the writer sits in a rejected
+    document already contributes nothing from that document, so the claim
+    names only the directory that believes it.
+
+    THE DIRECTION. A MATCHING writer uuid never blesses anything, so this
+    function can only ever add a directory to the dropped set. Elasticsearch
+    treats the field the same way in `StoreFileMetadata.isSame`, where a
+    mismatch decides and a match falls through to the other comparisons.
+
+    THE LIMIT. A document that never parsed claimed nothing, so a read that
+    fails outright can still remove the only witness to a shared writer, and
+    the directory it would have contradicted is then believed.
     """
-    seen: Dict[object, Set[str]] = {}
-    for directory, documents in by_directory.items():
-        for document in documents:
-            for writer in document.writer_uuids:
-                seen.setdefault(writer, set()).add(directory)
     out: Dict[str, Set[str]] = {}
-    for writer, directories in seen.items():
-        if len(directories) > 1:
-            for directory in directories:
-                out.setdefault(directory, set()).update(directories - {directory})
+    for directory, writers in believed.items():
+        others: Set[str] = set()
+        for writer in writers:
+            others |= sightings.directories_claiming(writer) - {directory}
+        if others:
+            out[directory] = others
     return out
 
 

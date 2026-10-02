@@ -58,6 +58,7 @@ MODULES = [
     "tests.test_generation_chain_cli",
     "tests.test_generation_chain_transports",
     "tests.test_generation_chain_monotonicity",
+    "tests.test_generation_chain_writer_uuid_evidence",
     "tests.test_lucene_segments",
     "tests.test_generation_chain_lucene_commit",
     "tests.test_reclaim_manifest",
@@ -143,7 +144,12 @@ CASES = [
      "    found = set(document.by_snapshot_name)\n    if True:"),
     ("a-writer-uuid-under-two-directories-drops-both",
      "derivation/identity.py",
-     "        if len(directories) > 1:", "        if False:"),
+     "        if others:\n            out[directory] = others",
+     "        if False:\n            out[directory] = others"),
+    ("a-parsed-document-s-writer-uuids-count-whatever-checks-it-fails",
+     "derivation/shards.py",
+     "        parsed.writers.record(location.directory, document)",
+     "        pass"),
 
     # -- the shard survey --------------------------------------------------
     ("a-live-snapshot-here-must-be-in-the-current-file-list",
@@ -268,7 +274,7 @@ CASES = [
      "    if missing:", "    if False:"),
     ("the-commit-oracle-tally-is-recorded-per-document",
      "derivation/shards.py",
-     "        tally.record(key, document)", "        pass"),
+     "        parsed.tally.record(key, document)", "        pass"),
 
     # -- reclaim: a manifest cut off part way through a write is refused ---
     ("a-manifest-without-a-trailing-newline-is-refused",

@@ -21,6 +21,9 @@ instead, and that is where the derivation stopped being monotone: what the run
 needed to read depended on what it had managed to read, so corrupting a root
 generation removed the requirement to read a shard document, which re-admitted
 the shard that document had been suppressing. Adding a failure grew the list.
+One effect of a failed read is not local and is stated where it lives: a
+document that never parsed claims no writer uuid, so it cannot witness a
+writer-uuid collision. See `_drop_global_writer_uuid_collisions`.
 
 ABSENCE IS NEVER POSITIVE EVIDENCE, and this module is where that rule has been
 broken most often. An index the current generation does not list looks like an
@@ -44,9 +47,9 @@ from ..sources import hint
 from ..sources import RepositorySource
 from ..sources.budget import RESIDENT_BYTES_PER_OBJECT
 from .chain import Chain
-from .identity import (Doubt, check_directory, check_snapshot_names,
-                       require_blob_names, writer_uuid_collisions,
-                       WRITER_UUID_COLLISION)
+from .identity import (Doubt, WriterUuidSightings, check_directory,
+                       check_snapshot_names, require_blob_names,
+                       writer_uuid_collisions, WRITER_UUID_COLLISION)
 from .keys import KeyIndex
 
 # `indices/<index>/<shard>/snap-<uuid>.dat`, one snapshot's own shard document.
@@ -76,8 +79,8 @@ class ShardHistory:
     current: ShardDocument
     documents: Dict[int, ShardDocument] = field(default_factory=dict)
     unreadable: Dict[int, Doubt] = field(default_factory=dict)
-    # The union of every document's writer uuids this shard has produced,
-    # current generation and every era read so far. Kept even after
+    # The union of the writer uuids of every document this run accepted for
+    # this shard, current generation and every era read so far. Kept even after
     # `documents` is cleared, because the writer-uuid collision check has to
     # run once against the whole run rather than once per batch: the set is
     # bounded by how many Lucene writers a shard has ever had, not by how
@@ -143,6 +146,21 @@ class CommitOracleTally:
         self.counted.add(key)
         self.checked += document.commit_oracle_checked
         self.skipped += document.commit_oracle_skipped
+
+
+@dataclass
+class ParseRecord:
+    """What `_read` records about every shard document it parses.
+
+    Both halves record before any identity check runs, so what they hold
+    does not depend on which documents those checks went on to reject or
+    which directories a later check dropped. `writers` is the run-wide
+    evidence the writer-uuid collision check runs against; see
+    `_drop_global_writer_uuid_collisions`.
+    """
+
+    tally: CommitOracleTally = field(default_factory=CommitOracleTally)
+    writers: WriterUuidSightings = field(default_factory=WriterUuidSightings)
 
 
 @dataclass
@@ -214,12 +232,13 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
 
     The writer-uuid collision check runs ONCE, after every group has been
     read, against `ShardHistory.writer_uuids`, which every location keeps
-    for the whole run regardless of `.documents` being cleared per group.
-    It has to run this way rather than per group: two directories whose
-    documents claim the same Lucene writer identity are a contradiction
-    wherever in the run they are read, and a check that only compared
-    directories inside one group would miss a pair split across two of
-    them. `on_collision(locations)`, if given, runs once with whichever
+    for the whole run regardless of `.documents` being cleared per group,
+    and against `ParseRecord.writers`, which every parsed document in both
+    passes recorded into. It has to run this way rather than per group: two
+    directories whose documents claim the same Lucene writer identity are a
+    contradiction wherever in the run they are read, and a check that only
+    compared directories inside one group would miss a pair split across
+    two of them. `on_collision(locations)`, if given, runs once with whichever
     locations this removed, so a caller that condemned a group's segments
     before the whole run's writer uuids were known can take back
     condemnations that came from a directory since found untrustworthy.
@@ -232,10 +251,10 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     live_documents_here = _live_shard_documents(keys, set(chain.final.snapshots))
     live_indices = _live_index_uuids(chain)
 
-    tally = CommitOracleTally()
+    parsed = ParseRecord()
     histories, dropped, retired = _survey_current(
         source, chain, wanted, present, owners, live_documents_here,
-        live_indices, index, tally)
+        live_indices, index, parsed)
     _check_declared_extent(source, chain, histories, dropped, notes)
 
     for group in _shard_batches(sorted(histories, key=_location_order), groups):
@@ -257,21 +276,22 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
         for location in group:
             history = histories[location]
             _read_eras(source, chain, location, wanted[location], cache,
-                      history.present_blobs, owners, index, history, tally)
+                      history.present_blobs, owners, index, history, parsed)
         if on_group is not None:
             survivors = [location for location in group if location in histories]
             on_group(survivors, histories)
             for location in survivors:
                 histories[location].documents = {}
 
-    collided = _drop_global_writer_uuid_collisions(histories, dropped)
+    collided = _drop_global_writer_uuid_collisions(histories, dropped,
+                                                   parsed.writers)
     if on_collision is not None and collided:
         on_collision(collided)
 
     return ShardSurvey(histories=histories, dropped=dropped,
                        considered=len(wanted) - len(retired), retired=retired,
-                       commit_oracle_checked=tally.checked,
-                       commit_oracle_skipped=tally.skipped)
+                       commit_oracle_checked=parsed.tally.checked,
+                       commit_oracle_skipped=parsed.tally.skipped)
 
 
 def _location_order(location: ShardLocation) -> Tuple[str, int]:
@@ -283,15 +303,16 @@ def _survey_current(
         wanted: Dict[ShardLocation, Dict[int, Optional[str]]],
         present: Dict[str, Set[str]], owners: Dict[str, Set[str]],
         live_documents_here: Dict[str, Set[str]], live_indices: Set[str],
-        index: KeyIndex, tally: "CommitOracleTally"
+        index: KeyIndex, parsed: ParseRecord
 ) -> Tuple[Dict[ShardLocation, ShardHistory], Dict[str, Doubt], Dict[str, Doubt]]:
     """Decide which shard directories survive on their current document alone.
 
     One document per directory, so this never grows with how much history a
     shard carries, which is why it runs for every directory the chain names
-    before any batching starts. `tally` is the same instance the batched era
-    reads record into later: the count this reports is a whole-run total,
-    not a per-batch one, so it has to outlive any one batch's cache.
+    before any batching starts. `parsed` is the same instance the batched
+    era reads record into later: the counts and writer uuids it holds are
+    whole-run totals, not per-batch ones, so it has to outlive any one
+    batch's cache.
     """
     cache: Dict[str, Optional[ShardDocument]] = {}
     histories: Dict[ShardLocation, ShardHistory] = {}
@@ -301,7 +322,7 @@ def _survey_current(
         stems = frozenset(present.get(location.directory, set()))
         live, current, doubt = _current_live_set(
             source, chain, location, cache, stems, owners, index, live_indices,
-            live_documents_here.get(location.directory, set()), tally)
+            live_documents_here.get(location.directory, set()), parsed)
         if doubt is not None:
             if doubt.code == INDEX_RETIRED:
                 retired[location.directory] = doubt
@@ -339,13 +360,13 @@ def _read_eras(source: RepositorySource, chain: Chain, location: ShardLocation,
                cache: Dict[str, Optional[ShardDocument]],
                stems: FrozenSet[str], owners: Dict[str, Set[str]],
                index: KeyIndex, history: ShardHistory,
-               tally: CommitOracleTally) -> None:
+               parsed: ParseRecord) -> None:
     """The file lists of the earlier eras, each tied to this directory or left out."""
     for generation, shard_generation in sorted(per_generation.items()):
         if shard_generation is None:
             continue
         where = f"index-{shard_generation}"
-        document = _read(source, location, shard_generation, cache, tally)
+        document = _read(source, location, shard_generation, cache, parsed)
         if document is None:
             history.unreadable[generation] = Doubt(
                 CURRENT_DOCUMENT_UNREADABLE, f"{where} could not be read")
@@ -366,55 +387,57 @@ def _read_eras(source: RepositorySource, chain: Chain, location: ShardLocation,
         history.writer_uuids = history.writer_uuids | document.writer_uuids
 
 
-@dataclass(frozen=True)
-class _WriterUuidWitness:
-    """A stand-in for a ShardDocument that carries only its writer uuids.
-
-    `identity.writer_uuid_collisions` reads nothing off what it is given
-    except `.writer_uuids`, so this lets the check below run from
-    `ShardHistory.writer_uuids`, the small whole-run summary that survives
-    `.documents` being discarded, rather than from the documents themselves.
-    """
-
-    writer_uuids: FrozenSet[object]
-
-
 def _drop_global_writer_uuid_collisions(
         histories: Dict[ShardLocation, ShardHistory],
-        dropped: Dict[str, Doubt]) -> List[ShardLocation]:
-    """A Lucene writer identity seen under two directories drops both.
+        dropped: Dict[str, Doubt],
+        sightings: WriterUuidSightings) -> List[ShardLocation]:
+    """A Lucene writer identity seen under two directories drops the believer.
 
-    See `identity.writer_uuid_collisions` for what was measured and for the
-    claim it refutes. The check can only ever REJECT: a matching writer uuid
-    never blesses a document, which mirrors how Elasticsearch treats the field
-    in `StoreFileMetadata.isSame`, where a mismatch returns false and a match
-    falls through to the length, checksum and hash conjunction.
+    See `identity.writer_uuid_collisions` for what was measured, for the
+    exact rule, and for the claim it refutes. The check can only ever
+    REJECT: a matching writer uuid never blesses a document, which mirrors
+    how Elasticsearch treats the field in `StoreFileMetadata.isSame`, where
+    a mismatch returns false and a match falls through to the length,
+    checksum and hash conjunction.
 
-    Runs ONCE, against every surviving directory's whole-run `writer_uuids`
-    summary, after every batch has been read. Not per batch: the set a
-    directory has accumulated by the end of the run is what the collision
-    is measured against, and two directories claiming the same writer
-    identity are a contradiction wherever in the run each was read, not
-    only when they happen to land in the same group. The set itself is
-    bounded by how many Lucene writers a shard has ever had, not by how
-    much history it carries: measured stable at nine values across three
+    Runs ONCE, after every batch has been read. It compares each surviving
+    directory's whole-run `writer_uuids` summary, the writers of the
+    documents this run believed for it, against `sightings`, the writers
+    that EVERY parsed shard document claimed in both passes, which `_read`
+    recorded before any identity check ran. The comparison uses the
+    parse-time record and not only the other survivors, because the
+    evidence of a shared writer must not depend on the witness surviving. A
+    witness directory that a later check dropped, or whose documents a
+    check rejected, still parsed a document claiming that writer under its
+    own key. When the check compared survivors only, one more fault could
+    remove the contradiction and admit the forged file list it pointed at.
+
+    THE LIMIT. A read that fails outright parses nothing and so records no
+    writer. When that document was the only one carrying the shared writer,
+    the collision goes unseen, because nothing else this run reads names
+    the writer instead.
+
+    Neither summary has to be narrowed to afford batching. Each is bounded
+    by how many Lucene writers the shards have ever had, not by how much
+    history they carry: measured stable at nine values across three
     generations of one shard (docs/repository-layout-and-reachability.md),
-    so keeping it for the whole run costs nothing like what keeping the
-    documents themselves did, and this check does not have to be narrowed
-    to afford batching. `check_directory` is necessary and not sufficient
-    against a fetch returning another directory's document (a real document
-    from a different shard whose blob set happens to be contained in the
-    victim directory's still passes it); this is the one check that stands
-    against exactly that case, so it runs at full strength.
+    so keeping them for the whole run costs nothing like what keeping the
+    documents themselves did. `check_directory` is necessary and not
+    sufficient against a fetch returning another directory's document (a
+    real document from a different shard whose blob set happens to be
+    contained in the victim directory's still passes it); this is the one
+    check that stands against exactly that case, so it runs at full
+    strength.
 
     Returns the locations this removed. Segment condemnation happens per
     batch, before the whole run's writer uuids are known, so a caller that
     already condemned one of these locations' segments has to take that
     back; see `run_audit`'s `on_collision`.
     """
-    by_directory = {location.directory: [_WriterUuidWitness(history.writer_uuids)]
-                    for location, history in histories.items()}
-    for directory, others in writer_uuid_collisions(by_directory).items():
+    believed = {location.directory: history.writer_uuids
+                for location, history in histories.items()}
+    for directory, others in writer_uuid_collisions(believed,
+                                                    sightings).items():
         dropped[directory] = Doubt(
             WRITER_UUID_COLLISION,
             "documents read here claim Lucene writer identities that also "
@@ -432,7 +455,7 @@ def _current_live_set(source: RepositorySource, chain: Chain,
                       cache: Dict[str, Optional[ShardDocument]],
                       stems: FrozenSet[str], owners: Dict[str, Set[str]],
                       index: KeyIndex, live_indices: Set[str],
-                      live_documents: Set[str], tally: CommitOracleTally
+                      live_documents: Set[str], parsed: ParseRecord
                       ) -> Tuple[FrozenSet[str], Optional[ShardDocument],
                                  Optional[Doubt]]:
     """What the ANCHOR generation still says lives in this shard.
@@ -486,7 +509,7 @@ def _current_live_set(source: RepositorySource, chain: Chain,
             f"generation {chain.current_generation} names no shard generation "
             f"for shard {location.shard} of index {entry.name!r}")
     where = f"index-{shard_generation}"
-    document = _read(source, location, shard_generation, cache, tally)
+    document = _read(source, location, shard_generation, cache, parsed)
     if document is None:
         return frozenset(), None, Doubt(
             CURRENT_DOCUMENT_UNREADABLE,
@@ -778,7 +801,7 @@ def _shard_generation_ids(
 
 def _read(source: RepositorySource, location: ShardLocation,
           shard_generation: str, cache: Dict[str, Optional[ShardDocument]],
-          tally: CommitOracleTally) -> Optional[ShardDocument]:
+          parsed: ParseRecord) -> Optional[ShardDocument]:
     """One shard document, or None when this run may not use it.
 
     `require_blob_names` runs here rather than at a call site, so there is no
@@ -787,18 +810,22 @@ def _read(source: RepositorySource, location: ShardLocation,
     every directory in the repository, which is how one read turns into a live
     set for the wrong shard.
 
-    `tally` records here too, once per key actually parsed rather than once
+    `parsed` records here too, once per key actually parsed rather than once
     per call site, which is why it happens before `require_blob_names`: the
     Lucene commit cross-check already ran during `parse_shard_snapshots`, and
     that stands whether or not this document goes on to fail a different,
-    unrelated check.
+    unrelated check. The writer uuids are recorded at the same point for the
+    same reason. The document claimed them under this key whatever a later
+    check decides, and the collision check needs that claim even when the
+    document or its directory does not survive.
     """
     key = f"{location.directory}/index-{shard_generation}"
     if key in cache:
         return cache[key]
     try:
         document = parse_shard_snapshots(source.fetch(key), key)
-        tally.record(key, document)
+        parsed.tally.record(key, document)
+        parsed.writers.record(location.directory, document)
         require_blob_names(document, key)
     except (SourceReadError, GenerationChainError):
         document = None
