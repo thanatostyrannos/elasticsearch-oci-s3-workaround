@@ -157,8 +157,9 @@ else
 fi
 
 say "starting $CYCLES cycle(s)"
-python3 reclaim_test_protocol.py "${args[@]}"
-status=$?
+# A failing protocol must still reach the report below, so errexit is off for this one command.
+status=0
+python3 reclaim_test_protocol.py "${args[@]}" || status=$?
 
 say "done, exit $status"
 say "totals, read from the per-cycle execute files rather than the summary:"
@@ -169,5 +170,9 @@ if ls "$OUT"/exec-*.txt >/dev/null 2>&1; then
 else
   echo "    no execute files: nothing was deleted"
 fi
-echo "    cycles recorded: $(( $(wc -l < "$OUT/cycles.tsv") - 1 ))"
+if [[ -f "$OUT/cycles.tsv" ]]; then
+  echo "    cycles recorded: $(( $(wc -l < "$OUT/cycles.tsv") - 1 ))"
+else
+  echo "    cycles recorded: 0 (no cycles.tsv)"
+fi
 exit "$status"
