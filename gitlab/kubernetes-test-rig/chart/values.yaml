@@ -418,7 +418,7 @@ teardown:
     enabled: true          # run automatically on `helm uninstall` (post-delete hook)
   standalone:
     enabled: false          # also render an always-present Job you can trigger with
-                             # `kubectl create job --from=job/<release>-teardown-manual manual-1`
+                             # `kubectl create job --from=job/<release>-<nameOverride>-teardown-manual manual-1`
   deriveFromPrefix: false   # --derive-from-prefix; proceed without a state file. Read the
                              # tool's own refusal text before setting this: derived names
                              # are ordinary ones and may belong to a repository this rig

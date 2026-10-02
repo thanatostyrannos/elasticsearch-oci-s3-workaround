@@ -18,7 +18,7 @@ does not change what the tools do, only how they are deployed.
 | Job `<release>-qualify` | `reclaim_test_protocol.py` | `qualify` | **No.** Manual only. |
 | CronJob `<release>-audit` | `python3 -m generation_chain` | `auditCronJob` | **Yes.** Read-only. |
 | Job `<release>-teardown-hook` | `snapshot_churn_rig.py teardown` | `teardown` | runs on `helm uninstall` |
-| Job `<release>-teardown-manual` (suspended template) | same | `teardown.standalone` | triggered by hand |
+| Job `<release>-<nameOverride>-teardown-manual` (suspended template) | same | `teardown.standalone` | triggered by hand |
 
 `values.yaml` exposes every flag every one of these commands accepts,
 grouped by tool, with a comment on each taken from that tool's own `--help`
