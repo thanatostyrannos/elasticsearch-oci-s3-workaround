@@ -115,9 +115,10 @@ spec:
               echo "DELETES ARE ENABLED for this run (qualify.dryRunOnly is false)."
               {{- end }}
               echo "starting: python3 reclaim_test_protocol.py $args"
+              # A failing protocol must still reach the report below, so errexit is off for this one command.
+              status=0
               # shellcheck disable=SC2086
-              python3 reclaim_test_protocol.py $args
-              status=$?
+              python3 reclaim_test_protocol.py $args || status=$?
               echo "done, exit $status"
               echo "totals, read from the per-cycle execute files rather than the summary:"
               if ls "{{ .Values.qualify.outPath }}"/exec-*.txt >/dev/null 2>&1; then
