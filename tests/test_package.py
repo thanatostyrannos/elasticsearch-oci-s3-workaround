@@ -13,10 +13,13 @@ import hashlib
 import os
 import posixpath
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -24,11 +27,46 @@ sys.path.insert(0, ROOT)
 import package
 
 
+def _git(repo, *args):
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+         "-c", "commit.gpgsign=false", *args],
+        cwd=repo, check=True, capture_output=True)
+
+
+def committed_copy(parent):
+    """A temporary git repo committing the working-tree copy of every
+    tracked file, so the build sees what the developer is about to commit
+    whether or not their edits are committed yet."""
+    listing = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, check=True,
+                             capture_output=True).stdout
+    repo = os.path.join(parent, "repo")
+    os.makedirs(repo)
+    for relative in filter(None, listing.decode().split("\0")):
+        source = os.path.join(ROOT, relative)
+        if not os.path.isfile(source):
+            continue
+        target = os.path.join(repo, relative)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copy(source, target)
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "fixture")
+    return repo
+
+
+def build_from_copy(parent, out):
+    """Build an archive from a committed copy of the working tree."""
+    repo = committed_copy(parent)
+    with mock.patch.object(package, "ROOT", repo):
+        return package.build(out)
+
+
 class TheReleaseCarriesWhatAnOperatorNeeds(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="release-")
-        cls.archive = package.build(cls.tmp)
+        cls.archive = build_from_copy(cls.tmp, os.path.join(cls.tmp, "out"))
         with zipfile.ZipFile(cls.archive) as zf:
             cls.names = set(zf.namelist())
 
@@ -188,7 +226,7 @@ class TheReleaseNamesNoVendor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="release-vendor-")
-        cls.archive = package.build(cls.tmp)
+        cls.archive = build_from_copy(cls.tmp, os.path.join(cls.tmp, "out"))
 
     @classmethod
     def tearDownClass(cls):
@@ -224,14 +262,14 @@ class TheReleaseIsReproducible(unittest.TestCase):
         # means nothing, and the hash is what a recipient checks.
         with tempfile.TemporaryDirectory() as one, \
                 tempfile.TemporaryDirectory() as two:
-            first = package.build(one)
-            second = package.build(two)
+            first = build_from_copy(one, os.path.join(one, "out"))
+            second = build_from_copy(two, os.path.join(two, "out"))
             self.assertEqual(hashlib.sha256(open(first, "rb").read()).hexdigest(),
                              hashlib.sha256(open(second, "rb").read()).hexdigest())
 
     def test_a_checksum_is_written_beside_the_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
-            archive = package.build(tmp)
+            archive = build_from_copy(tmp, os.path.join(tmp, "out"))
             checksum = archive + ".sha256"
             self.assertTrue(os.path.exists(checksum))
             recorded = open(checksum).read().split()[0]
@@ -244,15 +282,120 @@ class TheReleaseRefusesToCarryACredential(unittest.TestCase):
     def test_credential_material_in_a_packaged_file_stops_the_build(self):
         # The gate that makes the exclusions above load bearing rather than
         # merely tidy. Without it, a future file added to the shipped set
-        # could carry a secret and nothing would notice.
-        planted = os.path.join(ROOT, "generation_chain", "_leak_probe.py")
-        with open(planted, "w") as fh:
-            fh.write('SECRET = "%s"\n' % PEM_MARKERS[1].decode())
-        self.addCleanup(os.remove, planted)
+        # could carry a secret and nothing would notice. The file is
+        # committed, because an untracked one never reaches the scan.
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(package.ReleaseRefused) as raised:
-                package.build(tmp)
+            repo = committed_copy(tmp)
+            planted = os.path.join(repo, "generation_chain", "_leak_probe.py")
+            with open(planted, "w") as fh:
+                fh.write('SECRET = "%s"\n' % PEM_MARKERS[1].decode())
+            _git(repo, "add", "generation_chain/_leak_probe.py")
+            _git(repo, "commit", "-q", "-m", "leak")
+            with mock.patch.object(package, "ROOT", repo), \
+                    self.assertRaises(package.ReleaseRefused) as raised:
+                package.build(os.path.join(tmp, "out"))
         self.assertIn("_leak_probe.py", str(raised.exception))
+
+
+class TheReleaseReflectsACommit(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = committed_copy(self._tmp.name)
+        patcher = mock.patch.object(package, "ROOT", self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _build_names(self):
+        archive = package.build(os.path.join(self._tmp.name, "out"))
+        with zipfile.ZipFile(archive) as zf:
+            return set(zf.namelist())
+
+    def test_a_clean_commit_builds(self):
+        # Guards the CI path: a fresh checkout is a clean tree and must still
+        # produce an archive, or no release can ever be cut.
+        self.assertTrue(any(n.endswith("README.md")
+                            for n in self._build_names()))
+
+    def test_an_untracked_file_under_a_shipped_directory_stays_out(self):
+        # A local creds.json or scratch note beside tracked code used to be
+        # swept into the archive by a directory walk, and then published.
+        planted = os.path.join(self.repo, "generation_chain", "creds.json")
+        with open(planted, "w") as fh:
+            fh.write('{"api_key": "not-for-release"}')
+        scratch = os.path.join(self.repo, "docs", "scratch.json")
+        with open(scratch, "w") as fh:
+            fh.write("{}")
+        names = self._build_names()
+        self.assertFalse([n for n in names if n.endswith("creds.json")])
+        self.assertFalse([n for n in names if n.endswith("scratch.json")])
+
+    def test_an_untracked_python_file_stays_out_too(self):
+        # Extension filters alone let a stray .py through; only the tracked
+        # check keeps an unreviewed script out of the release.
+        with open(os.path.join(self.repo, "generation_chain", "stray.py"),
+                  "w") as fh:
+            fh.write("print('unreviewed')\n")
+        self.assertFalse([n for n in self._build_names()
+                          if n.endswith("stray.py")])
+
+    def test_a_modified_tracked_file_refuses_the_build(self):
+        # An archive hashed and attested as commit X must not carry edits
+        # that exist in no commit.
+        with open(os.path.join(self.repo, "FACTS.md"), "a") as fh:
+            fh.write("edited after the commit\n")
+        with self.assertRaises(package.ReleaseRefused) as raised:
+            package.build(os.path.join(self._tmp.name, "out"))
+        self.assertIn("FACTS.md", str(raised.exception))
+
+    def test_a_deleted_tracked_file_refuses_the_build(self):
+        # A missing file would otherwise surface as a bare OSError, or ship
+        # a release that differs from the commit.
+        os.remove(os.path.join(self.repo, "FACTS.md"))
+        with self.assertRaises(package.ReleaseRefused):
+            package.build(os.path.join(self._tmp.name, "out"))
+
+    def test_a_staged_but_uncommitted_change_refuses_the_build(self):
+        # Staged is still not committed.
+        with open(os.path.join(self.repo, "LICENSE"), "a") as fh:
+            fh.write("x\n")
+        _git(self.repo, "add", "LICENSE")
+        with self.assertRaises(package.ReleaseRefused):
+            package.build(os.path.join(self._tmp.name, "out"))
+
+    def test_a_modified_file_that_does_not_ship_does_not_block(self):
+        # Only what ships has to match the commit; a developer's edited test
+        # must not stop a release build.
+        outside = os.path.join(self.repo, "notes.txt")
+        with open(outside, "w") as fh:
+            fh.write("a")
+        _git(self.repo, "add", "notes.txt")
+        _git(self.repo, "commit", "-q", "-m", "notes")
+        with open(outside, "w") as fh:
+            fh.write("b")
+        self.assertTrue(self._build_names())
+
+    def test_a_named_file_that_is_untracked_refuses_the_build(self):
+        # A file listed in PACKAGED_FILES that exists only on disk would ship
+        # uncommitted content under a name the release promises.
+        _git(self.repo, "rm", "-q", "--cached", "LICENSE")
+        _git(self.repo, "commit", "-q", "-m", "untrack")
+        with self.assertRaises(package.ReleaseRefused):
+            package.build(os.path.join(self._tmp.name, "out"))
+
+    def test_outside_a_git_work_tree_the_build_refuses(self):
+        # With no commit to reflect, the archive cannot be tied to one.
+        with tempfile.TemporaryDirectory() as bare:
+            for relative in package.members():
+                target = os.path.join(bare, relative)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copy(os.path.join(self.repo, relative), target)
+            with mock.patch.object(package, "ROOT", bare), \
+                    mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES":
+                                                 os.path.dirname(bare)}):
+                with self.assertRaises(package.ReleaseRefused) as raised:
+                    package.build(os.path.join(self._tmp.name, "out"))
+        self.assertIn("git", str(raised.exception))
 
 
 if __name__ == "__main__":
