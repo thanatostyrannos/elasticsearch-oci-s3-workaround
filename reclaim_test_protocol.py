@@ -147,6 +147,7 @@ import base64
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import time
@@ -269,6 +270,21 @@ def refuse_non_http_scheme(url, what):
             f"{scheme or '(no scheme)'!r} value cannot be opened")
 
 
+def es_tls_context(args):
+    """A verifying context, trusting --es-ca-cert when one was given.
+
+    There is no way to turn verification off: the flag adds a CA to the
+    trust set and nothing else.
+    """
+    return ssl.create_default_context(
+        cafile=getattr(args, "es_ca_cert", None))
+
+
+def es_ca_flags(args):
+    ca = getattr(args, "es_ca_cert", None)
+    return ["--es-ca-cert", ca] if ca else []
+
+
 def es_call(args, path):
     url = args.elasticsearch.rstrip("/") + path
     refuse_non_http_scheme(url, "--elasticsearch")
@@ -279,7 +295,8 @@ def es_call(args, path):
     # refuse_non_http_scheme() above already confirmed only http or https
     # reaches this call. A redirect raises RedirectRefused rather than
     # carrying the Basic credential to another host.
-    with refusing_urlopen(req, timeout=60) as r:  # nosec B310
+    with refusing_urlopen(req, timeout=60,  # nosec B310
+                          context=es_tls_context(args)) as r:
         return json.loads(r.read())
 
 
@@ -396,7 +413,7 @@ def reclaim_command(args, manifest):
                "--prefix", args.prefix, "--credentials", args.credentials]
     if args.elasticsearch and args.repository:
         command += ["--elasticsearch", args.elasticsearch,
-                    "--es-repository", args.repository]
+                    "--es-repository", args.repository] + es_ca_flags(args)
     else:
         command.append("--without-elasticsearch")
     return command
@@ -415,7 +432,7 @@ def cycle(args, n, mode, outdir, log):
         "--credentials", args.credentials, "--manifest", manifest]
     if args.repository and args.elasticsearch:
         cmd += ["--elasticsearch", args.elasticsearch,
-                "--es-repository", args.repository]
+                "--es-repository", args.repository] + es_ca_flags(args)
     rc, _ = run(cmd, derive, args.timeout)
 
     report = read_text(derive)
@@ -602,6 +619,11 @@ def build_parser():
                    help="a PATH, for this harness's own calls only. A secret "
                         "in argv is visible in ps. The audit reads its "
                         "cluster credential from --credentials instead")
+    p.add_argument("--es-ca-cert", metavar="FILE",
+                   help="a PEM CA file to trust for https calls to the "
+                        "cluster, for this harness's own calls and for the "
+                        "audit and reclaim runs it starts. Verification "
+                        "stays on; there is no flag to turn it off")
     p.add_argument("--repository")
     p.add_argument("--data-stream", default="",
                    help="data stream whose shards are checked in segment mode")
@@ -625,6 +647,11 @@ def check_arguments(p, args):
             refuse_non_http_scheme(args.elasticsearch, "--elasticsearch")
         except ValueError as exc:
             p.error(str(exc))
+    if args.es_ca_cert:
+        try:
+            es_tls_context(args)
+        except (OSError, ssl.SSLError) as exc:
+            p.error(f"--es-ca-cert {args.es_ca_cert!r} cannot be loaded: {exc}")
     if args.mode != "metadata" and not args.data_stream:
         p.error("segment mode needs --data-stream to check shard population")
     args.es_password = ""
