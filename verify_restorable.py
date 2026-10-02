@@ -198,7 +198,37 @@ PW = read_secret(_a.password_file, "--password-file")
 AUTH = "Basic " + base64.b64encode(f"{_a.user}:{PW}".encode()).decode()
 
 
-def call(method, path, body=None, timeout=300):
+class RedirectRefused(Exception):
+    """Elasticsearch answered 3xx. The redirect was not followed."""
+
+    def __init__(self, code, location):
+        try:
+            parsed = urllib.parse.urlsplit(location)
+            host = parsed.hostname or ""
+            if ":" in host:
+                host = f"[{host}]"
+            if host and parsed.port:
+                host = f"{host}:{parsed.port}"
+        except ValueError:
+            host = ""
+        super().__init__(
+            f"Elasticsearch answered {code} and redirected to "
+            f"{host or '(an unreadable location)'}. A redirect is never "
+            "followed, because it would carry the Basic credential to that "
+            "host. Point --elasticsearch at the host that answers directly")
+        self.code = code
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RedirectRefused(code, newurl)
+
+
+OPENER = urllib.request.build_opener(
+    _RefuseRedirects(), urllib.request.HTTPSHandler(context=CTX))
+
+
+def request(method, path, body=None, timeout=300):
     req = urllib.request.Request(ES + path, method=method,
                                  data=json.dumps(body).encode() if body else None)
     req.add_header("Authorization", AUTH)
@@ -208,7 +238,7 @@ def call(method, path, body=None, timeout=300):
     # plus a path this script builds, so only http and https ever reach
     # this call.
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=CTX) as r:  # nosec B310
+        with OPENER.open(req, timeout=timeout) as r:  # nosec B310
             raw = r.read()
             # A JSON array is as much JSON as an object. The _cat APIs answer
             # with one under format=json, and treating it as text made every
@@ -222,6 +252,13 @@ def call(method, path, body=None, timeout=300):
             return e.code, json.loads(raw)
         except Exception:
             return e.code, raw.decode(errors="replace")
+
+
+def call(method, path, body=None, timeout=300):
+    try:
+        return request(method, path, body, timeout)
+    except RedirectRefused as refused:
+        fail(str(refused))
 
 
 def fail(msg):
@@ -238,7 +275,7 @@ def delete_probe(name, restore_unanswered):
     when the restore never created the index, so it prints nothing.
     """
     try:
-        code, body = call("DELETE", f"/{path_segment(name)}", timeout=60)
+        code, body = request("DELETE", f"/{path_segment(name)}", timeout=60)
         problem = None if code < 300 or code == 404 else \
             f"http={code} {str(body)[:200]}"
     except Exception as err:  # best effort, see the docstring

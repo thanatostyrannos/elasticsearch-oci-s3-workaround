@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, FrozenSet, Mapping, Optional
 
 from ..errors import ForbiddenMethod, SourceReadError
+from ..redirects import RedirectRefused, refusing_urlopen
 
 # This package reads. It has no --execute, no --approve and no delete branch,
 # so DELETE and POST are not merely unused here, they are unreachable.
@@ -72,7 +73,7 @@ class HttpReader:
     def __init__(self, policy: RetryPolicy = RetryPolicy(),
                  critical_policy: RetryPolicy = CRITICAL_RETRY_POLICY,
                  sleep: Callable[[float], None] = time.sleep,
-                 opener: Callable = urllib.request.urlopen,
+                 opener: Callable = refusing_urlopen,
                  jitter: Callable[[], float] = random.random,
                  clock: Callable[[], float] = time.monotonic) -> None:
         self.policy = policy
@@ -102,6 +103,9 @@ class HttpReader:
         for attempt in range(policy.max_attempts):
             try:
                 return self._once(url, headers, method, timeout)
+            except RedirectRefused as exc:
+                # An answer, not weather: a retry meets the same redirect.
+                raise SourceReadError(f"{url}: {exc}") from exc
             except urllib.error.HTTPError as exc:
                 last = f"{exc.code} from {url}: {_detail(exc)}"
                 if exc.code not in policy.retry_statuses:
