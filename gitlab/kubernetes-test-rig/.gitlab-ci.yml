@@ -181,13 +181,29 @@ teardown:manual:
   stage: teardown
   script:
     - |
-      helm uninstall "$HELM_RELEASE" --namespace "$KUBE_NAMESPACE" --wait --timeout 15m || true
+      # The suspended template Job belongs to the release, so find it by
+      # label while the release still exists, run it, and only then uninstall.
+      template_job=$(kubectl -n "$KUBE_NAMESPACE" get job \
+        -l "app.kubernetes.io/instance=${HELM_RELEASE},rig-component=teardown-manual" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+      if [ -z "$template_job" ]; then
+        echo "no teardown-manual template Job found for release $HELM_RELEASE in $KUBE_NAMESPACE." >&2
+        echo "Either the release is already uninstalled, or it was installed without teardown.standalone.enabled=true." >&2
+        echo "Nothing was torn down. Reinstall with teardown.standalone.enabled=true and run this job again," >&2
+        echo "or run snapshot_churn_rig.py teardown by hand against the rig's Elasticsearch and bucket." >&2
+        exit 1
+      fi
       kubectl -n "$KUBE_NAMESPACE" create job \
-        --from="job/${HELM_RELEASE}-elasticsearch-oci-s3-workaround-test-rig-teardown-manual" \
-        "teardown-manual-${CI_JOB_ID}"
+        --from="job/${template_job}" "teardown-manual-${CI_JOB_ID}"
+      teardown_rc=0
       kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete \
-        "job/teardown-manual-${CI_JOB_ID}" --timeout 15m
-      kubectl -n "$KUBE_NAMESPACE" logs "job/teardown-manual-${CI_JOB_ID}"
+        "job/teardown-manual-${CI_JOB_ID}" --timeout 15m || teardown_rc=$?
+      kubectl -n "$KUBE_NAMESPACE" logs "job/teardown-manual-${CI_JOB_ID}" || true
+      if [ "$teardown_rc" -ne 0 ]; then
+        echo "teardown Job did not complete; leaving the release installed so its state volume survives." >&2
+        exit "$teardown_rc"
+      fi
+      helm uninstall "$HELM_RELEASE" --namespace "$KUBE_NAMESPACE" --wait --timeout 15m
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
