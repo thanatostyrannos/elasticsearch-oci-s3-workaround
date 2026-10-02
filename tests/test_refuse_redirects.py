@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from generation_chain.corroboration import (CorroborationUnavailable,
                                             Credentials, ElasticsearchVeto)
 from generation_chain.errors import SourceReadError
-from generation_chain.reclaim.transport import TransportError, send_batch_delete
+from generation_chain.reclaim.transport import (TransportError, fetch_object,
+                                               send_batch_delete)
 from generation_chain.redirects import RedirectRefused
 from generation_chain.sources.http_reads import HttpReader
 from generation_chain.sources.s3 import S3Credentials
@@ -176,6 +177,28 @@ class ReclaimPostRefusesRedirects(_Pair):
     def test_a_plain_answer_is_still_returned(self):
         self.second.body = b"<DeleteResult/>"
         self.assertEqual(self._send(self.second), b"<DeleteResult/>")
+
+
+class ReclaimTargetReadRefusesRedirects(_Pair):
+
+    def _fetch(self, server):
+        return fetch_object(
+            scheme="http", host=f"127.0.0.1:{server.server_port}",
+            region="us-east-1", bucket="bucket", key="index.latest",
+            credentials=S3Credentials("AKIAEXAMPLE", SECRET), timeout=5.0,
+            sleep=lambda _s: None, jitter=lambda: 0.0)
+
+    def test_a_redirect_is_a_transport_error_and_is_not_followed(self):
+        # This GET decides which repository the delete goes to. Following a
+        # redirect would hand the signature to another host and let that
+        # host answer the identity check for a store it is not.
+        with self.assertRaises(TransportError) as raised:
+            self._fetch(self.first)
+        self.assert_nothing_followed(str(raised.exception))
+
+    def test_a_plain_answer_is_still_returned(self):
+        self.second.body = b"\x00" * 8
+        self.assertEqual(self._fetch(self.second), b"\x00" * 8)
 
 
 class ReclaimHarnessRefusesRedirects(_Pair):

@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generation_chain.reclaim.manifest import (EXPECTED_HEADER, ManifestError,
                                                load_manifest)
-from generation_chain.reporting.manifest import COMPLETION_MARKER
+from generation_chain.reporting.manifest import (COMPLETION_MARKER,
+                                                completion_line)
 
 
 def write(path: str, *rows: str, complete: bool = True) -> None:
@@ -159,6 +160,66 @@ class LoadManifest(unittest.TestCase):
     def test_a_missing_file_is_refused_with_no_traceback(self):
         with self.assertRaises(ManifestError):
             load_manifest(os.path.join(self.dir, "does-not-exist.tsv"))
+
+
+class DerivationRecord(unittest.TestCase):
+    """The marker line's record of which repository, which generation, when."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="reclaim-manifest-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.path = os.path.join(self.dir, "manifest.tsv")
+
+    def write_with_marker(self, marker: str) -> None:
+        with open(self.path, "w", encoding="utf-8") as handle:
+            handle.write(EXPECTED_HEADER + "\n" + ROW + "\n" + marker + "\n")
+
+    def test_the_record_the_audit_writes_reads_back_exactly(self):
+        # Use case. reclaim compares these three values with the target and
+        # the clock. A reader that dropped a second, or read the generation
+        # as another number, would refuse the right repository or accept a
+        # stale manifest.
+        line = completion_line("repo-uuid-aaaa", 41, 1790000000.9)
+        self.write_with_marker(line.rstrip("\n"))
+        derivation = load_manifest(self.path).derivation
+        self.assertEqual(derivation.repository_uuid, "repo-uuid-aaaa")
+        self.assertEqual(derivation.anchor_generation, 41)
+        self.assertEqual(derivation.derived_at, 1790000000.0)
+
+    def test_a_bare_marker_reads_but_carries_no_record(self):
+        # A manifest from before the record existed is still a complete
+        # manifest, and the dry run has to be able to read it to say why
+        # --execute refuses it. It must never come back with a record.
+        self.write_with_marker(COMPLETION_MARKER.rstrip("\n"))
+        self.assertIsNone(load_manifest(self.path).derivation)
+
+    def test_a_record_with_a_field_missing_is_refused(self):
+        # Abuse case: a hand edit that drops derived_at would otherwise turn
+        # a stale manifest into one with no age at all.
+        self.write_with_marker(
+            "# derivation complete\trepository_uuid=u\tanchor_generation=3")
+        with self.assertRaises(ManifestError):
+            load_manifest(self.path)
+
+    def test_a_record_with_an_unreadable_time_is_refused(self):
+        # Abuse case: a local time, or a time with an offset, is not the UTC
+        # instant the age is measured from, and reading it as one would
+        # shift the age by hours.
+        self.write_with_marker(
+            "# derivation complete\trepository_uuid=u\tanchor_generation=3"
+            "\tderived_at=2026-10-02T12:00:00+02:00")
+        with self.assertRaises(ManifestError):
+            load_manifest(self.path)
+
+    def test_a_record_with_a_negative_generation_is_refused(self):
+        # Abuse case: a generation that cannot exist would pass the "target
+        # at or above the anchor" check against every store. Neutered under
+        # "a-record-naming-no-real-generation-is-refused".
+        self.write_with_marker(
+            "# derivation complete\trepository_uuid=u\tanchor_generation=-1"
+            "\tderived_at=2026-10-02T12:00:00Z")
+        with self.assertRaises(ManifestError):
+            load_manifest(self.path)
 
 
 if __name__ == "__main__":

@@ -5,9 +5,12 @@ GET or HEAD.
 and that stays true: this module does not import `HttpReader`, does not touch
 `ALLOWED_METHODS`, and is never imported by anything under `derivation/`,
 `sources/` or `reporting/`. It is a separate, small, independently reviewable
-path that exists to send exactly one kind of request: a signed `POST
-/<bucket>?delete` batch delete, built from a body `batch.py` already rendered
-and a checksum `checksum.py` already computed over that same body.
+path that sends two kinds of request. One is a signed `POST /<bucket>?delete`
+batch delete, built from a body `batch.py` already rendered and a checksum
+`checksum.py` already computed over that same body. The other is a signed
+GET of one object, which the CLI uses to read the target's `index.latest`
+and catalog before the first delete, so a manifest is never executed against
+a repository it was not derived from.
 
 Retried only on the statuses a retry can fix. `DeleteObjects` is idempotent,
 deleting an already-deleted key answers success again, so retrying a batch
@@ -101,8 +104,9 @@ def _refuse_unsendable_target(scheme: str, host: str) -> None:
             "Nothing was sent")
 
 
-def _signed_headers(host: str, amz_date: str, payload_sha256: str,
-                    credentials: S3Credentials, region: str, canonical_uri: str,
+def _signed_headers(method: str, host: str, amz_date: str,
+                    payload_sha256: str, credentials: S3Credentials,
+                    region: str, canonical_uri: str,
                     canonical_query: str) -> Mapping[str, str]:
     headers = {
         "Host": host,
@@ -111,11 +115,51 @@ def _signed_headers(host: str, amz_date: str, payload_sha256: str,
     }
     headers["Authorization"] = sigv4.authorization(
         access_key=credentials.access_key,
-        secret_key=credentials.secret_key.reveal(), method="POST",
+        secret_key=credentials.secret_key.reveal(), method=method,
         canonical_uri=canonical_uri, canonical_query=canonical_query,
         headers=headers, payload_sha256=payload_sha256, region=region,
         service="s3", amz_date=amz_date)
     return headers
+
+
+def _amz_date() -> str:
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _send_with_retries(build: Callable[[], urllib.request.Request], url: str,
+                       timeout: float, policy: RetryPolicy, opener: Callable,
+                       sleep: Callable[[float], None],
+                       jitter: Callable[[], float]) -> bytes:
+    """Send what `build` returns, re-signed per attempt, and return the body.
+
+    `build` runs once per attempt so every attempt carries a fresh
+    `X-Amz-Date` and signature.
+    """
+    last_detail = ""
+    for attempt in range(policy.max_attempts):
+        try:
+            with opener(build(), timeout=timeout) as response:
+                return response.read()
+        except RedirectRefused as exc:
+            # The request was answered, so there is nothing to retry.
+            raise TransportError(f"{url}: {exc}") from exc
+        except urllib.error.HTTPError as exc:
+            detail = _detail(exc)
+            last_detail = f"{exc.code} from {url}: {detail}"
+            if exc.code not in RETRY_STATUSES:
+                raise TransportError(last_detail) from exc
+        except Exception as exc:
+            # Deliberately broad, for the same reason http_reads.py catches
+            # broadly: a truncated response or a socket error must become a
+            # TransportError, never a bare traceback that skips the retry
+            # loop and leaves the caller unsure whether anything was sent.
+            last_detail = f"cannot reach {url}: {type(exc).__name__}: {exc}"
+        if attempt + 1 >= policy.max_attempts:
+            break
+        sleep(jitter() * min(policy.max_sleep_seconds,
+                             policy.base_seconds
+                             * policy.growth_factor ** attempt))
+    raise TransportError(last_detail or f"no answer from {url}")
 
 
 def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
@@ -138,40 +182,43 @@ def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
     payload_sha256 = hashlib.sha256(body).hexdigest()
     url = f"{scheme}://{host}{canonical_uri}?{canonical_query}"
 
-    last_detail = ""
-    for attempt in range(policy.max_attempts):
-        now = dt.datetime.now(dt.timezone.utc)
-        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    def build() -> urllib.request.Request:
         headers = dict(_signed_headers(
-            host, amz_date, payload_sha256, credentials, region,
+            "POST", host, _amz_date(), payload_sha256, credentials, region,
             canonical_uri, canonical_query))
         headers["Content-Type"] = "application/xml"
         headers[checksum[0]] = checksum[1]
-        request = urllib.request.Request(url, data=body, headers=headers,
-                                         method="POST")
-        try:
-            with opener(request, timeout=timeout) as response:
-                return response.read()
-        except RedirectRefused as exc:
-            # The POST was answered, so there is nothing to retry.
-            raise TransportError(f"{url}: {exc}") from exc
-        except urllib.error.HTTPError as exc:
-            detail = _detail(exc)
-            last_detail = f"{exc.code} from {url}: {detail}"
-            if exc.code not in RETRY_STATUSES:
-                raise TransportError(last_detail) from exc
-        except Exception as exc:
-            # Deliberately broad, for the same reason http_reads.py catches
-            # broadly: a truncated response or a socket error must become a
-            # TransportError, never a bare traceback that skips the retry
-            # loop and leaves the caller unsure whether anything was sent.
-            last_detail = f"cannot reach {url}: {type(exc).__name__}: {exc}"
-        if attempt + 1 >= policy.max_attempts:
-            break
-        sleep(jitter() * min(policy.max_sleep_seconds,
-                             policy.base_seconds
-                             * policy.growth_factor ** attempt))
-    raise TransportError(last_detail or f"no answer from {url}")
+        return urllib.request.Request(url, data=body, headers=headers,
+                                      method="POST")
+
+    return _send_with_retries(build, url, timeout, policy, opener, sleep,
+                              jitter)
+
+
+def fetch_object(*, scheme: str, host: str, region: str, bucket: str,
+                 key: str, credentials: S3Credentials, timeout: float,
+                 policy: RetryPolicy = RetryPolicy(),
+                 opener: Callable = refusing_urlopen,
+                 sleep: Callable[[float], None] = time.sleep,
+                 jitter: Callable[[], float] = random.random) -> bytes:
+    """GET one object, path style, and return its bytes.
+
+    `key` is the full key inside the bucket, prefix included. Any answer
+    other than a 2xx raises `TransportError`, a 404 included, and so does a
+    3xx: the redirect is never followed.
+    """
+    _refuse_unsendable_target(scheme, host)
+    canonical_uri = f"/{sigv4.quote_path(bucket)}/{sigv4.quote_path(key)}"
+    url = f"{scheme}://{host}{canonical_uri}"
+
+    def build() -> urllib.request.Request:
+        headers = dict(_signed_headers(
+            "GET", host, _amz_date(), sigv4.EMPTY_PAYLOAD_SHA256,
+            credentials, region, canonical_uri, ""))
+        return urllib.request.Request(url, headers=headers, method="GET")
+
+    return _send_with_retries(build, url, timeout, policy, opener, sleep,
+                              jitter)
 
 
 def _detail(exc: urllib.error.HTTPError) -> str:

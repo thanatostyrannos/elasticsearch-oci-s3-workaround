@@ -67,6 +67,7 @@ MODULES = [
     "tests.test_reclaim_safety",
     "tests.test_reclaim_cli",
     "tests.test_reclaim_recheck",
+    "tests.test_reclaim_target_binding",
     "tests.test_security_findings",
 ]
 
@@ -280,8 +281,38 @@ CASES = [
      "        if False:"),
     ("a-manifest-without-the-completion-marker-is-refused",
      "reclaim/manifest.py",
-     "    if not rest or rest[-1] != _MARKER_LINE:",
+     "    if not rest or not _is_marker(rest[-1]):",
      "    if False:"),
+    ("a-record-naming-no-real-generation-is-refused",
+     "reclaim/manifest.py",
+     "    if not uuid.strip() or not _GENERATION.match(generation):",
+     "    if not uuid.strip() or not generation.lstrip(\"-\").isdigit():"),
+
+    # -- reclaim: the manifest is bound to its repository and its age ------
+    ("the-target-must-carry-the-manifest-s-uuid",
+     "reclaim/recheck.py",
+     "    if catalog.repository_uuid != derivation.repository_uuid:",
+     "    if False:"),
+    ("the-target-must-be-at-or-past-the-anchor",
+     "reclaim/recheck.py",
+     "    if generation < derivation.anchor_generation:",
+     "    if False:"),
+    ("an-unreadable-target-is-refused",
+     "reclaim/recheck.py",
+     "        return (\"the target's index.latest, or the catalog it names, "
+     "could \"",
+     "        return None\n"
+     "        return (\"the target's index.latest, or the catalog it names, "
+     "could \""),
+    ("execute-checks-the-target",
+     "reclaim/cli.py",
+     "    problem = _target_problem(args, manifest, (scheme, host), "
+     "credentials)",
+     "    problem = None"),
+    ("age-is-measured-from-the-derivation-record",
+     "reclaim/cli.py",
+     "    age = time.time() - manifest.derivation.derived_at",
+     "    age = time.time() - __import__(\"os\").path.getmtime(manifest.path)"),
 
     # -- reclaim: approval is about this exact manifest, not a category ---
     ("approval-checks-the-manifest-digest",

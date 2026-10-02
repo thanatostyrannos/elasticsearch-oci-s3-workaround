@@ -12,8 +12,10 @@ import io
 import json
 import os
 import shutil
+import struct
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -22,27 +24,55 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import s3rig
 from generation_chain.reclaim import batch, cli
 from generation_chain.reclaim.manifest import EXPECTED_HEADER, load_manifest
-from generation_chain.reporting.manifest import COMPLETION_MARKER
+from generation_chain.reporting.manifest import completion_line
 from generation_chain.sources.s3 import S3CompatibleSource
 
 ROW = "{key}\treason text\tsegment blob\tsuuid\tsname\t1\t2"
+
+# The repository every manifest in this file is derived from, and the catalog
+# `store` serves for it, so --execute's target check finds the repository the
+# manifest names.
+REPOSITORY_UUID = "reclaim-cli-repository"
+GENERATION = 1
+IDENTITY_KEYS = ("index.latest", f"index-{GENERATION}")
 
 
 def write_manifest(path: str, keys, complete: bool = True) -> None:
     """A manifest in the shape the audit CLI writes.
 
-    `complete=True`, the default, appends COMPLETION_MARKER, the same as a
-    successful run written through `--manifest FILE`. Every test in this
-    file exercises the reclaim CLI against a manifest an operator would
-    actually be allowed to execute against, so this is the default rather
-    than something each test has to ask for.
+    `complete=True`, the default, appends the completion marker with a
+    derivation record naming REPOSITORY_UUID at GENERATION, derived now, the
+    same as a successful run written through `--manifest FILE`. Every test
+    in this file exercises the reclaim CLI against a manifest an operator
+    would actually be allowed to execute against, so this is the default
+    rather than something each test has to ask for.
     """
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(EXPECTED_HEADER + "\n")
         for key in keys:
             handle.write(ROW.format(key=key) + "\n")
         if complete:
-            handle.write(COMPLETION_MARKER)
+            handle.write(completion_line(REPOSITORY_UUID, GENERATION,
+                                         time.time()))
+
+
+def store(objects, prefix: str = "", **options) -> s3rig.S3Rig:
+    """A rig holding `objects` plus the catalog of REPOSITORY_UUID."""
+    base = (prefix.strip("/") + "/") if prefix.strip("/") else ""
+    catalog = {"min_version": "7.12.0", "uuid": REPOSITORY_UUID,
+               "snapshots": [], "indices": {},
+               "index_metadata_identifiers": {}}
+    served = {base + "index.latest": struct.pack(">q", GENERATION),
+              base + f"index-{GENERATION}":
+                  json.dumps(catalog).encode("utf-8")}
+    served.update(objects)
+    return s3rig.S3Rig(root=None, prefix=prefix, objects=served, **options)
+
+
+def repository_keys(rig) -> set:
+    """What the rig holds, less the catalog `store` added."""
+    return {key for key in rig.keys()
+            if key.rsplit("/", 1)[-1] not in IDENTITY_KEYS}
 
 
 def write_credentials(path: str) -> None:
@@ -93,12 +123,12 @@ class NeverDeletesOutsideTheManifest(ReclaimCase):
         # else, so there is no conditional a mutation could flip to widen it;
         # this test is the proof instead.
         write_manifest(self.manifest_path, ["named/one"])
-        with s3rig.S3Rig(root=None, objects={
+        with store({
                 "named/one": b"x", "not/named": b"y",
                 "also/not/named": b"z"}) as rig:
             code, _stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_OK)
-            remaining = rig.keys()
+            remaining = repository_keys(rig)
         self.assertNotIn("named/one", remaining)
         self.assertIn("not/named", remaining)
         self.assertIn("also/not/named", remaining)
@@ -114,11 +144,11 @@ class ManifestMustBeMarkedComplete(ReclaimCase):
         # refusal before a single request is built, not a manifest read as
         # though it named nothing.
         write_manifest(self.manifest_path, ["a"], complete=False)
-        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+        with store({"a": b"x"}) as rig:
             code, _stdout, stderr = self.run_cli(rig, execute=False)
             self.assertEqual(code, cli.EXIT_USAGE)
             self.assertEqual(rig.requests, [])
-            self.assertIn("a", rig.keys())
+            self.assertIn("a", repository_keys(rig))
         self.assertIn("marker", stderr.lower())
 
 
@@ -130,9 +160,9 @@ class DuplicateRowsAreRefused(ReclaimCase):
         # approves N rows and the store deletes fewer, with no warning.
         keys = ["k/one", "k/two", "k/three"]
         write_manifest(self.manifest_path, keys)
-        with s3rig.S3Rig(root=None, objects={k: b"x" for k in keys}) as rig:
+        with store({k: b"x" for k in keys}) as rig:
             code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
-            remaining = rig.keys()
+            remaining = repository_keys(rig)
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("deleted: 3", stdout)
         self.assertEqual(remaining, set())
@@ -144,10 +174,10 @@ class DuplicateRowsAreRefused(ReclaimCase):
         # shape, so the only way here is an edit, and the safe answer is to
         # send nothing and name the key so the operator can fix the file.
         write_manifest(self.manifest_path, ["k/one", "k/two", "k/one"])
-        with s3rig.S3Rig(root=None, objects={"k/one": b"x", "k/two": b"y"}) as rig:
+        with store({"k/one": b"x", "k/two": b"y"}) as rig:
             code, _stdout, stderr = self.run_cli(rig, execute=True, approve=True)
             requests = list(rig.requests)
-            remaining = set(rig.keys())
+            remaining = set(repository_keys(rig))
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertEqual(requests, [])
         self.assertEqual(remaining, {"k/one", "k/two"})
@@ -159,7 +189,7 @@ class DuplicateRowsAreRefused(ReclaimCase):
         # a duplicate, it would hand the operator a count the execute run
         # then refuses, or worse, one the old code half honoured.
         write_manifest(self.manifest_path, ["k/one", "k/one"])
-        with s3rig.S3Rig(root=None, objects={"k/one": b"x"}) as rig:
+        with store({"k/one": b"x"}) as rig:
             code, _stdout, stderr = self.run_cli(rig, execute=False)
         self.assertEqual(code, cli.EXIT_USAGE)
         self.assertIn("k/one", stderr)
@@ -172,11 +202,11 @@ class DryRunSendsNothing(ReclaimCase):
         # delete attempt happens at all. Neutered under
         # "dry-run-is-the-default-and-sends-nothing".
         write_manifest(self.manifest_path, ["a", "b"])
-        with s3rig.S3Rig(root=None, objects={"a": b"x", "b": b"y"}) as rig:
+        with store({"a": b"x", "b": b"y"}) as rig:
             code, _stdout, stderr = self.run_cli(rig, execute=False)
             self.assertEqual(code, cli.EXIT_OK)
             self.assertEqual(rig.batch_delete_attempts, [])
-            self.assertEqual(rig.keys(), {"a", "b"})
+            self.assertEqual(repository_keys(rig), {"a", "b"})
         self.assertIn("DRY RUN", stderr)
 
     def test_the_dry_run_prints_a_command_that_execute_will_accept(self):
@@ -187,7 +217,7 @@ class DryRunSendsNothing(ReclaimCase):
         # invocation it will then refuse teaches the wrong command to
         # everyone who copies it, including whoever writes the docs.
         write_manifest(self.manifest_path, ["a"])
-        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+        with store({"a": b"x"}) as rig:
             _code, _stdout, stderr = self.run_cli(rig, execute=False)
         self.assertIn("--without-elasticsearch", stderr)
         self.assertIn("--elasticsearch", stderr)
@@ -198,7 +228,7 @@ class DryRunSendsNothing(ReclaimCase):
         # straight from this output is not copying a value that will refuse.
         write_manifest(self.manifest_path, ["a"])
         manifest = load_manifest(self.manifest_path)
-        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+        with store({"a": b"x"}) as rig:
             _code, _stdout, stderr = self.run_cli(rig, execute=False)
         self.assertIn(manifest.digest, stderr)
         self.assertIn(f"--approve-rows {len(manifest.keys)}", stderr)
@@ -210,11 +240,11 @@ class ApprovalIsRequiredForExecute(ReclaimCase):
         # Abuse case: --execute alone must not be enough. Neutered under
         # "execute-without-approval-is-refused".
         write_manifest(self.manifest_path, ["a"])
-        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+        with store({"a": b"x"}) as rig:
             code, _stdout, _stderr = self.run_cli(rig, execute=True, approve=False)
             self.assertEqual(code, cli.EXIT_APPROVAL_REFUSED)
             self.assertEqual(rig.batch_delete_attempts, [])
-            self.assertIn("a", rig.keys())
+            self.assertIn("a", repository_keys(rig))
 
     def test_execute_with_a_stale_approval_is_refused(self):
         # Abuse case: an approval computed against an earlier version of the
@@ -222,13 +252,13 @@ class ApprovalIsRequiredForExecute(ReclaimCase):
         write_manifest(self.manifest_path, ["a"])
         stale_digest = load_manifest(self.manifest_path).digest
         write_manifest(self.manifest_path, ["a", "b"])  # regenerated, grew
-        with s3rig.S3Rig(root=None, objects={"a": b"x", "b": b"y"}) as rig:
+        with store({"a": b"x", "b": b"y"}) as rig:
             code, _stdout, _stderr = self.run_cli(
                 rig, "--approve-digest", stale_digest, "--approve-rows", "1",
                 execute=True, approve=False)
             self.assertEqual(code, cli.EXIT_APPROVAL_REFUSED)
             self.assertEqual(rig.batch_delete_attempts, [])
-            self.assertEqual(rig.keys(), {"a", "b"})
+            self.assertEqual(repository_keys(rig), {"a", "b"})
 
 
 class PartialFailureIsReportedHonestly(ReclaimCase):
@@ -240,23 +270,23 @@ class PartialFailureIsReportedHonestly(ReclaimCase):
         # the object must still be in the store afterward. Neutered under
         # "cli-reports-a-per-key-failure-as-failed".
         write_manifest(self.manifest_path, ["ok", "blocked"])
-        with s3rig.S3Rig(root=None, objects={"ok": b"x", "blocked": b"y"},
+        with store({"ok": b"x", "blocked": b"y"},
                          delete_status={"blocked": (500, "InternalError")}) as rig:
             code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_PARTIAL)
-            self.assertIn("blocked", rig.keys())
-            self.assertNotIn("ok", rig.keys())
+            self.assertIn("blocked", repository_keys(rig))
+            self.assertNotIn("ok", repository_keys(rig))
         self.assertIn("failed: 1", stdout)
         self.assertIn("deleted: 1", stdout)
         self.assertIn("blocked", stdout)
 
     def test_a_key_missing_from_the_response_is_unconfirmed_not_ok(self):
         write_manifest(self.manifest_path, ["ok", "dropped"])
-        with s3rig.S3Rig(root=None, objects={"ok": b"x", "dropped": b"y"},
+        with store({"ok": b"x", "dropped": b"y"},
                          delete_status={"dropped": (0, "OMIT")}) as rig:
             code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_PARTIAL)
-            self.assertIn("dropped", rig.keys())
+            self.assertIn("dropped", repository_keys(rig))
         self.assertIn("unconfirmed: 1", stdout)
 
     def test_an_unreadable_200_reports_every_key_as_failed(self):
@@ -266,7 +296,7 @@ class PartialFailureIsReportedHonestly(ReclaimCase):
         # Abuse case: the keys must also never count as deleted and must end
         # the run partial.
         write_manifest(self.manifest_path, ["one", "two"])
-        with s3rig.S3Rig(root=None, objects={"one": b"x", "two": b"y"}) as rig:
+        with store({"one": b"x", "two": b"y"}) as rig:
             with patch.object(cli, "send_batch_delete",
                               return_value=b"not xml at all"):
                 code, stdout, _stderr = self.run_cli(
@@ -284,7 +314,7 @@ class PartialFailureIsReportedHonestly(ReclaimCase):
         # gone) already holds, so a manifest naming only such keys is not a
         # partial failure.
         write_manifest(self.manifest_path, ["gone"])
-        with s3rig.S3Rig(root=None, objects={},
+        with store({},
                          delete_status={"gone": (404, "NoSuchKey")}) as rig:
             code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
         self.assertEqual(code, cli.EXIT_OK)
@@ -300,11 +330,11 @@ class ChecksumAlgorithmIsConfigurable(ReclaimCase):
         # the whole request, not just the checksum function in isolation,
         # must go through under it.
         write_manifest(self.manifest_path, ["a"])
-        with s3rig.S3Rig(root=None, objects={"a": b"x"}) as rig:
+        with store({"a": b"x"}) as rig:
             code, _stdout, _stderr = self.run_cli(
                 rig, "--checksum-algorithm", "crc32c", execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_OK)
-            self.assertNotIn("a", rig.keys())
+            self.assertNotIn("a", repository_keys(rig))
 
 
 class ChecksumCoversTheBodyActuallySent(ReclaimCase):
@@ -329,7 +359,7 @@ class ChecksumCoversTheBodyActuallySent(ReclaimCase):
             calls.append(rendered)
             return rendered
 
-        with s3rig.S3Rig(root=None, objects={"a": b"x", "b": b"y"}) as rig:
+        with store({"a": b"x", "b": b"y"}) as rig:
             batch.build_request_body = counting
             try:
                 code, _stdout, _stderr = self.run_cli(rig, execute=True,
@@ -359,13 +389,13 @@ class PrefixIsAppliedConsistently(ReclaimCase):
         # while reporting success, or worse, deletes a same-named key living
         # at the bucket root instead of inside the repository's base_path.
         write_manifest(self.manifest_path, ["shard-file"])
-        with s3rig.S3Rig(root=None, prefix="base/path", objects={
+        with store(prefix="base/path", objects={
                 "base/path/shard-file": b"x",
                 "shard-file": b"a co-tenant's object of the same name"}) as rig:
             code, _stdout, _stderr = self.run_cli(
                 rig, "--prefix", "base/path", execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_OK)
-            remaining = rig.keys()
+            remaining = repository_keys(rig)
         self.assertNotIn("base/path/shard-file", remaining)
         self.assertIn("shard-file", remaining)
 
@@ -381,11 +411,11 @@ class MultipleBatches(ReclaimCase):
         keys = [f"k{i}" for i in range(count)]
         write_manifest(self.manifest_path, keys)
         objects = {key: b"x" for key in keys}
-        with s3rig.S3Rig(root=None, objects=objects) as rig:
+        with store(objects) as rig:
             code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
             self.assertEqual(code, cli.EXIT_OK)
             self.assertEqual(len(rig.batch_delete_attempts), 2)
-            self.assertEqual(rig.keys(), set())
+            self.assertEqual(repository_keys(rig), set())
         self.assertIn(f"deleted: {count}", stdout)
 
 

@@ -18,6 +18,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -25,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import genchain_fixtures as fx
 from generation_chain import cli
+from generation_chain.reclaim.manifest import load_manifest
 from generation_chain.reporting import manifest
 from generation_chain.sources import s3
 from generation_chain.sources.local import LocalMirrorSource
@@ -273,8 +275,32 @@ class ExitCodes(unittest.TestCase):
             ["--local-repo", self.root, "--manifest", path])
         self.assertEqual(code, 0)
         with open(path, encoding="utf-8") as fh:
-            self.assertEqual(fh.read().splitlines()[-1],
-                             manifest.COMPLETION_MARKER.rstrip("\n"))
+            last = fh.read().splitlines()[-1]
+        self.assertEqual(last.split("\t")[0],
+                         manifest.COMPLETION_MARKER.rstrip("\n"))
+
+    def test_the_marker_records_the_repository_generation_and_time(self):
+        # reclaim checks the target store against the uuid and generation
+        # recorded here, and measures the age limit from the time. If the
+        # audit recorded the wrong anchor, reclaim would refuse the live
+        # repository or accept an older copy of it, and a wrong time would
+        # let a stale manifest pass the age limit.
+        path = os.path.join(self.dir, "orphans.tsv")
+        before = int(time.time())
+        code, _out, _err = self.run_cli(
+            ["--local-repo", self.root, "--manifest", path, "--coverage-json",
+             os.path.join(self.dir, "coverage.json")])
+        after = time.time()
+        self.assertEqual(code, 0)
+        derivation = load_manifest(path).derivation
+        with open(os.path.join(self.dir, "coverage.json"),
+                  encoding="utf-8") as fh:
+            coverage = json.load(fh)
+        self.assertEqual(derivation.repository_uuid,
+                         coverage["repository_uuid"])
+        self.assertEqual(derivation.anchor_generation,
+                         coverage["current_generation"])
+        self.assertTrue(before <= derivation.derived_at <= after)
 
     def test_a_refused_runs_manifest_file_carries_no_completion_marker(self):
         # The other half. A reviewer trusting the marker's absence has to be
@@ -287,7 +313,9 @@ class ExitCodes(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_REFUSED)
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
-        self.assertNotIn(manifest.COMPLETION_MARKER.rstrip("\n"), lines)
+        marker = manifest.COMPLETION_MARKER.rstrip("\n")
+        self.assertEqual([line for line in lines if line.startswith(marker)],
+                         [])
 
     def test_the_marker_never_reaches_stdout(self):
         # Stdout is a pipe another program reads with `cut -f1`, not a file a

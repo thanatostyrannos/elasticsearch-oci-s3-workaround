@@ -10,13 +10,19 @@ DRY RUN IS THE DEFAULT. Every invocation without `--execute` builds the exact
 requests it would send, checksums included, and reports them without sending
 anything. `--execute` needs `--approve-digest` and `--approve-rows` naming
 this exact manifest (see `approval.py`); without a match, nothing is deleted.
+
+THE TARGET IS CHECKED, NOT TRUSTED. The approval binds the manifest's bytes
+and the command line names the store. Before the first delete, `--execute`
+reads the target's `index.latest` and the catalog it names, and refuses unless
+they show the repository uuid the manifest records, at its anchor generation
+or later. The age limit is measured from the derivation time recorded in the
+manifest, never from the file's mtime.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 import urllib.parse
@@ -26,15 +32,16 @@ from ..corroboration import ElasticsearchVeto
 from ..credentials import load_elasticsearch, load_s3
 from ..errors import GenerationChainError, SourceReadError
 from ..paths import PathRefused, checked_path
+from ..reporting.manifest import DERIVED_AT_FORMAT
 from ..sources.s3 import (S3Credentials, _refuse_plain_http,
-                           refuse_plain_http_cluster)
+                          refuse_plain_http_cluster)
 from . import batch
 from .approval import ApprovalError, verify_approval
 from . import recheck
 from .checksum import (DEFAULT_ALGORITHM, SUPPORTED_ALGORITHMS, ChecksumError,
                        checksum_header)
 from .manifest import ManifestData, ManifestError, load_manifest
-from .transport import TransportError, send_batch_delete
+from .transport import TransportError, fetch_object, send_batch_delete
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -45,7 +52,10 @@ EXIT_CODES = """Exit codes
   0  dry run reported, or every key executed against was deleted or already
      absent
   2  the invocation, the manifest, or the checksum algorithm is wrong
-  3  --execute was passed without an approval matching this exact manifest
+  3  --execute refused before sending anything: no approval matching this
+     exact manifest, a manifest too old or with no derivation record, a
+     target that is not the repository the manifest was derived from or
+     cannot be read, or a cluster that now protects a key
   4  the run executed and at least one key failed or went unconfirmed"""
 
 
@@ -132,8 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument(
         "--max-manifest-age", type=int, metavar="SECONDS",
         default=recheck.DEFAULT_MAX_MANIFEST_AGE_SECONDS,
-        help="refuse a manifest older than this, because the cluster can "
-             "change under it. 0 disables the check (default: %(default)s)")
+        help="refuse a manifest derived longer ago than this, measured "
+             "from the derivation time the manifest records, because the "
+             "cluster can change under it. 0 disables the check (default: "
+             "%(default)s)")
     return parser
 
 
@@ -260,15 +272,35 @@ def _execute_problem(args: argparse.Namespace,
         args.elasticsearch, args.without_elasticsearch)
     if problem:
         return problem, EXIT_USAGE
-    try:
-        age = time.time() - os.path.getmtime(manifest.path)
-    except OSError as exc:
-        return f"cannot read the age of {manifest.path}: {exc}", EXIT_USAGE
+    if manifest.derivation is None:
+        return (recheck.missing_derivation_problem(manifest.path),
+                EXIT_APPROVAL_REFUSED)
+    age = time.time() - manifest.derivation.derived_at
     problem = recheck.staleness_problem(age, args.max_manifest_age,
                                         manifest.path)
     if problem:
         return problem, EXIT_APPROVAL_REFUSED
     return _cluster_problem(args, manifest)
+
+
+def _target_problem(args: argparse.Namespace, manifest: ManifestData,
+                    store: Tuple[str, str],
+                    credentials: S3Credentials) -> Optional[str]:
+    """Why the target named on the command line must not be deleted from.
+
+    Reads with GET only, through the same endpoint, scheme and credentials
+    the delete will use, so the store that answers is the store that would
+    be deleted from.
+    """
+    scheme, host = store
+    prefix = normalise_prefix(args.prefix)
+
+    def read(key: str) -> bytes:
+        return fetch_object(
+            scheme=scheme, host=host, region=args.region, bucket=args.bucket,
+            key=prefix + key, credentials=credentials, timeout=args.timeout)
+
+    return recheck.target_problem(manifest.derivation, read)
 
 
 def _open_report(path: Optional[str]):
@@ -305,7 +337,8 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
         f"  {len(batches)} batch(es) of up to {batch.MAX_KEYS_PER_BATCH}, "
         f"checksum algorithm {args.checksum_algorithm}\n"
         f"  target: {scheme}://{host}/{args.bucket}"
-        f"{'/' + args.prefix.strip('/') if args.prefix.strip('/') else ''}\n")
+        f"{'/' + args.prefix.strip('/') if args.prefix.strip('/') else ''}\n"
+        f"{_derivation_summary(manifest)}")
 
     if not args.execute:
         return _dry_run(manifest, batches, args, stderr)
@@ -322,8 +355,27 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
 
+    problem = _target_problem(args, manifest, (scheme, host), credentials)
+    if problem is not None:
+        stderr.write(f"{problem}\n")
+        return EXIT_APPROVAL_REFUSED
+
     return _execute(batches, store_to_manifest, scheme, host, args,
                     credentials, stdout, stderr)
+
+
+def _derivation_summary(manifest: ManifestData) -> str:
+    """The derivation record as the dry run and --execute both print it."""
+    derivation = manifest.derivation
+    if derivation is None:
+        return ("  no derivation record (repository uuid, anchor generation, "
+                "time). --execute refuses this manifest; derive it again\n")
+    stamp = time.strftime(DERIVED_AT_FORMAT,
+                          time.gmtime(derivation.derived_at))
+    age = int(time.time() - derivation.derived_at)
+    return (f"  derived from repository {derivation.repository_uuid} at "
+            f"generation {derivation.anchor_generation}, {stamp} "
+            f"({age}s ago)\n")
 
 
 def _dry_run(manifest: ManifestData, batches, args: argparse.Namespace,
