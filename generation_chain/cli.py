@@ -28,7 +28,7 @@ from .corroboration import (CorroborationUnavailable,
                             ElasticsearchVeto, Veto)
 from .derivation.audit import run_audit
 from .errors import GenerationChainError
-from .paths import checked_path
+from .paths import PathRefused, checked_path
 from .model import AuditResult
 from .reporting import coverage as coverage_report
 from .reporting import manifest as manifest_writer
@@ -57,8 +57,12 @@ EXIT_CODES = """Exit codes
   0  the run completed and wrote a manifest
   2  the run refused for a settled reason, such as an unsupported repository
      format or a catalog it could not anchor. Retrying changes nothing
-  3  the invocation or a credential is wrong. Fix it and run again
-  4  the store or the cluster did not answer. A retry is reasonable
+  3  the invocation or a credential is wrong. Fix it and run again. This
+     covers a store that answers 401 or 403, a bucket or --prefix with no
+     index.latest (404), and an output path that is refused or cannot be
+     written, which is checked before the store is read
+  4  the store or the cluster did not answer, or answered 429 or a 5xx. A
+     retry is reasonable
   5  the repository listing, or a single shard directory, is larger than this
      host can hold. Run it somewhere with more memory, narrow it with --prefix, or raise
      --max-ram (or --memory-mb) if this host really has more than it reports"""
@@ -369,6 +373,8 @@ def _exit_code(coverage) -> int:
         return EXIT_OK
     if coverage.refusal_needs_a_bigger_host:
         return EXIT_TOO_BIG
+    if coverage.refusal_is_invocation:
+        return EXIT_USAGE
     return EXIT_TRANSPORT if coverage.refusal_is_transient else EXIT_REFUSED
 
 
@@ -383,6 +389,12 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
 
     if args.self_test:
         return EXIT_OK if selftest.run(stderr) == 0 else EXIT_REFUSED
+
+    try:
+        _check_output_paths(args)
+    except (PathRefused, OSError) as exc:
+        stderr.write(f"{exc}\n")
+        return EXIT_USAGE
 
     try:
         transport = _resolve_transport(args, stdin, stderr)
@@ -413,9 +425,44 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
     result = run_audit(
         source, veto, budget_bytes=budget_bytes,
         progress=None if args.quiet else _progress_writer(stderr))
-    _write(result, transport, source.describe(), args, stdout, stderr,
-           sizes=_reported_sizes(source))
+    try:
+        _write(result, transport, source.describe(), args, stdout, stderr,
+               sizes=_reported_sizes(source))
+    except (PathRefused, OSError) as exc:
+        stderr.write(f"an output file could not be written: {exc}\n")
+        return EXIT_USAGE
     return _exit_code(result.coverage)
+
+
+def _check_output_paths(args: argparse.Namespace) -> None:
+    """Refuse every output path that cannot be written, before any read.
+
+    A run can read for half an hour. A path found unwritable only when the
+    results are written costs all of it.
+    """
+    for flag, path in (("--manifest", args.manifest),
+                       ("--classification", args.classification),
+                       ("--coverage-json", args.coverage_json)):
+        if path is None:
+            continue
+        _check_writable(checked_path(path, flag), flag)
+
+
+def _check_writable(target: str, flag: str) -> None:
+    directory = os.path.dirname(target) or "."
+    try:
+        probe = tempfile.NamedTemporaryFile(
+            dir=directory, prefix=".genchain-", suffix=".probe")
+    except OSError as exc:
+        # A target such as /dev/null sits in a directory this process cannot
+        # create files in, and `_write_atomically` writes it directly.
+        if os.path.exists(target) and not os.path.isdir(target) \
+                and os.access(target, os.W_OK):
+            return
+        raise PathRefused(
+            f"{flag} names {target}, and nothing can be written in "
+            f"{directory}: {exc.strerror or exc}. Nothing was read") from exc
+    probe.close()
 
 
 def _write_atomically(path: str, render, purpose: str = "an output file") -> None:

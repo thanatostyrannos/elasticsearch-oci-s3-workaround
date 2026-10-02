@@ -186,6 +186,9 @@ class Coverage:
     # call for opposite action, and conflating them wastes either a host or a
     # retry budget.
     refusal_needs_a_bigger_host: bool = False
+    # The credential or the command line is wrong, so a retry changes nothing
+    # and the operator has to act.
+    refusal_is_invocation: bool = False
     # None means nobody asked Elasticsearch. It NEVER means the
     # question was asked and went unanswered; that refuses the run.
     corroborated_by: Optional[str] = None
