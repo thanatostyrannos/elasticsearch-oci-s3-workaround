@@ -242,6 +242,17 @@ cloned it, or the image's own working directory when it is baked in.
 {{- end -}}
 
 {{/*
+snapshot_churn_rig.py verifies certificates and has no switch that turns that
+off, so insecureTls cannot be honoured. Fail the render instead of emitting a
+flag the script's parser rejects with exit 2.
+*/}}
+{{- define "rig.requireVerifiedTls" -}}
+{{- if .Values.elasticsearch.insecureTls -}}
+{{- fail "elasticsearch.insecureTls is not supported: snapshot_churn_rig.py always verifies TLS and has no --insecure flag. Set elasticsearch.caCert to the PEM of the CA that signed the cluster certificate (under ECK: kubectl get secret <cluster>-es-http-certs-public -o jsonpath='{.data.ca\\.crt}' | base64 -d) and leave insecureTls false." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 python3 snapshot_churn_rig.py teardown's full argument list, shared between
 the automatic pre-delete hook and the standalone manual safety-net Job so
 the two can never drift apart.
@@ -257,9 +268,7 @@ the two can never drift apart.
 - --ca-cert
 - /es-ca-cert/ca.crt
 {{- end }}
-{{- if .Values.elasticsearch.insecureTls }}
-- --insecure
-{{- end }}
+{{- include "rig.requireVerifiedTls" . }}
 - --prefix
 - {{ .Values.churnRig.prefix | quote }}
 {{- if .Values.churnRig.dataStream }}

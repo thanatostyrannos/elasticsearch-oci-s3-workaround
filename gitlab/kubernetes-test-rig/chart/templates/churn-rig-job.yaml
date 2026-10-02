@@ -57,9 +57,7 @@ spec:
             - --ca-cert
             - /es-ca-cert/ca.crt
             {{- end }}
-            {{- if .Values.elasticsearch.insecureTls }}
-            - --insecure
-            {{- end }}
+            {{- include "rig.requireVerifiedTls" . }}
             - --prefix
             - {{ .Values.churnRig.prefix | quote }}
             {{- if .Values.churnRig.dataStream }}
