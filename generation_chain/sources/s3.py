@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ..credentials import Secret, as_secret
-from ..errors import SourceReadError
+from ..errors import RunRefused, SourceReadError
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader
 from .signing import sigv4
 
@@ -120,8 +120,13 @@ def _continuation_token(tree: ET.Element) -> Optional[str]:
     it is, and every generation and blob past that point silently does not
     exist as far as the run is concerned.
     """
-    truncated = tree.findtext(f"{LIST_NAMESPACE}IsTruncated", "false")
-    if truncated.strip().lower() != "true":
+    truncated = tree.findtext(f"{LIST_NAMESPACE}IsTruncated")
+    if truncated not in ("true", "false"):
+        raise RunRefused(
+            f"the listing page carries IsTruncated {truncated!r}, not true "
+            "or false, so this run cannot tell whether the listing is "
+            "complete")
+    if truncated == "false":
         return None
     token = tree.findtext(f"{LIST_NAMESPACE}NextContinuationToken")
     if not token:
