@@ -105,7 +105,7 @@ class HttpReader:
             except urllib.error.HTTPError as exc:
                 last = f"{exc.code} from {url}: {_detail(exc)}"
                 if exc.code not in policy.retry_statuses:
-                    raise SourceReadError(last) from exc
+                    raise SourceReadError(last, status=exc.code) from exc
                 pause = self._pause(policy, attempt, _retry_after(exc))
             except Exception as exc:
                 # Deliberately broad. The stated contract is that a read

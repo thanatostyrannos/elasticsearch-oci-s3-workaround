@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from ..errors import (GenerationChainError, RunRefused, SourceReadError,
+                      denial_refusal,
                       UnsupportedRepository)
 from ..formats.latest import INDEX_LATEST_KEY, parse_index_latest
 from ..formats.repository_data import (parse_repository_data,
@@ -253,6 +254,8 @@ def _highest_ours(source: RepositorySource, present: List[int], latest: int,
         try:
             parsed = parse_repository_data(source.fetch(key), number)
         except SourceReadError as exc:
+            if exc.is_denial:
+                raise denial_refusal(exc, f"cannot read {key}") from exc
             raise RunRefused(
                 f"{key} is listed above the generation {INDEX_LATEST_KEY} "
                 f"names and could not be read ({exc}), so this run cannot tell "
@@ -282,6 +285,14 @@ def _index_latest(source: RepositorySource) -> int:
     try:
         return parse_index_latest(source.fetch(INDEX_LATEST_KEY))
     except SourceReadError as exc:
+        if exc.is_denial:
+            raise denial_refusal(exc, f"cannot read {INDEX_LATEST_KEY}") from exc
+        if exc.status == 404:
+            raise RunRefused(
+                f"{INDEX_LATEST_KEY} does not exist ({exc}). The bucket, "
+                "endpoint or --prefix names a place with no repository in "
+                "it, and a retry gets the same answer",
+                invocation_is_wrong=True) from exc
         raise RunRefused(f"cannot read {INDEX_LATEST_KEY}: {exc}",
                          transient=True) from exc
     except GenerationChainError as exc:
@@ -296,6 +307,9 @@ def _read_generation(source: RepositorySource,
     except UnsupportedRepository as exc:
         raise RunRefused(str(exc)) from exc
     except SourceReadError as exc:
+        if exc.is_denial:
+            raise denial_refusal(
+                exc, f"cannot read generation index-{generation}") from exc
         raise RunRefused(
             f"cannot read generation index-{generation}: {exc}",
             transient=True) from exc

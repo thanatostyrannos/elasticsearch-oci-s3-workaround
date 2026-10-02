@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Dict, FrozenSet, List, Optional
 
 from ..corroboration import Veto
-from ..errors import RunRefused, SourceReadError
+from ..errors import RunRefused, SourceReadError, denial_refusal
 from ..model import AuditResult, Condemnation, Coverage, ShardLocation
 from ..sources import RepositorySource, hint, prepared
 from .chain import load_chain
@@ -84,6 +84,9 @@ def run_audit(source: RepositorySource, veto: Optional[Veto] = None,
     except RunRefused as exc:
         return _refused_by(exc, notes)
     except SourceReadError as exc:
+        if exc.is_denial:
+            return _refused_by(
+                denial_refusal(exc, "cannot list the repository"), notes)
         return _refused(f"cannot list the repository: {exc}", notes, True)
     say(f"listed {len(keys):,} objects")
     try:
@@ -241,4 +244,5 @@ def _refused_by(exc: RunRefused, notes: List[str]) -> AuditResult:
     """
     result = _refused(str(exc), notes, exc.transient)
     result.coverage.refusal_needs_a_bigger_host = exc.needs_a_bigger_host
+    result.coverage.refusal_is_invocation = exc.invocation_is_wrong
     return result
