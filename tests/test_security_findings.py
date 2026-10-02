@@ -84,6 +84,128 @@ class EntityExpansionIsRefusedBeforeParsing(unittest.TestCase):
             s3.parse_listing_body(b"\n\n   " + BILLION_LAUGHS)
 
 
+def _padded_doctype(pad):
+    return (b'<?xml version="1.0"?><!-- ' + b"x" * pad + b' -->'
+            b'<!DOCTYPE r [<!ENTITY a "AAAA"><!ENTITY b "&a;&a;&a;&a;">]>'
+            b'<ListBucketResult><Key>&b;</Key></ListBucketResult>')
+
+
+def _internal_entity_only():
+    # No DOCTYPE keyword in the first bytes and no leading comment: the
+    # declaration alone, so the entity layer is exercised on its own.
+    return (b'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY a "AAAA">]>'
+            b'<ListBucketResult>&a;</ListBucketResult>')
+
+
+def _utf16(body):
+    return body.decode("utf-8").replace(
+        'version="1.0"?>', 'version="1.0" encoding="UTF-16"?>', 1
+    ).encode("utf-16")
+
+
+def _both_sites():
+    """The two parsers that read a store response, as (name, call) pairs."""
+    def listing(body):
+        return s3.parse_listing_body(body)
+
+    def delete(body):
+        return batch.parse_response(body, ["a"])
+    return (("listing", listing), ("delete result", delete))
+
+
+class TheWholeBodyIsCheckedBeforeParsing(unittest.TestCase):
+    """The DOCTYPE refusal holds wherever the declaration sits in the body.
+
+    The first version looked at the first 2048 bytes only, so a long comment in
+    front of the DOCTYPE, or a UTF-16 body, reached expat with its entity
+    declarations and expanded 1,000,000 characters from 3.3 KB. Both parsers
+    share one check, so each abuse case runs against both.
+    """
+
+    def test_a_normal_listing_page_of_1000_keys_parses(self):
+        # Breaks if the size cap or the encoding rule rejects what a real
+        # store sends, which would stop every audit at the first full page.
+        entries = b"".join(
+            b"<Contents><Key>" + (b"k" * 1000) + b"%d</Key><Size>1</Size>"
+            b"<ETag>&quot;abc&quot;</ETag></Contents>" % i
+            for i in range(1000))
+        body = (b'<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>'
+                b"<IsTruncated>false</IsTruncated>" + entries
+                + b"</ListBucketResult>")
+        self.assertEqual(len(s3.parse_listing_body(body).findall("Contents")),
+                         1000)
+
+    def test_a_normal_delete_result_for_1000_keys_parses(self):
+        # Same failure on the delete side: a full batch result refused would
+        # leave every batch reported as unconfirmed.
+        keys = ["indices/%d" % i + "k" * 900 for i in range(1000)]
+        body = (b'<?xml version="1.0" encoding="UTF-8"?><DeleteResult>'
+                + b"".join(b"<Deleted><Key>" + k.encode() + b"</Key></Deleted>"
+                           for k in keys) + b"</DeleteResult>")
+        self.assertEqual(list(batch.parse_response(body, keys).deleted), keys)
+
+    def test_a_doctype_after_a_10kb_comment_is_refused(self):
+        # Breaks if the scan goes back to a prefix: a comment pushes the
+        # DOCTYPE past it and entity expansion exhausts the process.
+        for name, call in _both_sites():
+            with self.subTest(site=name):
+                with self.assertRaises(Exception) as raised:
+                    call(_padded_doctype(10_000))
+                self.assertIn("DOCTYPE", str(raised.exception))
+
+    def test_an_internal_entity_declaration_is_refused(self):
+        for name, call in _both_sites():
+            with self.subTest(site=name):
+                with self.assertRaises(Exception) as raised:
+                    call(_internal_entity_only())
+                self.assertIn("DOCTYPE", str(raised.exception))
+
+    def test_a_utf16_body_is_refused(self):
+        # Breaks if a non-UTF-8 body is decoded by expat: the byte scan sees
+        # no ASCII "<!DOCTYPE" in UTF-16 and the declaration gets through.
+        for name, call in _both_sites():
+            with self.subTest(site=name):
+                with self.assertRaises(Exception) as raised:
+                    call(_utf16(_padded_doctype(0)))
+                self.assertIn("UTF-8", str(raised.exception))
+
+    def test_a_latin1_declaration_is_refused(self):
+        # A declared legacy encoding is the same hole by another route.
+        body = (b'<?xml version="1.0" encoding="ISO-8859-1"?>'
+                b"<ListBucketResult/>")
+        for name, call in _both_sites():
+            with self.subTest(site=name):
+                with self.assertRaises(Exception) as raised:
+                    call(body)
+                self.assertIn("UTF-8", str(raised.exception))
+
+    def test_an_oversized_body_is_refused_before_it_is_read(self):
+        # Breaks if a hostile store can make the audit allocate without limit
+        # by sending a valid but enormous document.
+        body = (b"<ListBucketResult>"
+                + b" " * s3.MAX_XML_BODY_BYTES + b"</ListBucketResult>")
+        for name, call in _both_sites():
+            with self.subTest(site=name):
+                with self.assertRaises(Exception) as raised:
+                    call(body)
+                self.assertIn("larger than", str(raised.exception))
+
+    def test_the_parser_itself_refuses_a_doctype(self):
+        # The string layer is a second layer. With it switched off, expat's
+        # own handlers must still stop the declaration before any entity is
+        # stored, so one layer failing does not reopen expansion.
+        original = s3.refuse_doctype
+        s3.refuse_doctype = lambda body, what: None
+        try:
+            for name, call in _both_sites():
+                with self.subTest(site=name):
+                    with self.assertRaises(Exception) as raised:
+                        call(_padded_doctype(10_000))
+                    self.assertIn("DOCTYPE", str(raised.exception))
+        finally:
+            s3.refuse_doctype = original
+
+
 class Md5IsMarkedAsNotForSecurity(unittest.TestCase):
     """Content-MD5 is an S3 protocol checksum, not a security hash.
 

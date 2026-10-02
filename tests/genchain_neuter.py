@@ -233,9 +233,10 @@ CASES = [
 
     # -- the security findings, each checked against this runtime ----------
     ("entity-expansion-is-refused-before-parsing", "sources/s3.py",
-     '    if _DOCTYPE in body[:2048].lstrip():', "    if False:"),
+     '    if _DOCTYPE in text or _ENTITY in text:', "    if False:"),
     ("the-delete-response-refuses-a-doctype-too", "reclaim/batch.py",
-     '    if b"<!DOCTYPE" in body[:2048].lstrip():', "    if False:"),
+     '        root = parse_xml_body(body, "delete response")',
+     '        root = ET.fromstring(body)'),
     ("plain-http-off-loopback-is-refused", "sources/s3.py",
      "    if parsed.scheme == \"https\" or allowed:\n        return",
      "    if True:\n        return"),
