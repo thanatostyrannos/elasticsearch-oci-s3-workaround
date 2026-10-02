@@ -136,12 +136,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+MAX_DUPLICATES_NAMED = 10
+
+
+def _refuse_duplicate_keys(manifest: ManifestData) -> None:
+    """Raise `ManifestError` when any key appears on more than one row.
+
+    `--approve-rows` counts rows, and `_store_keys` holds one entry per key.
+    A repeated row would make the delete send fewer keys than the operator
+    approved, so the manifest is refused before any request is built. The
+    audit never writes a repeated key; a hand edit can.
+    """
+    seen = set()
+    repeated: List[str] = []
+    for key in manifest.keys:
+        if key in seen and key not in repeated:
+            repeated.append(key)
+        seen.add(key)
+    if not repeated:
+        return
+    named = ", ".join(repr(key) for key in repeated[:MAX_DUPLICATES_NAMED])
+    more = len(repeated) - MAX_DUPLICATES_NAMED
+    suffix = f" and {more} more" if more > 0 else ""
+    raise ManifestError(
+        f"{manifest.path} names {len(repeated)} key(s) on more than one "
+        f"row: {named}{suffix}. The approved row count would not match the "
+        "keys deleted, so nothing was sent. Remove the repeated rows and "
+        "derive or approve the manifest again")
+
+
 def _store_keys(manifest: ManifestData, prefix: str) -> Dict[str, str]:
     """Store key -> the manifest's own relative key, in manifest order.
 
-    A dict rather than a list because reporting translates a store key back
-    to the spelling an operator recognises from the manifest; built with a
-    dict comprehension rather than a loop that could drop or reorder an entry.
+    A dict because reporting translates a store key back to the spelling an
+    operator recognises from the manifest. A dict holds one entry per key, so
+    callers must pass a manifest that `_refuse_duplicate_keys` accepted.
     """
     normalised = normalise_prefix(prefix)
     return {normalised + key: key for key in manifest.keys}
@@ -257,6 +286,7 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
 
     try:
         manifest = load_manifest(args.manifest)
+        _refuse_duplicate_keys(manifest)
         scheme, host = _require_store_arguments(args)
     except (ManifestError, Misconfigured) as exc:
         stderr.write(f"{exc}\n")

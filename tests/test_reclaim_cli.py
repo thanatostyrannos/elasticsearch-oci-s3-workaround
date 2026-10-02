@@ -121,6 +121,49 @@ class ManifestMustBeMarkedComplete(ReclaimCase):
         self.assertIn("marker", stderr.lower())
 
 
+class DuplicateRowsAreRefused(ReclaimCase):
+
+    def test_a_manifest_without_duplicates_executes_every_approved_key(self):
+        # --approve-rows counts the manifest's rows. If a refactor of the
+        # duplicate check ever drops or merges distinct keys, an operator
+        # approves N rows and the store deletes fewer, with no warning.
+        keys = ["k/one", "k/two", "k/three"]
+        write_manifest(self.manifest_path, keys)
+        with s3rig.S3Rig(root=None, objects={k: b"x" for k in keys}) as rig:
+            code, stdout, _stderr = self.run_cli(rig, execute=True, approve=True)
+            remaining = rig.keys()
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertIn("deleted: 3", stdout)
+        self.assertEqual(remaining, set())
+
+    def test_a_duplicate_row_is_refused_and_nothing_is_sent(self):
+        # A hand edited or spliced manifest can repeat a key. The approval
+        # counts every row, so executing it would delete fewer keys than the
+        # operator approved and report success. The audit never writes this
+        # shape, so the only way here is an edit, and the safe answer is to
+        # send nothing and name the key so the operator can fix the file.
+        write_manifest(self.manifest_path, ["k/one", "k/two", "k/one"])
+        with s3rig.S3Rig(root=None, objects={"k/one": b"x", "k/two": b"y"}) as rig:
+            code, _stdout, stderr = self.run_cli(rig, execute=True, approve=True)
+            requests = list(rig.requests)
+            remaining = set(rig.keys())
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertEqual(requests, [])
+        self.assertEqual(remaining, {"k/one", "k/two"})
+        self.assertIn("k/one", stderr)
+        self.assertNotIn("k/two", stderr)
+
+    def test_a_dry_run_also_refuses_a_duplicate_row(self):
+        # The dry run prints the --approve-rows value to use. If it accepted
+        # a duplicate, it would hand the operator a count the execute run
+        # then refuses, or worse, one the old code half honoured.
+        write_manifest(self.manifest_path, ["k/one", "k/one"])
+        with s3rig.S3Rig(root=None, objects={"k/one": b"x"}) as rig:
+            code, _stdout, stderr = self.run_cli(rig, execute=False)
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertIn("k/one", stderr)
+
+
 class DryRunSendsNothing(ReclaimCase):
 
     def test_no_request_reaches_the_store_without_execute(self):
