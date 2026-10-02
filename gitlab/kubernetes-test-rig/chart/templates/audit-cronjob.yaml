@@ -86,12 +86,13 @@ spec:
                   args="$args --oci-profile {{ .Values.auditCronJob.ociProfile }}"
                   {{- end }}
                   args="$args --credentials /secrets/{{ .Values.credentials.keys.credentialsJson }}"
-                  args="$args --manifest /output/orphans.tsv"
+                  RUN_DIR="/output/$(date -u +%Y%m%dT%H%M%SZ)"
+                  args="$args --manifest $RUN_DIR/orphans.tsv"
                   {{- if .Values.auditCronJob.writeClassification }}
-                  args="$args --classification /output/classification.tsv"
+                  args="$args --classification $RUN_DIR/classification.tsv"
                   {{- end }}
                   {{- if .Values.auditCronJob.writeCoverageJson }}
-                  args="$args --coverage-json /output/coverage.json"
+                  args="$args --coverage-json $RUN_DIR/coverage.json"
                   {{- end }}
                   {{- if .Values.auditCronJob.askElasticsearch }}
                   args="$args --elasticsearch {{ include "rig.esUrl" . }}"
@@ -117,9 +118,7 @@ spec:
                   {{- if .Values.auditCronJob.quiet }}
                   args="$args --quiet"
                   {{- end }}
-                  RUN_DIR="/output/$(date -u +%Y%m%dT%H%M%SZ)"
                   mkdir -p "$RUN_DIR"
-                  args=$(echo "$args" | sed "s#/output/#$RUN_DIR/#g")
                   echo "starting: python3 -m generation_chain $args"
                   status=0
                   # The human report always goes to stderr; keep it as its
