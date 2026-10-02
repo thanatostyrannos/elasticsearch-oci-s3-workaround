@@ -14,7 +14,7 @@ and nothing has been reformatted.
 > to a real delete of a live segment blob, and they were removed.
 >
 > Read the commands here as history. Do not run them. The replacement,
-> [`generation_chain`](../../generation_chain/README.md), cannot delete at all:
+> [`generation_chain`](../../generation_chain/), cannot delete at all:
 > its HTTP layer allows GET and HEAD and nothing else.
 
 The `dN` prefix is the day of the campaign the file came from.

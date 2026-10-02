@@ -68,7 +68,7 @@ java.io.IOException: Failed to delete blobs [ObjectIdentifier(Key=<base-path>/in
 
 If that is you, keep reading. The affected version boundary, the mechanism and
 the upstream history are in
-[the problem record](docs/problem-record.md#the-failure-in-detail).
+[FACTS.md](FACTS.md#the-fault-this-repository-exists-for).
 
 ## What "audit" means here
 
@@ -261,7 +261,7 @@ The commands, the output, and what each disposition means are in
 There is no upstream fix to wait for. Elastic declined one and considers this
 the storage vendor's problem. The version boundary, the mechanism, what was
 proposed upstream and why it was declined are in
-[the problem record](docs/problem-record.md#root-cause-and-upstream-status).
+[FACTS.md](FACTS.md#the-fault-this-repository-exists-for).
 
 ## The tools
 
@@ -273,7 +273,7 @@ exist to measure and to check.
 |---|---|
 | [`generation_chain/`](generation_chain/) | Reads a snapshot repository and names the objects a delete should have removed and did not. It cannot delete: its HTTP layer allows GET and HEAD and nothing else, refused at the transport with a raised exception rather than an assert, because `python3 -O` strips asserts and once let a DELETE through. Output is a manifest a person reads. See [the safety condition](FACTS.md#the-safety-condition-stated-correctly) in FACTS.md and [the exit codes](docs/running-it.md#when-it-refuses) in the guide to running it. |
 | [`generation_chain/reclaim/`](generation_chain/reclaim/) | Deletes the keys in an approved manifest, in batches, with `Content-MD5`. Dry run by default. `--execute` requires `--approve-digest` and `--approve-rows` from that dry run, so an edited manifest cannot be executed. It contains no reference to Elasticsearch: the veto is applied when the manifest is derived. |
-| [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [generating load](docs/generating-load.md). |
+| [`snapshot_churn_rig.py`](snapshot_churn_rig.py) | Builds a snapshot repository that churns continuously and generates the load itself, so there is something to audit. One file, no Kubernetes. See [step 5 of the testing guide](docs/testing-guide.md#step-5-start-the-load-generator). |
 | [`verify_restorable.py`](verify_restorable.py) | Restores an index from the repository and counts documents. The only check that survives the others passing. |
 
 ## Documentation
@@ -283,9 +283,7 @@ exist to measure and to check.
 | [docs/running-it.md](docs/running-it.md) | Audit, reclaim, verify. The credentials file, the output, the exit codes, and a read-only Elasticsearch API key |
 | [docs/testing-guide.md](docs/testing-guide.md) | Qualify the tool on a throwaway repository, on Oracle or MinIO. The settings behind the published numbers, what they cost, and how the rig works |
 | [docs/operating-the-repository.md](docs/operating-the-repository.md) | What `?verify=false` does and does not change, checking a repository after deletion traffic, and `base_path` |
-| [docs/problem-record.md](docs/problem-record.md) | The problem for whoever holds the ticket, then the root cause and upstream status in full |
 | [docs/blast-radius.md](docs/blast-radius.md) | What a wrong delete costs, and why there is no undo |
 | [docs/oci-s3-compatibility.md](docs/oci-s3-compatibility.md) | What Oracle's endpoint accepts and rejects, measured against a real bucket |
-| [docs/generating-load.md](docs/generating-load.md) | The load generator, flag by flag |
 | [FACTS.md](FACTS.md) | What was measured, against what, on which day |
-| [docs/README.md](docs/README.md) | Everything else: security review, engineering, the service request to Oracle |
+| [docs/README.md](docs/README.md) | Everything else: security review and engineering |

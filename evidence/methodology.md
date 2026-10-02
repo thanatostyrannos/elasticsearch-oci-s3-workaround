@@ -524,9 +524,6 @@ The step numbers are the trail into the recorded run. Campaign 2's captured
 artifacts in [`campaign-data.md`](campaign-data.md) are named `d0` through `d10`,
 one prefix per step below: Step 6 is measured by `d6-es-pod.log` and the `d6-*`
 acknowledgments, Step 9's residual audit is `d9-residual-orphans.tsv`, and so on.
-The same numbering runs through
-[`../skills/es-hybrid-migration/SKILL.md`](../skills/es-hybrid-migration/SKILL.md),
-which is the operator-facing version of this section.
 
 ### Step 0: heal broken mounts first
 
@@ -655,8 +652,7 @@ settings block. **On any repository that does have one, a `PUT` without it
 repoints the repository at the bucket root**, because `PUT` replaces the settings
 rather than merging them. Read the existing settings first and carry every key
 across, and accept on the snapshot listing being unchanged rather than on
-`acknowledged` alone. See Step 4 of
-[`../skills/es-hybrid-migration/SKILL.md`](../skills/es-hybrid-migration/SKILL.md).
+`acknowledged` alone.
 
 **Acceptance:** `{"acknowledged":true}`, and `_cat/snapshots/oci-repro` lists the
 same snapshots as before the PUT. `?verify=false` is Elastic support's

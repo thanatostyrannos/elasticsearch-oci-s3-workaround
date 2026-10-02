@@ -23,7 +23,6 @@ MATRIX = os.path.join(ROOT, ".github", "workflows", "python-matrix.yml")
 # where a file mentions a floor this list does not know about.
 DOCUMENTS = (
     "README.md",
-    os.path.join("docs", "generating-load.md"),
     os.path.join("docs", "running-it.md"),
     os.path.join("docs", "testing-guide.md"),
     os.path.join("gitlab", "README.md"),
