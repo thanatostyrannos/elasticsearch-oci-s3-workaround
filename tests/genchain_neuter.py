@@ -175,10 +175,19 @@ CASES = [
      "            _drop_indices(histories, dropped, {index_uuid}, Doubt("),
     ("an-unverified-extent-drops-the-snapshots-shards",
      "derivation/shards.py",
+     "f\"snapshot {snapshot.name!r} was not verified\")\n"
      "            _drop_indices(histories, dropped, touched, Doubt(\n"
      "                EXTENT_UNREADABLE,",
+     "f\"snapshot {snapshot.name!r} was not verified\")\n"
      "            _keep = (histories, dropped, touched, Doubt(\n"
      "                EXTENT_UNREADABLE,"),
+    ("a-snapshot-document-for-another-uuid-is-not-trusted",
+     "derivation/shards.py",
+     "        if extent.uuid != uuid:", "        if False:"),
+    ("a-snapshot-without-shard-counts-is-not-measured",
+     "derivation/shards.py",
+     "        if extent.total_shards is None or extent.successful_shards is None:",
+     "        if False:"),
     ("a-partial-snapshot-is-not-measured-against-its-extent",
      "derivation/shards.py",
      "        if not extent.is_complete:", "        if False:"),

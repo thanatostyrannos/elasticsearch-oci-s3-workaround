@@ -633,6 +633,27 @@ def _check_declared_extent(source: RepositorySource, chain: Chain,
                 f"the extent of live snapshot {snapshot.name!r} could not be "
                 "verified"))
             continue
+        if extent.uuid != uuid:
+            notes.append(f"{key} declares snapshot uuid {extent.uuid!r}, so "
+                         f"the extent of snapshot {snapshot.name!r} was not "
+                         "verified")
+            _drop_indices(histories, dropped, touched, Doubt(
+                EXTENT_UNREADABLE,
+                f"the document fetched for live snapshot {snapshot.name!r} "
+                "belongs to a different snapshot"))
+            continue
+        if extent.total_shards is None or extent.successful_shards is None:
+            # Without both counts this run cannot tell a complete snapshot
+            # from a partial one, so it cannot tell a short read from a
+            # legitimate shortfall either.
+            notes.append(f"{key} declares no usable shard counts, so the "
+                         f"extent of snapshot {snapshot.name!r} was not "
+                         "verified")
+            _drop_indices(histories, dropped, touched, Doubt(
+                EXTENT_UNREADABLE,
+                f"live snapshot {snapshot.name!r} declares no usable "
+                "total_shards or successful_shards"))
+            continue
         if not extent.is_complete:
             # A partial snapshot legitimately does not cover what it set out to,
             # so a shortfall says nothing about this run's reading.

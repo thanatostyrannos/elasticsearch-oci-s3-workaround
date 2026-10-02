@@ -146,6 +146,50 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
         self.assertEqual(set(),
                          self.built.live_blob_keys & set(result.keys))
 
+    def _rewrite_s2(self, change):
+        self.dir = tempfile.mkdtemp(prefix="genchain-extent-body-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.built = repo.build(self.dir, HISTORY)
+        _rewrite_snapshot_body(self.dir, repo.snapshot_uuid("s2"), change)
+        return run_audit(LocalMirrorSource(self.dir))
+
+    def _assert_condemns_nothing_in_wide(self, result):
+        self.assertEqual(shards.EXTENT_UNREADABLE, self._code(result, WIDE_0))
+        self.assertEqual(shards.EXTENT_UNREADABLE, self._code(result, WIDE_1))
+        self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
+
+    def test_a_snapshot_document_that_lost_total_shards_drops_its_shards(self):
+        # An Elasticsearch release that renames `total_shards` would otherwise
+        # switch the whole extent check off and let a short traversal condemn
+        # live segments with nothing left to contradict it.
+        result = self._rewrite_s2(lambda b: b.pop("total_shards"))
+        self._assert_condemns_nothing_in_wide(result)
+
+    def test_a_snapshot_document_that_lost_successful_shards_drops_its_shards(self):
+        # Same hole through the other counter: without it the run cannot tell
+        # a partial snapshot from a complete one.
+        result = self._rewrite_s2(lambda b: b.pop("successful_shards"))
+        self._assert_condemns_nothing_in_wide(result)
+
+    def test_a_non_integer_total_shards_drops_its_shards(self):
+        # A string or float count that a decoder passes through must not be
+        # read as "no declaration, nothing to check".
+        result = self._rewrite_s2(lambda b: b.update(total_shards="3"))
+        self._assert_condemns_nothing_in_wide(result)
+
+    def test_a_snapshot_document_for_another_uuid_drops_its_shards(self):
+        # A snapshot document swapped in from a different snapshot would
+        # declare that other snapshot's extent, and a traversal could be
+        # measured against, and pass, the wrong declaration.
+        result = self._rewrite_s2(lambda b: b.update(uuid="some-other-uuid"))
+        self._assert_condemns_nothing_in_wide(result)
+
+    def test_a_well_formed_snapshot_document_still_passes(self):
+        # Baseline for the refusals above. If a normal document were refused,
+        # every audit would drop every shard.
+        result = self._rewrite_s2(lambda b: None)
+        self.assertEqual({}, result.coverage.shards_dropped)
+
     def test_a_partial_snapshot_is_not_measured_against_its_own_extent(self):
         # A snapshot Elasticsearch itself reports as partial legitimately does
         # not cover what it set out to, so the shortfall says nothing about
@@ -374,6 +418,18 @@ def _strip_index_details(root: str, uuid: str) -> None:
     key = f"snap-{uuid}.dat"
     body = unwrap(repo.read(root, key))["snapshot"]
     body.pop("index_details", None)
+    repo.overwrite(root, key, repo.codec_wrap(
+        json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
+        codec_name="snapshot"))
+
+
+def _rewrite_snapshot_body(root: str, uuid: str, change) -> None:
+    """Apply `change` to one snapshot document's body and write it back."""
+    import json
+    from generation_chain.formats.codec import unwrap
+    key = f"snap-{uuid}.dat"
+    body = unwrap(repo.read(root, key))["snapshot"]
+    change(body)
     repo.overwrite(root, key, repo.codec_wrap(
         json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
         codec_name="snapshot"))
