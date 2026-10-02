@@ -168,10 +168,8 @@ elasticsearch:
   # --es-password-file, used for the segment-mode shard wait) take no CA or
   # TLS flag at all in this tool's current CLI; see the chart README.
   caCert: ""
-  # Skip TLS verification for a lab cluster with a self-signed certificate.
-  # Only the load generator (snapshot_churn_rig.py) exposes this flag
-  # (--insecure); the audit has no equivalent and relies on --es-ca-cert
-  # instead.
+  # Not supported. Neither tool can skip TLS verification, so setting this
+  # to true fails the render. Give a self-signed lab cluster's CA in caCert.
   insecureTls: false
 
   # How long each job waits for the cluster to start answering before giving
