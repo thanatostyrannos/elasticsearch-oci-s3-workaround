@@ -23,7 +23,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Iterator, List, Sequence, Tuple
 
-from ..errors import GenerationChainError
+from ..errors import GenerationChainError, SourceReadError
+from ..sources.s3 import parse_xml_body
 
 # An XML namespace, which is a name rather than an address. Nothing here
 # fetches it, and it is spelled http:// because that is the string the S3
@@ -92,19 +93,13 @@ class BatchOutcome:
 
 def _delete_result_root(body: bytes) -> ET.Element:
     """The `DeleteResult` element, or BatchDeleteError naming what came back."""
-    if b"<!DOCTYPE" in body[:2048].lstrip():
-        # Same reasoning as the listing parser in sources/s3.py: a store does
-        # not send a DOCTYPE, and entity expansion inside one can be made to
-        # exhaust this process. This response decides which keys are reported
-        # deleted, so it is refused rather than parsed.
-        raise BatchDeleteError(
-            "the delete response declares a DOCTYPE, which a store does not "
-            "send; refused rather than parsed")
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError as exc:
-        raise BatchDeleteError(
-            f"the delete response is not XML: {exc}") from exc
+        root = parse_xml_body(body, "delete response")
+    except SourceReadError as exc:
+        # The shared parser refuses a DOCTYPE, an entity, a non-UTF-8 body and
+        # an oversized one. This response decides which keys are reported
+        # deleted, so each refusal stops the batch.
+        raise BatchDeleteError(str(exc)) from exc
     if _local(root.tag) != "DeleteResult":
         raise BatchDeleteError(
             f"the delete response's root element is {root.tag!r}, not "

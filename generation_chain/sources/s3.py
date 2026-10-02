@@ -9,8 +9,10 @@ named by the operator and the command line prompt says both forms out loud.
 from __future__ import annotations
 
 import datetime as dt
+import re
 import urllib.parse
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -64,36 +66,110 @@ def _refuse_plain_http(parsed, endpoint: str, allowed: bool) -> None:
 
 
 # A legitimate S3 listing or delete response never declares a DOCTYPE. stdlib
-# ElementTree expands internal entities, measured on Python 3.12: a short
-# billion-laughs body reaching 30,000 characters. This parser feeds the
-# enumeration that decides what gets condemned, so a response able to hang it
-# sits on the one path into the delete pipeline.
+# ElementTree expands internal entities, measured on Python 3.12: 3.3 KB of
+# nested entity declarations reached 1,000,000 characters, and a 1 MB body
+# reached 505 MB of resident memory before expat's amplification limit fired.
+# This parser feeds the enumeration that decides what gets condemned, so a
+# response able to hang it sits on the one path into the delete pipeline.
 #
 # Refused rather than parsed with limits, and refused before parsing rather
 # than after, because there is nothing to weigh up: a store that answers with
 # a DOCTYPE is answering something a store does not send.
 #
+# Two layers, because either one alone has failed before. refuse_doctype()
+# scans the whole decoded body. parse_xml_body() then installs expat handlers
+# that raise on the first DOCTYPE or entity declaration, so a spelling the
+# scan misses still stops before any entity is stored.
+#
 # External entities are NOT the concern here. ElementTree resolves none, tested
 # on this runtime, so a rule that flags this as an XXE file read is overstating
 # it. The denial of service is real; the disclosure is not.
-_DOCTYPE = b"<!DOCTYPE"
+
+# The largest body either parser accepts. The biggest legitimate responses are
+# a ListObjectsV2 page of 1000 keys and a DeleteObjects result for 1000 keys.
+# A key is at most 1024 bytes, and XML escaping can grow one by a factor of
+# five (`&` becomes `&amp;`), so 1000 worst-case keys are about 5.1 MB, and
+# the per-entry metadata (ETag, LastModified, Owner, error Code and Message)
+# adds under 1 KB each, about 1 MB. 16 MiB is roughly 2.5 times that sum and
+# stays far below the memory a hostile body can make expat spend.
+MAX_XML_BODY_BYTES = 16 * 1024 * 1024
+
+_DOCTYPE = "<!DOCTYPE"
+_ENTITY = "<!ENTITY"
+_XML_DECLARATION = re.compile(
+    r"\A\ufeff?\s*<\?xml\s(?:(?!\?>).)*?encoding\s*=\s*(?P<quote>[\"'])(?P<name>.+?)"
+    r"(?P=quote)", re.DOTALL)
+_ACCEPTED_ENCODINGS = frozenset({"utf-8", "utf8", "us-ascii", "ascii"})
 
 
 def refuse_doctype(body: bytes, what: str) -> None:
-    if _DOCTYPE in body[:2048].lstrip():
+    """Refuse a body that is too large, not UTF-8, or declares a DOCTYPE.
+
+    The scan runs on the decoded text, over the whole body, so a long comment
+    or a different encoding cannot move a declaration out of view.
+    """
+    if len(body) > MAX_XML_BODY_BYTES:
         raise SourceReadError(
-            f"the {what} declares a DOCTYPE. A store does not send one, and "
-            "entity expansion inside it can be made to exhaust this process, "
-            "so it is refused rather than parsed")
+            f"the {what} is {len(body)} bytes, larger than the "
+            f"{MAX_XML_BODY_BYTES} this tool reads; refused rather than "
+            "parsed")
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SourceReadError(
+            f"the {what} is not UTF-8, and S3 and OCI answer UTF-8; refused "
+            "rather than parsed") from exc
+    declared = _XML_DECLARATION.match(text)
+    if "\x00" in text or (
+            declared and declared.group("name").lower() not in _ACCEPTED_ENCODINGS):
+        raise SourceReadError(
+            f"the {what} declares an encoding other than UTF-8, and S3 and "
+            "OCI answer UTF-8; refused rather than parsed")
+    if _DOCTYPE in text or _ENTITY in text:
+        raise SourceReadError(
+            f"the {what} declares a DOCTYPE or an entity. A store does not "
+            "send one, and entity expansion inside it can be made to exhaust "
+            "this process, so it is refused rather than parsed")
+
+
+def parse_xml_body(body: bytes, what: str) -> ET.Element:
+    """Parse a store response, refusing a DOCTYPE, entity or non-UTF-8 body.
+
+    Raises SourceReadError for a refusal and for a body that is not XML.
+    """
+    refuse_doctype(body, what)
+
+    def refuse_declaration(*_args):
+        raise SourceReadError(
+            f"the {what} declares a DOCTYPE or an entity, which a store does "
+            "not send; refused rather than parsed")
+
+    def qualified(name):
+        # expat joins a namespace and a local name with the separator below;
+        # ElementTree spells the same name {namespace}local.
+        return "{" + name if "}" in name else name
+
+    tree = ET.TreeBuilder()
+    # stdlib's C XMLParser does not expose the expat object, so the handlers
+    # are installed on a pyexpat parser that feeds a TreeBuilder directly.
+    parser = expat.ParserCreate("utf-8", "}")
+    parser.buffer_text = True
+    parser.StartDoctypeDeclHandler = refuse_declaration
+    parser.EntityDeclHandler = refuse_declaration
+    parser.StartElementHandler = lambda name, attrs: tree.start(
+        qualified(name), {qualified(k): v for k, v in attrs.items()})
+    parser.EndElementHandler = lambda name: tree.end(qualified(name))
+    parser.CharacterDataHandler = tree.data
+    try:
+        parser.Parse(body, True)
+    except expat.ExpatError as exc:
+        raise SourceReadError(f"the {what} is not XML: {exc}") from exc
+    return tree.close()
 
 
 def parse_listing_body(body: bytes):
     """Parse a listing response, refusing one that carries a DOCTYPE."""
-    refuse_doctype(body, "listing")
-    try:
-        return ET.fromstring(body)
-    except ET.ParseError as exc:
-        raise SourceReadError(f"the listing is not XML: {exc}") from exc
+    return parse_xml_body(body, "listing")
 
 
 def _entry_size(contents: ET.Element) -> Optional[int]:
