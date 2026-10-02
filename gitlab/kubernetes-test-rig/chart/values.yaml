@@ -50,13 +50,22 @@ source:
   # code lives; that is your fork or mirror of this project, not this chart's
   # own repository.
   repoUrl: "https://gitlab.example.com/you/elasticsearch-oci-s3-workaround.git"
-  ref: "main"           # branch, tag or commit; pin a commit for a repeatable rig
+  # Branch, tag or full commit SHA. The pod clones, then checks out this ref
+  # detached, so all three work. "main" moves: every pod start runs whatever
+  # main holds at that moment, and the qualify Job can delete. Set a full
+  # commit SHA to pin the code a run executes.
+  ref: "main"
   cloneImage: "registry.access.redhat.com/ubi9/python-312@sha256:aebe03384391689993c42998836597e6161ac5340cbc84518c1b0528a1c59ea8"
   # A private repository needs credentials for the clone. Reference a Secret
   # holding an SSH deploy key (mounted as an SSH identity) or a
   # username+token embedded in repoUrl (https://user:token@host/...), never
   # entered here in plain text.
   existingSshSecret: ""    # Secret with key "id_rsa" or "id_ed25519"; leave empty for a public repo
+  # known_hosts lines for the SSH host (the output of `ssh-keyscan <host>`,
+  # checked against the host's published fingerprint). Required when
+  # existingSshSecret is set: the render fails without it, and the clone
+  # refuses any host key not listed here.
+  sshKnownHosts: ""
 
 # The user every tool runs as. The UBI base image ships uid 1001, and these
 # values must match it: the staging init container chowns the credentials to

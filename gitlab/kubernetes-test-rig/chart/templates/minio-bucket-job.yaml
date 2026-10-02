@@ -36,6 +36,8 @@ spec:
           env:
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
+            - name: HEALTH_URL
+              value: {{ printf "http://%s-minio.%s.svc:9000/minio/health/live" (include "rig.fullname" .) (include "rig.namespace" .) | quote }}
           securityContext:
             {{- include "rig.securityContext" . | nindent 12 }}
           resources:
@@ -44,8 +46,8 @@ spec:
             - python3
             - -c
             - |
-              import time, urllib.request, urllib.error
-              url = "http://{{ include "rig.fullname" . }}-minio.{{ include "rig.namespace" . }}.svc:9000/minio/health/live"
+              import os, time, urllib.request, urllib.error
+              url = os.environ["HEALTH_URL"]
               deadline = time.time() + 300
               while time.time() < deadline:
                   try:
@@ -63,10 +65,14 @@ spec:
             - /bin/sh
             - -c
             - >
-              mc alias set rig http://{{ include "rig.fullname" . }}-minio:9000
+              mc alias set rig "$MINIO_URL"
               "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" &&
-              mc mb -p rig/{{ .Values.minio.bucket }}
+              mc mb -p "rig/$MINIO_BUCKET"
           env:
+            - name: MINIO_URL
+              value: {{ printf "http://%s-minio:9000" (include "rig.fullname" .) | quote }}
+            - name: MINIO_BUCKET
+              value: {{ .Values.minio.bucket | quote }}
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:

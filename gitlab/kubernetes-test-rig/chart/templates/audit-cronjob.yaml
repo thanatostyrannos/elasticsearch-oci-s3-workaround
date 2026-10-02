@@ -61,71 +61,118 @@ spec:
               env:
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
+                - name: AUDIT_TRANSPORT
+                  value: {{ .Values.auditCronJob.transport | quote }}
+                - name: AUDIT_ENDPOINT
+                  value: {{ .Values.auditCronJob.endpoint | quote }}
+                - name: AUDIT_REGION
+                  value: {{ .Values.auditCronJob.region | quote }}
+                - name: AUDIT_BUCKET
+                  value: {{ .Values.auditCronJob.bucket | quote }}
+                - name: AUDIT_PREFIX
+                  value: {{ .Values.auditCronJob.prefix | quote }}
+                - name: AUDIT_CREDENTIALS
+                  value: {{ printf "/secrets/%s" .Values.credentials.keys.credentialsJson | quote }}
+                {{- if .Values.auditCronJob.localRepo }}
+                - name: AUDIT_LOCAL_REPO
+                  value: {{ .Values.auditCronJob.localRepo | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.ociNamespace }}
+                - name: AUDIT_OCI_NAMESPACE
+                  value: {{ .Values.auditCronJob.ociNamespace | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.ociRegion }}
+                - name: AUDIT_OCI_REGION
+                  value: {{ .Values.auditCronJob.ociRegion | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.profile }}
+                - name: AUDIT_PROFILE
+                  value: {{ .Values.auditCronJob.profile | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.ociProfile }}
+                - name: AUDIT_OCI_PROFILE
+                  value: {{ .Values.auditCronJob.ociProfile | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.maxRam }}
+                - name: AUDIT_MAX_RAM
+                  value: {{ .Values.auditCronJob.maxRam | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.askElasticsearch }}
+                - name: AUDIT_ES_URL
+                  value: {{ include "rig.esUrl" . | quote }}
+                - name: AUDIT_ES_REPOSITORY
+                  value: {{ .Values.auditCronJob.esRepository | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.concurrency }}
+                - name: AUDIT_CONCURRENCY
+                  value: {{ .Values.auditCronJob.concurrency | int64 | quote }}
+                {{- end }}
+                {{- if .Values.auditCronJob.memoryMb }}
+                - name: AUDIT_MEMORY_MB
+                  value: {{ .Values.auditCronJob.memoryMb | int64 | quote }}
+                {{- end }}
               command: ["/bin/sh", "-c"]
               args:
                 - |
                   set -eu
-                  args="--transport {{ .Values.auditCronJob.transport }}"
+                  set -- --transport "$AUDIT_TRANSPORT"
                   {{- if .Values.auditCronJob.localRepo }}
-                  args="$args --local-repo {{ .Values.auditCronJob.localRepo }}"
+                  set -- "$@" --local-repo "$AUDIT_LOCAL_REPO"
                   {{- end }}
-                  args="$args --endpoint {{ .Values.auditCronJob.endpoint }}"
-                  args="$args --region {{ .Values.auditCronJob.region }}"
-                  args="$args --bucket {{ .Values.auditCronJob.bucket }}"
-                  args="$args --prefix {{ .Values.auditCronJob.prefix }}"
+                  set -- "$@" --endpoint "$AUDIT_ENDPOINT"
+                  set -- "$@" --region "$AUDIT_REGION"
+                  set -- "$@" --bucket "$AUDIT_BUCKET"
+                  set -- "$@" --prefix "$AUDIT_PREFIX"
                   {{- if .Values.auditCronJob.ociNamespace }}
-                  args="$args --namespace {{ .Values.auditCronJob.ociNamespace }}"
+                  set -- "$@" --namespace "$AUDIT_OCI_NAMESPACE"
                   {{- end }}
                   {{- if .Values.auditCronJob.ociRegion }}
-                  args="$args --oci-region {{ .Values.auditCronJob.ociRegion }}"
+                  set -- "$@" --oci-region "$AUDIT_OCI_REGION"
                   {{- end }}
                   {{- if .Values.auditCronJob.profile }}
-                  args="$args --profile {{ .Values.auditCronJob.profile }}"
+                  set -- "$@" --profile "$AUDIT_PROFILE"
                   {{- end }}
                   {{- if .Values.auditCronJob.ociProfile }}
-                  args="$args --oci-profile {{ .Values.auditCronJob.ociProfile }}"
+                  set -- "$@" --oci-profile "$AUDIT_OCI_PROFILE"
                   {{- end }}
-                  args="$args --credentials /secrets/{{ .Values.credentials.keys.credentialsJson }}"
+                  set -- "$@" --credentials "$AUDIT_CREDENTIALS"
                   RUN_DIR="/output/$(date -u +%Y%m%dT%H%M%SZ)"
-                  args="$args --manifest $RUN_DIR/orphans.tsv"
+                  set -- "$@" --manifest "$RUN_DIR/orphans.tsv"
                   {{- if .Values.auditCronJob.writeClassification }}
-                  args="$args --classification $RUN_DIR/classification.tsv"
+                  set -- "$@" --classification "$RUN_DIR/classification.tsv"
                   {{- end }}
                   {{- if .Values.auditCronJob.writeCoverageJson }}
-                  args="$args --coverage-json $RUN_DIR/coverage.json"
+                  set -- "$@" --coverage-json "$RUN_DIR/coverage.json"
                   {{- end }}
                   {{- if .Values.auditCronJob.askElasticsearch }}
-                  args="$args --elasticsearch {{ include "rig.esUrl" . }}"
-                  args="$args --es-repository {{ .Values.auditCronJob.esRepository }}"
+                  set -- "$@" --elasticsearch "$AUDIT_ES_URL"
+                  set -- "$@" --es-repository "$AUDIT_ES_REPOSITORY"
                   {{- if include "rig.hasEsCa" . }}
-                  args="$args --es-ca-cert /es-ca-cert/ca.crt"
+                  set -- "$@" --es-ca-cert /es-ca-cert/ca.crt
                   {{- end }}
                   {{- end }}
                   {{- if .Values.auditCronJob.concurrency }}
-                  {{/* int64: a bare large integer from values.yaml decodes as float64,
-                       which Go renders in scientific notation past one million. */}}
-                  args="$args --concurrency {{ .Values.auditCronJob.concurrency | int64 }}"
+                  set -- "$@" --concurrency "$AUDIT_CONCURRENCY"
                   {{- end }}
                   {{- if .Values.auditCronJob.maxRam }}
-                  args="$args --max-ram {{ .Values.auditCronJob.maxRam }}"
+                  set -- "$@" --max-ram "$AUDIT_MAX_RAM"
                   {{- end }}
                   {{- if .Values.auditCronJob.memoryMb }}
-                  args="$args --memory-mb {{ .Values.auditCronJob.memoryMb | int64 }}"
+                  set -- "$@" --memory-mb "$AUDIT_MEMORY_MB"
                   {{- end }}
                   {{- if .Values.auditCronJob.insecureHttp }}
-                  args="$args --insecure-http"
+                  set -- "$@" --insecure-http
                   {{- end }}
                   {{- if .Values.auditCronJob.quiet }}
-                  args="$args --quiet"
+                  set -- "$@" --quiet
                   {{- end }}
                   mkdir -p "$RUN_DIR"
-                  echo "starting: python3 -m generation_chain $args"
+                  echo "starting: python3 -m generation_chain $*"
                   status=0
                   # The human report always goes to stderr; keep it as its
                   # own artifact rather than mixed into pod logs that scroll
                   # off after successfulJobsHistoryLimit CronJob runs.
-                  # shellcheck disable=SC2086
-                  python3 -m generation_chain $args 2> "$RUN_DIR/audit-summary.txt" || status=$?
+                  python3 -m generation_chain "$@" 2> "$RUN_DIR/audit-summary.txt" || status=$?
                   cat "$RUN_DIR/audit-summary.txt"
                   exit "$status"
               resources:

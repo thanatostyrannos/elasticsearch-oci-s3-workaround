@@ -100,14 +100,14 @@ class TheQualifyJobReportsOnFailure(unittest.TestCase):
         body = QUALIFY.read_text()
         self.assertRegex(
             body,
-            r"status=0\n(?:\s*#[^\n]*\n)*\s*python3 reclaim_test_protocol\.py \$args \|\| status=\$\?")
+            r"status=0\n(?:\s*#[^\n]*\n)*\s*python3 reclaim_test_protocol\.py \"\$@\" \|\| status=\$\?")
 
     def test_no_bare_command_precedes_the_status_capture(self):
         # Abuse: a bare `python3 ... $args` directly above `status=$?` is the
         # defect itself, and a later edit could reintroduce it.
         body = QUALIFY.read_text()
         self.assertIsNone(re.search(
-            r"\n\s*python3 reclaim_test_protocol\.py \$args\n\s*status=\$\?", body))
+            r"\n\s*python3 reclaim_test_protocol\.py \"\$@\"\n\s*status=\$\?", body))
 
 
 if __name__ == "__main__":
