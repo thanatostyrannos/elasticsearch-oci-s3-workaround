@@ -137,7 +137,8 @@ class OciNativeSource:
         return (f"/n/{oci_signature.quote_segment(self.namespace)}"
                 f"/b/{oci_signature.quote_segment(self.bucket)}/o")
 
-    def _request(self, method: str, path_and_query: str) -> Response:
+    def _request(self, method: str, path_and_query: str,
+                 critical: bool = False) -> Response:
         assert method in ALLOWED_METHODS, (
             f"{method} is not a method this package may send; version one "
             "reads and never deletes")
@@ -154,7 +155,7 @@ class OciNativeSource:
         }
         return self.reader.get(
             f"{self.scheme}://{self.host}{path_and_query}", headers,
-            method=method, timeout=self.timeout)
+            method=method, timeout=self.timeout, critical=critical)
 
     # -- the source interface ---------------------------------------------
 
@@ -178,7 +179,8 @@ class OciNativeSource:
                 "fields": "name,size",
             })
             response = self._request(
-                "GET", self._base_path() + (f"?{query}" if query else ""))
+                "GET", self._base_path() + (f"?{query}" if query else ""),
+                critical=True)
             page, following = self._page(response)
             keys.extend(page)
             if following is None:
@@ -233,6 +235,11 @@ class OciNativeSource:
     def fetch(self, key: str) -> bytes:
         path = oci_signature.quote_segment(self.prefix + key)
         return self._request("GET", f"{self._base_path()}/{path}").body
+
+    def fetch_critical(self, key: str) -> bytes:
+        path = oci_signature.quote_segment(self.prefix + key)
+        return self._request("GET", f"{self._base_path()}/{path}",
+                             critical=True).body
 
     def exists(self, key: str) -> bool:
         path = oci_signature.quote_segment(self.prefix + key)

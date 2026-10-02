@@ -164,7 +164,8 @@ class S3CompatibleSource:
     # -- transport --------------------------------------------------------
 
     def _request(self, method: str, canonical_uri: str,
-                 params: Dict[str, Optional[str]]) -> bytes:
+                 params: Dict[str, Optional[str]],
+                 critical: bool = False) -> bytes:
         assert method in ALLOWED_METHODS, (
             f"{method} is not a method this package may send; version one "
             "reads and never deletes")
@@ -187,7 +188,7 @@ class S3CompatibleSource:
         if query:
             url += "?" + query
         return self.reader.get(url, headers, method=method,
-                               timeout=self.timeout).body
+                               timeout=self.timeout, critical=critical).body
 
     # -- the source interface ---------------------------------------------
 
@@ -213,7 +214,7 @@ class S3CompatibleSource:
                 "max-keys": str(MAX_KEYS_PER_PAGE),
                 "encoding-type": "url",
                 "continuation-token": token,
-            })
+            }, critical=True)
             page, token = self._page(body)
             keys.extend(page)
             if token is None:
@@ -275,6 +276,11 @@ class S3CompatibleSource:
     def fetch(self, key: str) -> bytes:
         path = sigv4.quote_path(self.prefix + key)
         return self._request("GET", f"/{self.bucket}/{path}", {})
+
+    def fetch_critical(self, key: str) -> bytes:
+        path = sigv4.quote_path(self.prefix + key)
+        return self._request("GET", f"/{self.bucket}/{path}", {},
+                             critical=True)
 
     def exists(self, key: str) -> bool:
         path = sigv4.quote_path(self.prefix + key)

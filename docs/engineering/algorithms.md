@@ -610,7 +610,7 @@ sequenceDiagram
         Bud->>Pool: submit(_run, fetch, key)
     end
     Pool->>CR: fetch(key), on a worker thread
-    CR->>G: fetch(key), or fetch_critical(key) for the listing, index.latest, and the anchor generation
+    CR->>G: fetch(key), or fetch_critical(key) for index.latest and the anchor generation
     G->>S: the actual read
     S-->>G: bytes, or an exception
     G-->>CR: bytes, or SourceReadError raised
@@ -626,8 +626,11 @@ Two things are true at once and both matter to a reviewer. First, overlap
 must not move the answer: work is submitted and settled by key, one thread
 decides only when bytes arrive, never which bytes or which error belongs to
 which key, and that is what this project's determinism tests hold. Second, exactly three reads
-are escalated to a longer retry policy by `CriticalReads`: the listing,
-`index.latest`, and the root generation `index.latest` names. Those three end
+get a longer retry policy, 16 attempts within 1800 seconds against 8 within
+600 for an ordinary read: the listing, `index.latest`, and the root generation
+`index.latest` names. `CriticalReads` escalates the last two through the
+transport's `fetch_critical`. The transports apply the same policy to every
+page of the listing themselves, because a listing is not a fetch. Those three end
 the whole run if they fail; everything else, a shard document, an existence
 check, degrades locally and only shortens the manifest. The listing itself
 has no partial form and cannot be overlapped with anything else: it is one

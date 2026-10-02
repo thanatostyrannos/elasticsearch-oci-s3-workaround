@@ -46,6 +46,12 @@ class RetryPolicy:
     retry_statuses: FrozenSet[int] = frozenset({429, 500, 502, 503, 504})
 
 
+# For the listing, `index.latest` and the root generation it names. A failure
+# of any one of those ends the whole run, so they get twice the attempts and
+# three times the time of an ordinary read. The backoff curve is unchanged.
+CRITICAL_RETRY_POLICY = RetryPolicy(max_attempts=16, budget_seconds=1800.0)
+
+
 @dataclass(frozen=True)
 class Response:
     status: int
@@ -64,18 +70,21 @@ class HttpReader:
     """Performs reads with the retry policy, or raises SourceReadError."""
 
     def __init__(self, policy: RetryPolicy = RetryPolicy(),
+                 critical_policy: RetryPolicy = CRITICAL_RETRY_POLICY,
                  sleep: Callable[[float], None] = time.sleep,
                  opener: Callable = urllib.request.urlopen,
                  jitter: Callable[[], float] = random.random,
                  clock: Callable[[], float] = time.monotonic) -> None:
         self.policy = policy
+        self.critical_policy = critical_policy
         self._sleep = sleep
         self._opener = opener
         self._jitter = jitter
         self._clock = clock
 
     def get(self, url: str, headers: Mapping[str, str], method: str = "GET",
-            timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Response:
+            timeout: float = DEFAULT_TIMEOUT_SECONDS,
+            critical: bool = False) -> Response:
         # NOT an assert. `python3 -O` strips assert, and this single check is
         # what makes "reads and never deletes" true. Under -O the stripped
         # version let a DELETE through to the transport, measured, so the
@@ -87,16 +96,17 @@ class HttpReader:
                 f"and never deletes, so only {sorted(ALLOWED_METHODS)} are "
                 "possible. Reclaiming is a separate tool that a human "
                 "approves.")
+        policy = self.critical_policy if critical else self.policy
         started = self._clock()
         last = ""
-        for attempt in range(self.policy.max_attempts):
+        for attempt in range(policy.max_attempts):
             try:
                 return self._once(url, headers, method, timeout)
             except urllib.error.HTTPError as exc:
                 last = f"{exc.code} from {url}: {_detail(exc)}"
-                if exc.code not in self.policy.retry_statuses:
+                if exc.code not in policy.retry_statuses:
                     raise SourceReadError(last) from exc
-                pause = self._pause(attempt, _retry_after(exc))
+                pause = self._pause(policy, attempt, _retry_after(exc))
             except Exception as exc:
                 # Deliberately broad. The stated contract is that a read
                 # produces bytes or a SourceReadError, and `IncompleteRead`
@@ -104,10 +114,10 @@ class HttpReader:
                 # so a narrow tuple left three real truncation cases escaping
                 # as tracebacks.
                 last = f"cannot reach {url}: {type(exc).__name__}: {exc}"
-                pause = self._pause(attempt, None)
-            if attempt + 1 >= self.policy.max_attempts:
+                pause = self._pause(policy, attempt, None)
+            if attempt + 1 >= policy.max_attempts:
                 break
-            if self._clock() - started + pause > self.policy.budget_seconds:
+            if self._clock() - started + pause > policy.budget_seconds:
                 break
             self._sleep(pause)
         raise SourceReadError(last or f"no answer from {url}")
@@ -123,7 +133,8 @@ class HttpReader:
                             headers=dict(getattr(response, "headers", {})),
                             body=response.read())
 
-    def _pause(self, attempt: int, retry_after: Optional[float]) -> float:
+    def _pause(self, policy: RetryPolicy, attempt: int,
+               retry_after: Optional[float]) -> float:
         """Full jitter over an exponential backoff, with Retry-After capped.
 
         Ignoring Retry-After hammers a store that just asked for room. Obeying
@@ -131,10 +142,10 @@ class HttpReader:
         send, with nothing on screen.
         """
         if retry_after is not None:
-            return min(retry_after, self.policy.max_sleep_seconds)
-        ceiling = min(self.policy.max_sleep_seconds,
-                      self.policy.base_seconds
-                      * self.policy.growth_factor ** attempt)
+            return min(retry_after, policy.max_sleep_seconds)
+        ceiling = min(policy.max_sleep_seconds,
+                      policy.base_seconds
+                      * policy.growth_factor ** attempt)
         return self._jitter() * ceiling
 
 
