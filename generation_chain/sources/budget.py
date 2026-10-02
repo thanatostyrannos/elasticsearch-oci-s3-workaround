@@ -24,6 +24,7 @@ than the one this exists to prevent.
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import Dict, Iterable, List, Optional
 
@@ -82,7 +83,16 @@ class MemoryBudget:
         return sizer() if callable(sizer) else {}
 
     def list_keys(self) -> List[str]:
-        keys = self._inner.list_keys()
+        """The wrapped listing, refused as soon as it passes the ceiling.
+
+        A transport that takes `on_page` reports its running count after each
+        page, so a listing that will not fit stops at the first page past the
+        limit. One that does not take it is checked once, when it returns.
+        """
+        if _takes_page_hook(self._inner):
+            keys = self._inner.list_keys(on_page=self._check)
+        else:
+            keys = self._inner.list_keys()
         self._check(len(keys))
         return keys
 
@@ -103,12 +113,20 @@ class MemoryBudget:
         if needed <= self.limit_bytes:
             return
         raise RepositoryTooLarge(
-            f"this repository lists {objects} objects, which this run needs "
+            f"this repository lists at least {objects} objects, which this run needs "
             f"about {_megabytes(needed)} MB of memory to hold, and only "
             f"{_megabytes(self.limit_bytes)} MB is available to it. Nothing "
             "was read. Run it on a host with more memory, narrow it with "
             "--prefix, or raise the ceiling with --max-ram (or --memory-mb) "
             "if this host really has more than it reports")
+
+
+def _takes_page_hook(source) -> bool:
+    try:
+        parameters = inspect.signature(source.list_keys).parameters
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return "on_page" in parameters
 
 
 def _megabytes(value: int) -> int:

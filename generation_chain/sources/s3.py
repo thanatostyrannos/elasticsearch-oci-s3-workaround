@@ -203,10 +203,16 @@ class S3CompatibleSource:
         """
         return dict(self._sizes)
 
-    def list_keys(self) -> List[str]:
+    def list_keys(self, on_page=None) -> List[str]:
+        """Every key under the prefix, sorted.
+
+        `on_page`, when given, is called with the running key count after each
+        page and may raise to stop the listing early.
+        """
         keys: List[str] = []
         self._sizes = {}
         token: Optional[str] = None
+        seen_tokens = set()
         for _ in range(MAX_PAGES):
             body = self._request("GET", f"/{self.bucket}", {
                 "list-type": "2",
@@ -217,8 +223,14 @@ class S3CompatibleSource:
             }, critical=True)
             page, token = self._page(body)
             keys.extend(page)
+            if on_page is not None:
+                on_page(len(keys))
             if token is None:
                 return sorted(keys)
+            if token in seen_tokens:
+                raise SourceReadError(
+                    "the listing repeated a continuation token")
+            seen_tokens.add(token)
         raise SourceReadError(
             f"the listing did not finish in {MAX_PAGES} pages")
 

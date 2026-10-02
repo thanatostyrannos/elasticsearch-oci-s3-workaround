@@ -36,7 +36,12 @@ class LocalMirrorSource:
             raise SourceReadError(f"key escapes the mirror root: {key!r}")
         return candidate
 
-    def list_keys(self) -> List[str]:
+    def list_keys(self, on_page=None) -> List[str]:
+        """Every file under the root as a key, sorted.
+
+        `on_page`, when given, is called with the running key count after each
+        directory and may raise to stop the walk early.
+        """
         if not os.path.isdir(self.root):
             raise SourceReadError(f"no such directory: {self.root}")
         keys: List[str] = []
@@ -44,6 +49,8 @@ class LocalMirrorSource:
             for name in files:
                 full = os.path.join(dirpath, name)
                 keys.append(os.path.relpath(full, self.root).replace(os.sep, "/"))
+            if on_page is not None:
+                on_page(len(keys))
         return sorted(keys)
 
     def sizes(self) -> Dict[str, int]:

@@ -69,7 +69,8 @@ class WhatFitsOnThisHost(unittest.TestCase):
         with self.assertRaises(RepositoryTooLarge) as caught:
             self.budget(RESIDENT_BYTES_PER_OBJECT).list_keys()
         message = str(caught.exception)
-        self.assertIn(str(self.objects), message)
+        # The listing stops at the ceiling, so the count is a floor.
+        self.assertRegex(message, r"at least \d+ objects")
         self.assertIn("--memory-mb", message)
 
     def test_a_refusal_for_size_is_not_a_refusal_to_retry(self):
