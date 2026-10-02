@@ -15,6 +15,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -257,6 +258,26 @@ class PartialFailureIsReportedHonestly(ReclaimCase):
             self.assertEqual(code, cli.EXIT_PARTIAL)
             self.assertIn("dropped", rig.keys())
         self.assertIn("unconfirmed: 1", stdout)
+
+    def test_an_unreadable_200_reports_every_key_as_failed(self):
+        # An operator reading the report triages "unconfirmed" keys as "the
+        # store never answered". Reporting an unparseable answer that way
+        # sends them to chase a network fault when the store did answer.
+        # Abuse case: the keys must also never count as deleted and must end
+        # the run partial.
+        write_manifest(self.manifest_path, ["one", "two"])
+        with s3rig.S3Rig(root=None, objects={"one": b"x", "two": b"y"}) as rig:
+            with patch.object(cli, "send_batch_delete",
+                              return_value=b"not xml at all"):
+                code, stdout, _stderr = self.run_cli(
+                    rig, execute=True, approve=True)
+            self.assertIn("one", rig.keys())
+            self.assertIn("two", rig.keys())
+        self.assertEqual(code, cli.EXIT_PARTIAL)
+        self.assertIn("failed: 2", stdout)
+        self.assertIn("unconfirmed: 0", stdout)
+        self.assertIn("deleted: 0", stdout)
+        self.assertIn("UnparseableResponse", stdout)
 
     def test_already_absent_keys_alone_still_exit_ok(self):
         # An already-absent key means the manifest's goal (that key being

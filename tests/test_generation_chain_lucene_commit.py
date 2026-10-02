@@ -189,9 +189,70 @@ class CommitOracleCoverage(unittest.TestCase):
         # document was actually read. A survey that reads one document and a
         # survey that reads three would look identical against a weaker
         # assertion than the equality below.
-        self.assertGreater(len(calls), 1)
-        self.assertEqual(result.coverage.commit_oracle_checked, len(calls))
-        self.assertEqual(result.coverage.commit_oracle_skipped, len(calls))
+        # A key parsed under two caches is counted once, so the expected
+        # total is the distinct keys, not the parses.
+        self.assertGreater(len(set(calls)), 1)
+        self.assertEqual(result.coverage.commit_oracle_checked, len(set(calls)))
+        self.assertEqual(result.coverage.commit_oracle_skipped, len(set(calls)))
+
+
+# A repository with a current generation and one earlier era per shard, the
+# shape the double count needed: the current document is read in pass one and
+# again as the last era.
+TALLY_HISTORY = [
+    {"s1": {"i": {0: ["__i1"], 1: ["__j1"]}}},
+    {"s1": {"i": {0: ["__i1"], 1: ["__j1"]}},
+     "s2": {"i": {0: ["__i2"], 1: ["__j2"]}}},
+    {"s2": {"i": {0: ["__i2"], 1: ["__j2"]}}},
+]
+
+
+class CommitOracleTallyCountsEachDocumentOnce(unittest.TestCase):
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="genchain-oracle-tally-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.root = os.path.join(self.dir, "repo")
+        repo.build(self.root, TALLY_HISTORY)
+
+    def _audit_recording_fetches(self):
+        fetched = set()
+
+        class Recording(LocalMirrorSource):
+            def fetch(self, key):
+                if "/index-" in key:
+                    fetched.add(key)
+                return super().fetch(key)
+
+        return run_audit(Recording(self.root)), fetched
+
+    def test_each_directory_and_generation_is_counted_once(self):
+        # If this failed, the report would say the Lucene cross-check looked
+        # at more (snapshot, commit) pairs than exist, and an operator would trust
+        # a check that covered less of the repository than printed.
+        result, fetched = self._audit_recording_fetches()
+        coverage = result.coverage
+        pairs = 0
+        for key in fetched:
+            document = real_parse_shard_snapshots(
+                repo.read(self.root, key), key)
+            pairs += (document.commit_oracle_checked
+                      + document.commit_oracle_skipped)
+        self.assertEqual(pairs, 8)
+        self.assertEqual(
+            coverage.commit_oracle_checked + coverage.commit_oracle_skipped,
+            pairs)
+
+    def test_the_tally_never_changes_what_is_condemned(self):
+        # If the report-only tally started steering classification, a change
+        # to how documents are counted would silently change which blobs the
+        # manifest lets an operator delete.
+        counted, _ = self._audit_recording_fetches()
+        with patch("generation_chain.derivation.shards."
+                   "CommitOracleTally.record"):
+            uncounted = run_audit(LocalMirrorSource(self.root))
+        self.assertEqual(counted.condemned, uncounted.condemned)
+        self.assertTrue(counted.condemned)
 
 
 if __name__ == "__main__":
