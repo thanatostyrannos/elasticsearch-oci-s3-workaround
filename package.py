@@ -39,6 +39,13 @@ attest to the exact code it was produced from while living beside it. The
 archive's own hash is written next to the archive, for whoever is checking that
 the file they received is the file that was built.
 
+THE ARCHIVE REFLECTS A COMMIT
+
+Files come from `git ls-files`, filtered by the rules below, so an untracked
+file beside shipped code (a local creds.json, a scratch note) cannot enter the
+archive. The build refuses outside a git work tree and when any file that
+would ship has uncommitted changes.
+
 REPRODUCIBILITY IS NOT A FLOURISH
 
 Timestamps are pinned and members are sorted, so two builds of one commit are
@@ -51,6 +58,7 @@ import argparse
 import hashlib
 import os
 import re
+import subprocess
 import sys
 import zipfile
 
@@ -127,36 +135,95 @@ class ReleaseRefused(Exception):
     """The build stopped rather than shipping something it should not."""
 
 
-def tree_members(tree, suffixes):
-    """Every shipped file under one packaged tree, relative to the root."""
-    found = []
-    for directory, _, names in os.walk(os.path.join(ROOT, tree)):
-        if "__pycache__" in directory:
-            continue
-        for name in names:
-            if name.endswith(suffixes):
-                absolute = os.path.join(directory, name)
-                found.append(os.path.relpath(absolute, ROOT))
-    return found
+def _git(*args):
+    """Run git in the repository root and return its stdout as bytes."""
+    try:
+        done = subprocess.run(["git", *args], cwd=ROOT, capture_output=True)
+    except OSError as exc:
+        raise ReleaseRefused(
+            f"git could not be run ({exc}). A release is built from the "
+            "files a commit tracks, so the build needs git.")
+    if done.returncode != 0:
+        raise ReleaseRefused(
+            f"git {' '.join(args)} failed in {ROOT}: "
+            f"{done.stderr.decode(errors='replace').strip()}. A release is "
+            "built from a commit, so the build must run inside a git work "
+            "tree.")
+    return done.stdout
 
 
-def named_members():
+def tracked_files():
+    """Every path git tracks, relative to the root, as the index lists them."""
+    if _git("rev-parse", "--is-inside-work-tree").strip() != b"true":
+        raise ReleaseRefused(
+            f"{ROOT} is not inside a git work tree. A release is built from "
+            "a commit, so the build must run inside a git checkout.")
+    listing = _git("ls-files", "-z", "--full-name", "--", ".")
+    return [name.decode() for name in listing.split(b"\0") if name]
+
+
+def tree_members(tree, suffixes, tracked):
+    """Every tracked file under one packaged tree, relative to the root."""
+    return [name for name in tracked
+            if name.startswith(tree + "/")
+            and "__pycache__" not in name.split("/")
+            and name.endswith(suffixes)]
+
+
+def named_members(tracked):
     """The individually listed files, refusing the build if one has moved."""
+    held = set(tracked)
     for name in PACKAGED_FILES:
-        if not os.path.exists(os.path.join(ROOT, name)):
+        if name not in held:
             raise ReleaseRefused(
-                f"{name} is named in PACKAGED_FILES and is not in the tree. "
-                "Either it moved and the list is stale, or the release is "
-                "missing something an operator was promised.")
+                f"{name} is named in PACKAGED_FILES and is not tracked by "
+                "git. Either it moved and the list is stale, it was never "
+                "committed, or the release is missing something an operator "
+                "was promised.")
     return list(PACKAGED_FILES)
 
 
+def refuse_uncommitted(shipped):
+    """Refuse when any file that would ship differs from the commit.
+
+    `git status --porcelain` reports staged and unstaged edits and deletions
+    alike. Untracked files are not in `shipped`, so they never reach this
+    check; they are left out earlier.
+    """
+    report = _git("status", "--porcelain", "-z", "--untracked-files=no",
+                  "--", *shipped)
+    changed = []
+    entries = report.split(b"\0")
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        changed.append(entry[3:].decode(errors="replace"))
+        if entry[:1] in (b"R", b"C"):
+            index += 1
+    if changed:
+        raise ReleaseRefused(
+            "these files would ship with uncommitted changes: "
+            f"{', '.join(sorted(changed))}. A release must reflect a "
+            "commit. Commit or discard the changes and build again.")
+
+
 def members():
-    """Every path that ships, relative to the repository root, sorted."""
+    """Every path that ships, relative to the repository root, sorted.
+
+    The list comes from `git ls-files`, so a file that exists on disk and is
+    not committed cannot ship, and the build refuses when a shipped file has
+    uncommitted modifications.
+    """
+    tracked = tracked_files()
     found = []
     for tree, suffixes in PACKAGED_TREES:
-        found.extend(tree_members(tree, suffixes))
-    return sorted(found + named_members())
+        found.extend(tree_members(tree, suffixes, tracked))
+    shipped = sorted(found + named_members(tracked))
+    refuse_uncommitted(shipped)
+    return shipped
 
 
 def checked_directory(path, purpose):
