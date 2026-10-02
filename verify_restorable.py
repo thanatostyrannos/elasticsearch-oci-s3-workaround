@@ -229,6 +229,27 @@ def fail(msg):
     sys.exit(1)
 
 
+def delete_probe(name, restore_unanswered):
+    """Remove the restored index, and report on stdout if it stays.
+
+    This runs on every exit once the restore has been attempted, so it must
+    never replace the verdict already on its way out: a failed delete is
+    printed and the exit code stays what it was. A 404 is the normal answer
+    when the restore never created the index, so it prints nothing.
+    """
+    try:
+        code, body = call("DELETE", f"/{path_segment(name)}", timeout=60)
+        problem = None if code < 300 or code == 404 else \
+            f"http={code} {str(body)[:200]}"
+    except Exception as err:  # best effort, see the docstring
+        problem = f"{err.__class__.__name__}: {err}"
+    if problem:
+        note = (" The restore request got no answer, so Elasticsearch may "
+                "still be creating it." if restore_unanswered else "")
+        print(f"  WARNING: could not delete {name} ({problem}).{note} "
+              f"Delete it by hand: DELETE /{name}")
+
+
 print("== cluster ==")
 _, h = call("GET", "/_cluster/health")
 print(f"  status={h.get('status')} nodes={h.get('number_of_nodes')} "
@@ -317,30 +338,34 @@ if target is None:
     print("  no SUCCESS snapshot holding a non-mounted index; nothing restorable this pass")
     sys.exit(0)
 stamp = str(int(time.time()))
-code, body = call("POST",
-                  f"/_snapshot/{path_segment(REPO)}"
-                  f"/{path_segment(target['snapshot'])}"
-                  f"/_restore?wait_for_completion=true",
-                  {"indices": src, "include_aliases": False,
-                   # ^(.+)$ rather than .* : `.*` also matches the empty string at the end, so
-                   # Elasticsearch applies the replacement twice and the index lands under a
-                   # doubled name. Every check downstream then queries a name that does not
-                   # exist and reads the absence as zero documents.
-                   "rename_pattern": "^(.+)$", "rename_replacement": f"probe{stamp}",
-                   "index_settings": {"index.number_of_replicas": 0}}, timeout=900)
-print(f"  restore {target['snapshot']} index {src[:48]} -> probe{stamp}: http={code}")
-if code != 200:
-    fail(f"restore refused: {str(body)[:200]}")
-shards = (body.get("snapshot") or {}).get("shards", {}) if isinstance(body, dict) else {}
-print(f"  shards: {shards}")
-if shards.get("failed"):
-    fail(f"{shards['failed']} shard(s) failed to restore")
+restore_unanswered = True
+try:
+    code, body = call("POST",
+                      f"/_snapshot/{path_segment(REPO)}"
+                      f"/{path_segment(target['snapshot'])}"
+                      f"/_restore?wait_for_completion=true",
+                      {"indices": src, "include_aliases": False,
+                       # ^(.+)$ rather than .* : `.*` also matches the empty string at the end, so
+                       # Elasticsearch applies the replacement twice and the index lands under a
+                       # doubled name. Every check downstream then queries a name that does not
+                       # exist and reads the absence as zero documents.
+                       "rename_pattern": "^(.+)$", "rename_replacement": f"probe{stamp}",
+                       "index_settings": {"index.number_of_replicas": 0}}, timeout=900)
+    restore_unanswered = False
+    print(f"  restore {target['snapshot']} index {src[:48]} -> probe{stamp}: http={code}")
+    if code != 200:
+        fail(f"restore refused: {str(body)[:200]}")
+    shards = (body.get("snapshot") or {}).get("shards", {}) if isinstance(body, dict) else {}
+    print(f"  shards: {shards}")
+    if shards.get("failed"):
+        fail(f"{shards['failed']} shard(s) failed to restore")
 
-call("POST", f"/probe{stamp}/_refresh")
-_, c = call("GET", f"/probe{stamp}/_count")
-restored = c.get("count") if isinstance(c, dict) else None
-print(f"  documents restored: {restored}")
-call("DELETE", f"/probe{stamp}")
-if not restored:
-    fail("restore returned ZERO documents; the repository is not intact")
-print("  INTACT")
+    call("POST", f"/probe{stamp}/_refresh")
+    _, c = call("GET", f"/probe{stamp}/_count")
+    restored = c.get("count") if isinstance(c, dict) else None
+    print(f"  documents restored: {restored}")
+    if not restored:
+        fail("restore returned ZERO documents; the repository is not intact")
+    print("  INTACT")
+finally:
+    delete_probe(f"probe{stamp}", restore_unanswered)
