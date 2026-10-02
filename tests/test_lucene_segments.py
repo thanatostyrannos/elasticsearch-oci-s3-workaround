@@ -132,6 +132,19 @@ class LuceneSegmentsDecoder(unittest.TestCase):
         with self.assertRaises(SegmentsFileError):
             required_segment_names(commit)
 
+    def test_an_over_long_vint_is_refused_as_a_segments_error(self):
+        # Abuse case. A vint with no terminating byte never ends, and an
+        # unbounded read would run into the next field and mis-parse every
+        # name after it. The refusal has to come out as SegmentsFileError, the
+        # type the caller handles by dropping the shard, not as the codec's
+        # plain BlobFormatError.
+        commit = lucene_commit(["_0"])
+        header = struct.pack(">I", CODEC_MAGIC) + _vint(len("segments"))
+        header += b"segments" + struct.pack(">I", 10) + b"\x00" * 16
+        header += b"\x80" * 8
+        with self.assertRaisesRegex(SegmentsFileError, "vint"):
+            required_segment_names(header + commit[len(header):])
+
 
 if __name__ == "__main__":
     unittest.main()

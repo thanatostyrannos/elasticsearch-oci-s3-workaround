@@ -200,6 +200,17 @@ class CodecFraming(unittest.TestCase):
         with self.assertRaises(BlobFormatError):
             unwrap(full[:12])
 
+    def test_an_over_long_vint_in_the_header_is_refused_as_a_blob_error(self):
+        # Abuse case. Both Lucene readers share one vint decoder. If the shared
+        # decoder raised the segments reader's error here, shard-document
+        # callers that handle BlobFormatError would treat a corrupt shard
+        # document as a corrupt commit point, and a mis-parsed document would
+        # decide which blobs are condemned.
+        blob = struct.pack(">I", 0x3FD76C17) + b"\x80" * 8 + b"\x00" * 32
+        with self.assertRaisesRegex(BlobFormatError, "vint") as caught:
+            unwrap(blob)
+        self.assertIs(type(caught.exception), BlobFormatError)
+
 
 class Smile(unittest.TestCase):
 

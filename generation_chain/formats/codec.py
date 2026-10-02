@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import struct
 import zlib
-from typing import Any, Tuple
+from typing import Any, Tuple, Type
 
 from ..errors import BlobFormatError
 from .smile import SMILE_SIGNATURE, decode_smile
@@ -23,13 +23,23 @@ FOOTER_LENGTH = 16
 MAX_VINT_SHIFT = 35
 
 
-def _read_vint(data: bytes, offset: int) -> Tuple[int, int]:
-    """Lucene's writeVInt: little-endian seven-bit groups, high bit continues."""
+def read_vint(
+    data: bytes,
+    offset: int,
+    error: Type[BlobFormatError] = BlobFormatError,
+    subject: str = "codec header",
+) -> Tuple[int, int]:
+    """Lucene's writeVInt: little-endian seven-bit groups, high bit continues.
+
+    Returns the value and the offset after it. Raises `error`, naming
+    `subject`, when the data ends inside the vint or the vint runs longer
+    than a 32-bit value can need.
+    """
     value = 0
     shift = 0
     while True:
         if offset >= len(data):
-            raise BlobFormatError("codec header ends inside a vint")
+            raise error(f"{subject} ends inside a vint")
         byte = data[offset]
         offset += 1
         value |= (byte & 0x7F) << shift
@@ -37,7 +47,7 @@ def _read_vint(data: bytes, offset: int) -> Tuple[int, int]:
             return value, offset
         shift += 7
         if shift > MAX_VINT_SHIFT:
-            raise BlobFormatError("codec header vint is too long")
+            raise error(f"{subject} vint is too long")
 
 
 def unwrap(data: bytes) -> Any:
@@ -46,7 +56,7 @@ def unwrap(data: bytes) -> Any:
         raise BlobFormatError("blob is too short to carry codec framing")
     if struct.unpack_from(">I", data, 0)[0] != CODEC_MAGIC:
         raise BlobFormatError("missing Lucene codec header")
-    name_length, offset = _read_vint(data, 4)
+    name_length, offset = read_vint(data, 4)
     offset += name_length + 4  # codec name, then the format version
     if offset + FOOTER_LENGTH > len(data):
         raise BlobFormatError("codec header runs past the end of the blob")
