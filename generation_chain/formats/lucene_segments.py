@@ -52,7 +52,7 @@ import zlib
 from typing import FrozenSet, Set
 
 from ..errors import BlobFormatError
-from .codec import CODEC_MAGIC, FOOTER_MAGIC
+from .codec import CODEC_MAGIC, FOOTER_MAGIC, read_vint
 
 SEGMENTS_CODEC_NAME = "segments"
 FOOTER_LENGTH = 16
@@ -61,7 +61,6 @@ FOOTER_LENGTH = 16
 # not match it is proof the read is no longer aligned with the format, not a
 # real segment this tool has not seen the shape of yet.
 SEGMENT_NAME = re.compile(r"^_[0-9a-zA-Z]+$")
-MAX_VINT_SHIFT = 35
 
 
 class SegmentsFileError(BlobFormatError):
@@ -116,16 +115,9 @@ class _Cursor:
 
     def vint(self) -> int:
         """Lucene's variable-length integer: little-endian groups of 7 bits."""
-        value = 0
-        shift = 0
-        while True:
-            piece = self.byte()
-            value |= (piece & 0x7F) << shift
-            if not piece & 0x80:
-                return value
-            shift += 7
-            if shift > MAX_VINT_SHIFT:
-                raise SegmentsFileError("segments_N carries an oversized vint")
+        value, self.position = read_vint(
+            self._data, self.position, SegmentsFileError, "segments_N")
+        return value
 
     def string(self) -> str:
         length = self.vint()
