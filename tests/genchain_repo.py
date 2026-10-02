@@ -449,7 +449,7 @@ def extract_fixture(name: str, destination: str) -> str:
         for member in tar.getmembers():
             if member.name.startswith(("/", "..")) or ".." in member.name.split("/"):
                 raise ValueError(f"{archive} holds an unsafe path: {member.name}")
-        tar.extractall(destination)
+        tar.extractall(destination, filter="data")
     return destination
 
 
