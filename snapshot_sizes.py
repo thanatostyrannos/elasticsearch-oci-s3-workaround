@@ -16,8 +16,8 @@ minute against a repo with thousands of snapshots.
 Usage:
   ./snapshot_sizes.py --es https://es:9200 --repo my-repo --group day
   ./snapshot_sizes.py --es https://es:9200 --repo my-repo --group week \
-      --user elastic:changeme --ca-cert /path/ca.crt
-  ./snapshot_sizes.py ... --api-key <base64-id:key>   # ApiKey auth
+      --user elastic --password-file pw.txt --ca-cert /path/ca.crt
+  ./snapshot_sizes.py ... --api-key-file key.txt      # ApiKey auth
   ./snapshot_sizes.py ... --recommend                  # add sizing section
   ./snapshot_sizes.py ... --recommend --retention-days 10
   ./snapshot_sizes.py ... --split-frozen                # class-aware report
@@ -138,7 +138,9 @@ import collections
 import datetime as dt
 import json
 import math
+import os
 import ssl
+import stat
 import statistics
 import sys
 import urllib.error
@@ -251,6 +253,86 @@ def tls_context(args: argparse.Namespace):
     return _pinned_context(args.ca_cert)
 
 
+PASSWORD_ENV = "ES_PASSWORD"
+API_KEY_ENV = "GENCHAIN_ES_API_KEY"
+GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
+
+
+def read_secret_file(parser: argparse.ArgumentParser, path: str,
+                     flag: str) -> str:
+    """The one line in a secret file, or a refusal that never quotes it.
+
+    A file readable by group or others is refused unread. A file that is
+    empty or not a regular file is refused too, so a bad path fails at the
+    command line instead of as a 401 from the cluster.
+    """
+    resolved = os.path.realpath(path)
+    try:
+        info = os.stat(resolved)
+        if not stat.S_ISREG(info.st_mode):
+            parser.error(f"{flag} {path!r} is not a regular file")
+        if info.st_mode & GROUP_AND_WORLD:
+            parser.error(
+                f"{flag} {path!r} is mode {stat.S_IMODE(info.st_mode):04o} "
+                f"and must be 0600 or 0400, or other users on this host can "
+                f"read it. Run `chmod 600 {path}` and try again. Nothing "
+                f"was read")
+        with open(resolved) as handle:
+            value = handle.read().strip()
+    except OSError as problem:
+        parser.error(f"{flag} {path!r} could not be read: "
+                     f"{problem.strerror or problem.__class__.__name__}")
+    if not value:
+        parser.error(f"{flag} {path!r} is empty")
+    return value
+
+
+def resolve_credentials(parser: argparse.ArgumentParser,
+                        args: argparse.Namespace) -> None:
+    """Load the cluster secret into args, or refuse the command line.
+
+    A secret value on argv is refused rather than accepted, because argv is
+    visible in the process list and in shell history. The file and the
+    environment are the only sources.
+    """
+    if args.user and ":" in args.user:
+        parser.error("--user takes the user name only; a password after a "
+                     "colon would show in the process list. Put the password "
+                     f"in a 0600 file and pass --password-file PATH, or set "
+                     f"{PASSWORD_ENV}")
+    if args.api_key is not None:
+        parser.error("--api-key no longer takes a value, because it would "
+                     "show in the process list. Put the key in a 0600 file "
+                     f"and pass --api-key-file PATH, or set {API_KEY_ENV}")
+
+    password = os.environ.get(PASSWORD_ENV) or None
+    if args.password_file:
+        if password is not None:
+            parser.error(f"--password-file and {PASSWORD_ENV} are both set; "
+                         f"unset one so the credential in use is not a guess")
+        password = read_secret_file(parser, args.password_file,
+                                    "--password-file")
+    api_key = os.environ.get(API_KEY_ENV) or None
+    if args.api_key_file:
+        if api_key is not None:
+            parser.error(f"--api-key-file and {API_KEY_ENV} are both set; "
+                         f"unset one so the credential in use is not a guess")
+        api_key = read_secret_file(parser, args.api_key_file,
+                                   "--api-key-file")
+
+    if password is not None and api_key is not None:
+        parser.error("a password and an API key are both configured; "
+                     "configure one")
+    if args.user and password is None:
+        parser.error(f"--user needs a password: pass --password-file PATH "
+                     f"or set {PASSWORD_ENV}")
+    if password is not None and not args.user:
+        parser.error(f"a password is configured but --user is not given; "
+                     f"pass --user NAME")
+    args.password = password
+    args.api_key_value = api_key
+
+
 def http_get(path: str, args: argparse.Namespace) -> dict:
     """GET one path from the cluster --es names.
 
@@ -259,11 +341,13 @@ def http_get(path: str, args: argparse.Namespace) -> dict:
     path_segment. Nothing passed in here can move the request to another host.
     """
     req = urllib.request.Request(args.es + path)
-    if args.user:
-        tok = base64.b64encode(args.user.encode()).decode()
+    password = getattr(args, "password", None)
+    api_key = getattr(args, "api_key_value", None)
+    if args.user and password is not None:
+        tok = base64.b64encode(f"{args.user}:{password}".encode()).decode()
         req.add_header("Authorization", f"Basic {tok}")
-    elif args.api_key:
-        req.add_header("Authorization", f"ApiKey {args.api_key}")
+    elif api_key:
+        req.add_header("Authorization", f"ApiKey {api_key}")
     with urllib.request.urlopen(  # nosec B310
             req, context=getattr(args, "tls", None), timeout=120) as r:
         return json.load(r)
@@ -461,7 +545,7 @@ def emit_mounted(args: argparse.Namespace) -> int:
         mounted = fetch_mounted_set(args)
     except FETCH_ERRORS as e:
         print(f"mounted-index discovery (_settings) failed: {e} "
-              f"(check the URL, --user/--api-key and --ca-cert)",
+              f"(check the URL, the credentials and --ca-cert)",
               file=sys.stderr)
         return 1
     try:
@@ -831,7 +915,7 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
             f"/_snapshot/{path_segment(args.repo)}/*?verbose=false", args)
     except urllib.error.HTTPError as e:
         print(f"ES returned HTTP {e.code} for {args.es}: {e.reason} "
-              f"(check --user/--api-key and the repo name)", file=sys.stderr)
+              f"(check the credentials and the repo name)", file=sys.stderr)
         return None
     except (urllib.error.URLError, OSError, ssl.SSLError) as e:
         print(f"cannot reach {args.es}: {e} "
@@ -898,7 +982,7 @@ def emit_classified(args: argparse.Namespace,
     split, split_error = build_split(args, names)
     if split_error:
         print(f"--emit-classified aborted: {split_error} "
-              f"(check the URL, --user/--api-key and --ca-cert). "
+              f"(check the URL, the credentials and --ca-cert). "
               f"An incomplete classified export is worse than none, so "
               f"nothing was written.", file=sys.stderr)
         return 1
@@ -1213,8 +1297,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--es", required=True, help="http(s)://host:9200")
     p.add_argument("--repo", required=True)
     p.add_argument("--group", choices=["day", "week", "month"], default="day")
-    p.add_argument("--user", help="basic auth user:password")
-    p.add_argument("--api-key", help="ApiKey header value")
+    p.add_argument("--user", help="basic auth user name only; the password "
+                   f"comes from --password-file or {PASSWORD_ENV}")
+    p.add_argument("--password-file", metavar="PATH",
+                   help="file (mode 0600) holding the basic auth password")
+    p.add_argument("--api-key-file", metavar="PATH",
+                   help="file (mode 0600) holding the ApiKey header value; "
+                        f"{API_KEY_ENV} also works")
+    p.add_argument("--api-key", metavar="REFUSED",
+                   help="refused: a key on argv shows in the process list. "
+                        "Use --api-key-file")
     p.add_argument("--ca-cert", metavar="PEM",
                    help="PEM file holding the CA that signed the cluster's "
                         "certificate. This is how a lab cluster serving its "
@@ -1268,6 +1360,7 @@ def check_arguments(parser: argparse.ArgumentParser,
         parser.error(f"--batch must be at least 1 (got {args.batch})")
 
     checked_ca_cert(parser, args.ca_cert)
+    resolve_credentials(parser, args)
 
     if args.emit_mounted and args.emit_classified:
         parser.error("--emit-mounted and --emit-classified are mutually "
