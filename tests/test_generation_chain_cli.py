@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -26,6 +27,7 @@ import genchain_fixtures as fx
 from generation_chain import cli
 from generation_chain.reporting import manifest
 from generation_chain.sources import s3
+from generation_chain.sources.local import LocalMirrorSource
 
 HISTORY = [
     {"s1": {"idx": ["__a", "__shared"]}},
@@ -344,15 +346,81 @@ class MemoryBudgetFlags(unittest.TestCase):
         args = self.parse(["--local-repo", self.root, "--memory-mb", "0"])
         self.assertIsNone(cli._budget_bytes(args))
 
-    def test_a_shard_directory_too_large_for_max_ram_exits_too_big(self):
-        # End to end: a ceiling too small even for this repository's one
-        # shard directory has to reach the operator as exit code 5, the same
-        # code the old whole-repository gate used.
+    def test_a_ceiling_too_small_for_max_ram_exits_too_big(self):
+        # End to end: a ceiling too small for this repository has to reach
+        # the operator as exit code 5 and name the flag they passed. A
+        # refusal naming a flag they did not use sends them to the wrong fix.
         out, err = io.StringIO(), io.StringIO()
         code = cli.main(["--local-repo", self.root, "--max-ram", "1B"],
                         stdin=_Answers(), stdout=out, stderr=err)
         self.assertEqual(code, cli.EXIT_TOO_BIG)
         self.assertIn("--max-ram", err.getvalue())
+
+
+class _CountingLocal(LocalMirrorSource):
+    """A local mirror that counts every read made after the listing."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.reads = 0
+
+    def fetch(self, key):
+        self.reads += 1
+        return super().fetch(key)
+
+
+class MemoryBudgetBoundsTheListing(unittest.TestCase):
+    """The ceiling the run computes is also applied to the listing itself."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="genchain-cli-listing-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.root = os.path.join(self.dir, "repo")
+        fx.build_repository(self.root, HISTORY)
+        self.source = _CountingLocal(self.root)
+
+    def run_cli(self, ceiling):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(cli, "build_source",
+                               return_value=self.source):
+            code = cli.main(["--local-repo", self.root] + ceiling,
+                            stdin=_Answers(), stdout=out, stderr=err)
+        return code, err.getvalue()
+
+    def test_a_listing_inside_the_ceiling_runs(self):
+        # A guard that also refuses repositories that fit makes operators
+        # route around it with --memory-mb 0, and then a 2 GB host is
+        # OOM-killed at minute thirty again with no manifest.
+        code, _err = self.run_cli(["--max-ram", "1GiB"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertGreater(self.source.reads, 0)
+
+    def test_a_listing_over_the_ceiling_exits_too_big_before_any_read(self):
+        # Abuse case: a small host pointed at a repository with more
+        # objects than it can hold. Without the listing check the run reads
+        # for thirty minutes and the kernel kills it with no manifest and no
+        # message tying the kill to object count.
+        code, err = self.run_cli(["--max-ram", "1KiB"])
+        self.assertEqual(code, cli.EXIT_TOO_BIG)
+        self.assertEqual(self.source.reads, 0)
+        self.assertIn("--max-ram", err)
+
+    def test_memory_mb_zero_does_not_refuse_the_listing(self):
+        # Abuse case: an operator who knows the host has the memory turns
+        # the ceiling off. If the listing check ignored that, a documented
+        # escape hatch would refuse a run the operator was entitled to make.
+        with mock.patch.object(cli, "available_bytes", return_value=1024):
+            code, _err = self.run_cli(["--memory-mb", "0"])
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertGreater(self.source.reads, 0)
+
+    def test_memory_mb_bounds_the_listing_too(self):
+        # --memory-mb is the flag existing scripts pass. If only --max-ram
+        # reached the listing, those scripts would keep the OOM kill.
+        with mock.patch.object(cli, "MemoryBudget",
+                               wraps=cli.MemoryBudget) as budget:
+            self.run_cli(["--memory-mb", "512"])
+        self.assertEqual(budget.call_args.kwargs["limit_bytes"], 512 << 20)
 
 
 class FlagSurface(unittest.TestCase):

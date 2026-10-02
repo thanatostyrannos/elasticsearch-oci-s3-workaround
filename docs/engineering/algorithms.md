@@ -640,15 +640,17 @@ run.
 
 ## Memory model
 
-`--memory-mb` and `--max-ram` size `budget_bytes`, which flows into
-`run_audit` and from there into `plan_shard_batches`
-(`derivation/shards.py`). Without either flag, `available_bytes()`
-(`sources/budget.py`) reads `/proc/meminfo` and the container's cgroup limit,
+`--memory-mb` and `--max-ram` size `budget_bytes`. It flows to two places: a
+`MemoryBudget` (`sources/budget.py`) that the CLI wraps around the transport,
+inside the `prepared` stack, and `run_audit`, which passes it to
+`plan_shard_batches` (`derivation/shards.py`). `--memory-mb 0` turns both off. Without either flag,
+`available_bytes()` (`sources/budget.py`) reads `/proc/meminfo` and the container's cgroup limit,
 takes the smaller of the two, and keeps 80 percent of it.
 
 ```mermaid
 flowchart TD
     START["run starts: --memory-mb, --max-ram, or the host's own available_bytes reading"] --> LIST["list_keys: every key held in memory as one Python list for the rest of the run"]
+    LIST -->|"objects times 1900 bytes exceeds budget_bytes"| REFL["RepositoryTooLarge: refused before anything is read, exit 5"]
     LIST --> HOLD["held for the WHOLE run, never freed early: the key list, KeyIndex's per-key existence cache, the Chain's parsed root generations, ShardHistory.writer_uuids for every surviving directory, the condemned dict, and era_names' snapshot-name summaries"]
     HOLD --> PLAN["plan_shard_batches groups shard directories so that objects_in_directory times generations_for_that_directory times 1900 bytes stays under budget_bytes PER GROUP"]
     PLAN -->|"one directory alone exceeds budget_bytes"| REF5["ShardDirectoryTooLarge: refused before that directory is read, exit 5"]
@@ -658,27 +660,28 @@ flowchart TD
     CLEAR --> NEXT{"more groups"}
     NEXT -->|"yes"| GROUP
     NEXT -->|"no"| DONE["survey complete"]
-    HOLD -.-> GAP["the listing itself is never batched or bounded by budget_bytes. Only the parsed per-group shard documents are. A repository with enough OBJECTS, spread across many small shard directories that each individually fit, can still exceed what this host holds, with nothing in the current wiring refusing early"]
+    HOLD -.-> GAP["the 1900 bytes per object estimate is lenient: issue 7 measured more. A repository near the ceiling, spread across many small shard directories that each individually fit, can still exceed what this host holds"]
 ```
 
 The number this is measured against, 1.9 KB resident per object, is stated
 in `sources/budget.py` as linear to 585,194 objects at 1.55 GB peak, and a 2
 GB host was measured to die near 750,000 objects, at the end of a thirty
-minute run, with an OOM kill and no manifest. `sources/budget.py` also
-defines `MemoryBudget` and `with_budget`, a wrapper meant to refuse a listing
-too large for the host before a single object is read. As of this reading,
-that wrapper is exercised only by this project's own tests;
-`generation_chain/cli.py` never calls `with_budget` or constructs a
-`MemoryBudget`, so the door check the module's own docstring describes is
-not reachable from the command line today. The only active memory
-protection is `plan_shard_batches`'s per-group bounding and
-`ShardDirectoryTooLarge`'s refusal of one oversized directory; the whole-run
-overhead the docstring warns about (the listing, the key index, the chain)
-is not bounded by `--memory-mb` or `--max-ram` at all. This gap is the one
-[testing-guide.md](../testing-guide.md)
-tracks as a real, open limitation, upstream issue 7: memory use scales with
-object count, and `--memory-mb` today only makes the shard-batching refuse
-before it reads rather than fail partway through, not the run as a whole.
+minute run, with an OOM kill and no manifest. `MemoryBudget` wraps the transport, so it sees the raw listing,
+and `prepared` wraps it in turn: `ReadAhead(CriticalReads(GuardedSource(
+MemoryBudget(transport))))`. It multiplies the listed object count by 1,900
+bytes and raises `RepositoryTooLarge` when the product exceeds `budget_bytes`,
+before any shard document is read. `GuardedSource` and `CriticalReads` pass
+that refusal through unchanged, `run_audit` records it as a refusal, and the
+CLI exits 5. With `--memory-mb 0`, or a host that reports no limit, the check
+is off. The other memory protection is `plan_shard_batches`'s per-group
+bounding and `ShardDirectoryTooLarge`'s refusal of one oversized directory.
+The whole-run overhead the docstring warns about (the listing, the key index,
+the chain) is bounded only through the listing's object count. The 1,900
+bytes per object estimate is lower than the 4.28 KB per object that issue 7
+measured, so the ceiling is lenient and a run near it can still be killed.
+The per-shard-directory redesign in issue 7 is still open, and
+[testing-guide.md](../testing-guide.md) tracks it as a real limitation:
+memory use scales with object count.
 
 ## Existence is three-valued
 

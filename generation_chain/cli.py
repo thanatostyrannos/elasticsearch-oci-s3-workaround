@@ -34,7 +34,7 @@ from .reporting import coverage as coverage_report
 from .reporting import manifest as manifest_writer
 from .sizes import InvalidSize, parse_byte_size
 from .sources import RepositorySource, overlap, prepared
-from .sources.budget import available_bytes
+from .sources.budget import MemoryBudget, available_bytes
 from .sources.local import LocalMirrorSource
 from .sources.oci import (OciCredentials, OciNativeSource, endpoint_for_region)
 from .credentials import (CREDENTIAL_SUMMARY, load_elasticsearch,
@@ -59,8 +59,8 @@ EXIT_CODES = """Exit codes
      format or a catalog it could not anchor. Retrying changes nothing
   3  the invocation or a credential is wrong. Fix it and run again
   4  the store or the cluster did not answer. A retry is reasonable
-  5  a single shard directory is larger than this host can hold even alone.
-     Run it somewhere with more memory, narrow it with --prefix, or raise
+  5  the repository listing, or a single shard directory, is larger than this
+     host can hold. Run it somewhere with more memory, narrow it with --prefix, or raise
      --max-ram (or --memory-mb) if this host really has more than it reports"""
 
 TRANSPORTS = ("s3", "oci", "local")
@@ -258,11 +258,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="the memory this run may plan on using, in "
                              "megabytes. Without it, or --max-ram, the host "
                              "is asked, and a host that does not say gets no "
-                             "ceiling. This run sizes how many shard "
-                             "directories it reads at once to fit; only a "
-                             "single shard directory too large to hold even "
-                             "alone still refuses before it is read. 0 turns "
-                             "the ceiling off. Kept for scripts already "
+                             "ceiling. A listing with more objects than "
+                             "this holds refuses before anything is read, and "
+                             "the run sizes how many shard directories it "
+                             "reads at once to fit. 0 turns the ceiling off. Kept for scripts already "
                              "passing it; --max-ram takes a unit and cannot "
                              "be off by three orders of magnitude from a typo")
     memory.add_argument("--max-ram", type=_size_argument, default=None,
@@ -387,12 +386,17 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
 
     try:
         transport = _resolve_transport(args, stdin, stderr)
-        # The stack the run reads through: the transport, then the guard,
-        # escalation and read-ahead wrappers `prepared` assembles. The memory
-        # ceiling is not part of it. It sizes how many shard directories
-        # `run_audit` reads at once, so it goes to `run_audit` below.
-        source = prepared(build_source(transport, args, stdin, stderr),
-                          concurrency=args.concurrency)
+        # The stack the run reads through: the transport inside the memory
+        # budget, then the guard, escalation and read-ahead wrappers
+        # `prepared` assembles. The budget sits next to the transport so it
+        # sees the raw listing, and `prepared` stays outermost so read-ahead
+        # still reaches the transport. The same ceiling also goes to
+        # `run_audit`, which sizes how many shard directories it reads at once.
+        budget_bytes = _budget_bytes(args)
+        source = prepared(
+            MemoryBudget(build_source(transport, args, stdin, stderr),
+                         limit_bytes=budget_bytes),
+            concurrency=args.concurrency)
     except GenerationChainError as exc:
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
@@ -407,7 +411,7 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
         return EXIT_USAGE
 
     result = run_audit(
-        source, veto, budget_bytes=_budget_bytes(args),
+        source, veto, budget_bytes=budget_bytes,
         progress=None if args.quiet else _progress_writer(stderr))
     _write(result, transport, source.describe(), args, stdout, stderr,
            sizes=_reported_sizes(source))
