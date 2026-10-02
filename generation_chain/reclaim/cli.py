@@ -24,9 +24,10 @@ from typing import Dict, List, Optional, Sequence, TextIO, Tuple
 
 from ..corroboration import ElasticsearchVeto
 from ..credentials import load_elasticsearch, load_s3
-from ..errors import GenerationChainError
+from ..errors import GenerationChainError, SourceReadError
 from ..paths import PathRefused, checked_path
-from ..sources.s3 import S3Credentials, _refuse_plain_http
+from ..sources.s3 import (S3Credentials, _refuse_plain_http,
+                           refuse_plain_http_cluster)
 from . import batch
 from .approval import ApprovalError, verify_approval
 from . import recheck
@@ -107,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="append one JSON line per batch's outcome here")
     parser.add_argument(
         "--insecure-http", action="store_true",
-        help="send to a plain http endpoint that is not loopback. A manifest names exactly which production objects are about to be deleted, so this is only for a lab store on a network you trust")
+        help="send to a plain http endpoint that is not loopback, whether the store or the --elasticsearch cluster. A manifest names exactly which production objects are about to be deleted, and the cluster request carries its credential, so this is only for a lab you trust")
     group = parser.add_argument_group(
         "re-checking the cluster at execute time",
         "The manifest's Elasticsearch protection was decided when it was "
@@ -288,7 +289,9 @@ def main(argv: Optional[Sequence[str]] = None, stdout: Optional[TextIO] = None,
         manifest = load_manifest(args.manifest)
         _refuse_duplicate_keys(manifest)
         scheme, host = _require_store_arguments(args)
-    except (ManifestError, Misconfigured) as exc:
+        if args.elasticsearch:
+            refuse_plain_http_cluster(args.elasticsearch, args.insecure_http)
+    except (ManifestError, Misconfigured, SourceReadError) as exc:
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
 

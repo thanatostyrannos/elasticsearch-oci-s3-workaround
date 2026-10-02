@@ -51,18 +51,32 @@ class S3Credentials:
 _LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
 
 
-def _refuse_plain_http(parsed, endpoint: str, allowed: bool) -> None:
+_STORE_EXPOSURE = ("A manifest names exactly which production objects are "
+                   "about to be deleted, and this would send it, and the "
+                   "signed request carrying it, in the clear.")
+_CLUSTER_EXPOSURE = ("Every request to the cluster carries its API key or "
+                     "password, and this would send that credential in the "
+                     "clear.")
+
+
+def _refuse_plain_http(parsed, endpoint: str, allowed: bool,
+                       exposure: str = _STORE_EXPOSURE) -> None:
     if parsed.scheme == "https" or allowed:
         return
     host = parsed.netloc.rsplit("@", 1)[-1]
     if host.rsplit(":", 1)[0] in _LOOPBACK or host in _LOOPBACK:
         return
     raise SourceReadError(
-        f"the endpoint {endpoint!r} is plain {parsed.scheme}. A manifest names "
-        "exactly which production objects are about to be deleted, and this "
-        "would send it, and the signed request carrying it, in the clear. Use "
-        "https, or pass --insecure-http if you meant a lab store on a network "
-        "you trust.")
+        f"the endpoint {endpoint!r} is plain {parsed.scheme}. {exposure} Use "
+        "https, or pass --insecure-http if you meant a lab endpoint on a "
+        "network you trust.")
+
+
+def refuse_plain_http_cluster(endpoint: str, allowed: bool) -> None:
+    """Apply the store's plain-http rule to the Elasticsearch endpoint."""
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.scheme and parsed.netloc:
+        _refuse_plain_http(parsed, endpoint, allowed, _CLUSTER_EXPOSURE)
 
 
 # A legitimate S3 listing or delete response never declares a DOCTYPE. stdlib

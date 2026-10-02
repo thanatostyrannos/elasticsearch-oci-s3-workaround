@@ -41,7 +41,8 @@ from .credentials import (CREDENTIAL_SUMMARY, load_elasticsearch,
                           load_oci, load_s3)
 from .supported import SUPPORTED_SUMMARY
 from .sources.s3 import (DEDICATED_ORACLE_ENDPOINT, STANDARD_ORACLE_ENDPOINT,
-                         S3CompatibleSource, S3Credentials)
+                         S3CompatibleSource, S3Credentials,
+                         refuse_plain_http_cluster)
 
 # EXIT CODES ARE A CONTRACT, not a detail. A scheduled job derives success
 # from the code and retries on it, so the codes separate the failures worth
@@ -160,6 +161,7 @@ def _corroboration(args: argparse.Namespace) -> Optional[Veto]:
         raise Misconfigured(
             "--elasticsearch needs --es-repository naming the repository as "
             "Elasticsearch knows it")
+    refuse_plain_http_cluster(args.elasticsearch, args.insecure_http)
     return ElasticsearchVeto(
         endpoint=args.elasticsearch, repository=args.es_repository,
         credentials=load_elasticsearch(args.credentials),
@@ -278,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "passed together")
     parser.add_argument(
         "--insecure-http", action="store_true",
-        help="send to a plain http endpoint that is not loopback. A manifest names exactly which production objects are about to be deleted, so this is only for a lab store on a network you trust")
+        help="send to a plain http endpoint that is not loopback, whether the store or the --elasticsearch cluster. A manifest names exactly which production objects are about to be deleted, and the cluster request carries its credential, so this is only for a lab you trust")
     parser.add_argument(
         "--quiet", action="store_true",
         help="do not write progress to stderr. A run against a real "
