@@ -40,7 +40,13 @@ class LocalMirrorSource:
         if not os.path.isdir(self.root):
             raise SourceReadError(f"no such directory: {self.root}")
         keys: List[str] = []
-        for dirpath, _dirs, files in os.walk(self.root):
+
+        def refuse_unreadable(error: OSError) -> None:
+            raise SourceReadError(f"cannot list {error.filename}: {error}") \
+                from error
+
+        for dirpath, _dirs, files in os.walk(self.root,
+                                             onerror=refuse_unreadable):
             for name in files:
                 full = os.path.join(dirpath, name)
                 keys.append(os.path.relpath(full, self.root).replace(os.sep, "/"))

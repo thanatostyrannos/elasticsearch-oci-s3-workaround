@@ -45,7 +45,7 @@ from ..errors import (GenerationChainError, RunRefused, SourceReadError,
 from ..formats.latest import INDEX_LATEST_KEY, parse_index_latest
 from ..formats.repository_data import (parse_repository_data,
                                        root_generation_number)
-from ..model import RootGeneration
+from ..model import UUID_NOT_ASSIGNED, RootGeneration
 from ..sources import RepositorySource, hint
 
 BY_LISTING = "listing"
@@ -151,6 +151,13 @@ def load_chain(source: RepositorySource, keys: List[str]) -> Chain:
         raise RunRefused(
             f"generation {latest} carries no repository uuid, so no other "
             "generation blob can be attributed to this repository")
+
+    if repository_uuid == UUID_NOT_ASSIGNED:
+        raise RunRefused(
+            f"generation {latest} carries the placeholder repository uuid "
+            f"{UUID_NOT_ASSIGNED!r}: the repository predates repository "
+            "uuids, so its generation blobs cannot be told from another "
+            "repository's and it cannot be anchored safely")
 
     notes: List[str] = []
     rejected: Dict[int, str] = {}
@@ -263,6 +270,12 @@ def _highest_ours(source: RepositorySource, present: List[int], latest: int,
                 f"{key} is listed above the generation {INDEX_LATEST_KEY} "
                 f"names and could not be read ({exc}), so this run cannot tell "
                 "whether it is this repository's current generation") from exc
+        if parsed.repository_uuid is None:
+            raise RunRefused(
+                f"{key} is listed above the generation {INDEX_LATEST_KEY} "
+                "names and carries no repository uuid, so this run cannot "
+                "prove it belongs to another repository, and if it is this "
+                "one it is the current generation")
         if parsed.repository_uuid != repository_uuid:
             rejected[number] = (
                 f"belongs to repository {parsed.repository_uuid}, not "
