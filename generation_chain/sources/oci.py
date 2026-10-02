@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ..credentials import require_private
-from ..errors import GenerationChainError, SourceReadError
+from ..errors import ForbiddenMethod, GenerationChainError, SourceReadError
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader, Response
 from .signing import oci_signature
 from .signing.rsa import RsaPrivateKey
@@ -144,9 +144,10 @@ class OciNativeSource:
 
     def _request(self, method: str, path_and_query: str,
                  critical: bool = False) -> Response:
-        assert method in ALLOWED_METHODS, (
-            f"{method} is not a method this package may send; version one "
-            "reads and never deletes")
+        if method not in ALLOWED_METHODS:
+            raise ForbiddenMethod(
+                f"{method} is not a method this package may send; it reads "
+                "and never deletes")
         date_header = email.utils.format_datetime(
             dt.datetime.now(dt.timezone.utc), usegmt=True)
         signature = self.credentials.private_key.sign_sha256(
