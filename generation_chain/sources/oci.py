@@ -172,10 +172,16 @@ class OciNativeSource:
         """
         return dict(self._sizes)
 
-    def list_keys(self) -> List[str]:
+    def list_keys(self, on_page=None) -> List[str]:
+        """Every key under the prefix, sorted.
+
+        `on_page`, when given, is called with the running key count after each
+        page and may raise to stop the listing early.
+        """
         keys: List[str] = []
         self._sizes = {}
         start: Optional[str] = None
+        seen_markers = set()
         for _ in range(MAX_PAGES):
             query = oci_signature.query_string({
                 "prefix": self.prefix or None,
@@ -188,14 +194,17 @@ class OciNativeSource:
                 critical=True)
             page, following = self._page(response)
             keys.extend(page)
+            if on_page is not None:
+                on_page(len(keys))
             if following is None:
                 return sorted(keys)
-            if following == start:
+            if following == start or following in seen_markers:
                 # Abuse case seen in the wild: a store that answers every page
                 # with the same marker. Following it forever would burn the
                 # retry budget on one page and never say why.
                 raise SourceReadError(
                     "the listing repeated its next-page marker")
+            seen_markers.add(following)
             start = following
         raise SourceReadError(
             f"the listing did not finish in {MAX_PAGES} pages")
