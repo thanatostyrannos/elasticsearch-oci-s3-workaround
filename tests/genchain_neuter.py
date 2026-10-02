@@ -257,7 +257,7 @@ CASES = [
      "    if missing:", "    if False:"),
     ("the-commit-oracle-tally-is-recorded-per-document",
      "derivation/shards.py",
-     "        tally.record(document)", "        pass"),
+     "        tally.record(key, document)", "        pass"),
 
     # -- reclaim: a manifest cut off part way through a write is refused ---
     ("a-manifest-without-a-trailing-newline-is-refused",

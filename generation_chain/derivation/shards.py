@@ -111,11 +111,10 @@ class ShardHistory:
 class CommitOracleTally:
     """How many (snapshot, commit) pairs issue #1's Lucene cross-check saw.
 
-    Counted once per shard document this run actually decodes, at `_read`,
-    the one place every parse funnels through: a document served from cache
-    is not counted twice, because the cross-check did not run a second time
-    for it either. `checked` is a pair the oracle compared against the file
-    list. `skipped` is a pair it had no inline commit bytes for, so it fell
+    Counted once per shard document key this run decodes, at `_read`, the
+    one place every parse funnels through. A key parsed again under a
+    different cache is not counted twice. `checked` is a pair the oracle
+    compared against the file list. `skipped` is a pair it had no inline commit bytes for, so it fell
     back to the older presence-only gate without comparing anything.
 
     This exists because a run where the oracle fired on every entry and a
@@ -129,8 +128,19 @@ class CommitOracleTally:
 
     checked: int = 0
     skipped: int = 0
+    counted: Set[str] = field(default_factory=set)
 
-    def record(self, document: ShardDocument) -> None:
+    def record(self, key: str, document: ShardDocument) -> None:
+        """Count `document` once per `key`, however many caches parse it.
+
+        The current-generation survey and the era reads keep separate
+        caches, so the current document is parsed by both. Keying on the
+        object key keeps the totals at one count per (directory,
+        generation) document.
+        """
+        if key in self.counted:
+            return
+        self.counted.add(key)
         self.checked += document.commit_oracle_checked
         self.skipped += document.commit_oracle_skipped
 
@@ -767,7 +777,7 @@ def _read(source: RepositorySource, location: ShardLocation,
         return cache[key]
     try:
         document = parse_shard_snapshots(source.fetch(key), key)
-        tally.record(document)
+        tally.record(key, document)
         require_blob_names(document, key)
     except (SourceReadError, GenerationChainError):
         document = None

@@ -44,9 +44,11 @@ NOT_FOUND_CODES = frozenset({"NoSuchKey", "NotFound"})
 class BatchDeleteError(GenerationChainError):
     """The store's response could not be read as a `DeleteResult` at all.
 
-    Every key in the batch that produced this is `unconfirmed`, because a
-    response this package cannot parse is not evidence that any of them were
-    removed.
+    The reclaim CLI records every key in the batch that produced this as
+    `failed` (code `UnparseableResponse`), because a response this package
+    cannot parse is not evidence that any of them were removed. Both `failed`
+    and `unconfirmed` keys end the run with the partial exit code, so the
+    label changes the report line and not the exit status.
     """
 
 
