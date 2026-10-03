@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -82,6 +83,38 @@ class TheChurnRigRefusesAGroupOrWorldReadableSecret(SecretModeCase):
         os.symlink(target, link)
         with self.assertRaises(SystemExit):
             rig.read_secret_file(link, "--password-file")
+
+
+class TheChurnRigHonoursTheFileRoot(SecretModeCase):
+    """GENCHAIN_FILE_ROOT confines what the rig opens, as it does the audit."""
+
+    def test_a_secret_inside_the_root_is_read(self):
+        # A scheduled job that sets the root and keeps its secret there must
+        # still start; a confinement that refused this would be switched off.
+        path = self.secret(0o600)
+        with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": self.dir.name}):
+            self.assertEqual(rig.read_secret_file(path, "--password-file"),
+                             SECRET)
+
+    def test_a_secret_outside_the_root_is_refused_unread(self):
+        # Abuse case: a command line assembled by a wrapper or an agent names
+        # a file outside the directory the job was confined to. The rig must
+        # refuse before opening it, as generation_chain does.
+        path = self.secret(0o600)
+        with tempfile.TemporaryDirectory() as elsewhere:
+            with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": elsewhere}):
+                with self.assertRaises(SystemExit):
+                    rig.read_secret_file(path, "--password-file")
+
+    def test_a_link_inside_the_root_to_a_file_outside_is_refused(self):
+        # Abuse case: the check runs on the resolved path, so a symlink placed
+        # inside the root cannot carry the read outside it.
+        with tempfile.TemporaryDirectory() as root:
+            link = os.path.join(root, "pw")
+            os.symlink(self.secret(0o600), link)
+            with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": root}):
+                with self.assertRaises(SystemExit):
+                    rig.read_secret_file(link, "--password-file")
 
 
 class TheReclaimProtocolRefusesAGroupOrWorldReadableSecret(SecretModeCase):

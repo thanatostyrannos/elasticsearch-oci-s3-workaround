@@ -256,6 +256,26 @@ def tls_context(args: argparse.Namespace):
 PASSWORD_ENV = "ES_PASSWORD"
 API_KEY_ENV = "GENCHAIN_ES_API_KEY"
 GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
+FILE_ROOT_ENV_VAR = "GENCHAIN_FILE_ROOT"
+
+
+def confined(parser: argparse.ArgumentParser, path: str, flag: str) -> str:
+    """The symlink-resolved path, refused when it leaves GENCHAIN_FILE_ROOT.
+
+    The same rule generation_chain/paths.py applies, copied because this
+    script stays single-file: with the variable unset any path resolves, and
+    with it set nothing outside that directory is opened.
+    """
+    resolved = os.path.realpath(os.path.expanduser(path))
+    named = os.environ.get(FILE_ROOT_ENV_VAR, "").strip()
+    if named:
+        root = os.path.realpath(os.path.expanduser(named))
+        if resolved != root and not resolved.startswith(
+                root.rstrip(os.sep) + os.sep):
+            parser.error(f"{flag} {path!r} resolves to {resolved!r}, which is "
+                         f"outside {root!r}. {FILE_ROOT_ENV_VAR} confines "
+                         f"this run to that directory, so nothing was opened")
+    return resolved
 
 
 def read_secret_file(parser: argparse.ArgumentParser, path: str,
@@ -266,7 +286,7 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
     empty or not a regular file is refused too, so a bad path fails at the
     command line instead of as a 401 from the cluster.
     """
-    resolved = os.path.realpath(path)
+    resolved = confined(parser, path, flag)
     try:
         info = os.stat(resolved)
         if not stat.S_ISREG(info.st_mode):
