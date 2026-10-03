@@ -109,7 +109,7 @@ SELF_REPO_URL_RE = re.compile(
 
 def shipped_members() -> frozenset[str]:
     """The archive's own member list, exactly as `package.py` computes it."""
-    return frozenset(package.members())
+    return frozenset(package.shippable())
 
 
 def shipped_dirs(members: frozenset[str]) -> frozenset[str]:

@@ -210,18 +210,23 @@ def refuse_uncommitted(shipped):
             "commit. Commit or discard the changes and build again.")
 
 
-def members():
-    """Every path that ships, relative to the repository root, sorted.
+def shippable():
+    """Every tracked path the release rules select, relative to the root.
 
     The list comes from `git ls-files`, so a file that exists on disk and is
-    not committed cannot ship, and the build refuses when a shipped file has
-    uncommitted modifications.
+    not committed cannot appear in it. It does not check that the working
+    tree matches the commit; `members()` does.
     """
     tracked = tracked_files()
     found = []
     for tree, suffixes in PACKAGED_TREES:
         found.extend(tree_members(tree, suffixes, tracked))
-    shipped = sorted(found + named_members(tracked))
+    return sorted(found + named_members(tracked))
+
+
+def members():
+    """Every path that ships, sorted, refusing uncommitted modifications."""
+    shipped = shippable()
     refuse_uncommitted(shipped)
     return shipped
 

@@ -348,6 +348,23 @@ class TheReleaseReflectsACommit(unittest.TestCase):
             package.build(os.path.join(self._tmp.name, "out"))
         self.assertIn("FACTS.md", str(raised.exception))
 
+    def test_the_shippable_list_ignores_uncommitted_edits(self):
+        # The doc checks ask which files ship, not whether the tree matches
+        # a commit. If this listing refused a dirty tree, every contributor
+        # who runs the suite before committing, as CONTRIBUTING requires,
+        # would see those checks error on their own edits.
+        with open(os.path.join(self.repo, "FACTS.md"), "a") as fh:
+            fh.write("edited after the commit\n")
+        self.assertIn("FACTS.md", package.shippable())
+
+    def test_members_still_refuses_what_shippable_allows(self):
+        # Abuse case: the release path must not pick up shippable()'s
+        # leniency. members() feeds the archive, so it alone refuses.
+        with open(os.path.join(self.repo, "FACTS.md"), "a") as fh:
+            fh.write("edited after the commit\n")
+        with self.assertRaises(package.ReleaseRefused):
+            package.members()
+
     def test_a_deleted_tracked_file_refuses_the_build(self):
         # A missing file would otherwise surface as a bare OSError, or ship
         # a release that differs from the commit.
