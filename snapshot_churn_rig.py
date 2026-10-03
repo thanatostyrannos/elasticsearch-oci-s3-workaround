@@ -335,6 +335,35 @@ def read_secret_file(path, what):
 # Elasticsearch client, urllib only
 
 
+class RedirectRefused(urllib.error.URLError):
+    """The server answered 3xx. The redirect was not followed.
+
+    A URLError, so every caller's existing request-failure path reports it.
+    The message names the status and the Location host and nothing else.
+    """
+
+    def __init__(self, code, location):
+        try:
+            parsed = urllib.parse.urlsplit(location)
+            host = parsed.hostname or ""
+            if ":" in host:
+                host = f"[{host}]"
+            if host and parsed.port:
+                host = f"{host}:{parsed.port}"
+        except ValueError:
+            host = ""
+        super().__init__(
+            f"the server answered {code} and redirected to "
+            f"{host or '(an unreadable location)'}. A redirect is never "
+            "followed, because it would carry the credential to that host")
+        self.code = code
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RedirectRefused(code, newurl)
+
+
 class EsError(Exception):
     def __init__(self, status, body, url):
         super().__init__("HTTP %s on %s: %s" % (status, url, body[:400]))
@@ -374,6 +403,8 @@ class Es:
                 ("%s:%s" % (user, password)).encode()).decode()
             self.headers["Authorization"] = "Basic " + tok
         self.ctx = tls_context(self.base, ca_cert)
+        self.opener = urllib.request.build_opener(
+            _RefuseRedirects(), urllib.request.HTTPSHandler(context=self.ctx))
 
     def url_for(self, path):
         """The absolute URL for one of this file's request paths.
@@ -406,8 +437,8 @@ class Es:
         # accepted in __init__ plus a path written in this file, so only
         # http and https, and only the named host, reach this call.
         try:
-            with urllib.request.urlopen(  # nosec B310
-                    r, timeout=timeout, context=self.ctx) as resp:
+            with self.opener.open(  # nosec B310
+                    r, timeout=timeout) as resp:
                 raw = resp.read().decode("utf-8", "replace")
                 status = resp.status
         except urllib.error.HTTPError as e:
@@ -442,6 +473,9 @@ class Es:
 # S3 listing and single-object delete, SigV4 with the standard library.
 # Duplicating a small signer here instead of importing one keeps the tool
 # runnable from a copy, which this repository treats as a feature.
+
+
+_S3_OPENER = urllib.request.build_opener(_RefuseRedirects())
 
 
 class S3:
@@ -497,7 +531,7 @@ class S3:
         # self.endpoint plus a signed path this script builds, so only http
         # and https ever reach this call.
         try:
-            with urllib.request.urlopen(r, timeout=60) as resp:  # nosec B310
+            with _S3_OPENER.open(r, timeout=60) as resp:  # nosec B310
                 return resp.status, resp.read()
         except urllib.error.HTTPError as e:
             body = e.read()

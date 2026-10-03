@@ -333,6 +333,35 @@ def resolve_credentials(parser: argparse.ArgumentParser,
     args.api_key_value = api_key
 
 
+class RedirectRefused(urllib.error.URLError):
+    """The server answered 3xx. The redirect was not followed.
+
+    A URLError, so every caller's existing request-failure path reports it.
+    The message names the status and the Location host and nothing else.
+    """
+
+    def __init__(self, code, location):
+        try:
+            parsed = urllib.parse.urlsplit(location)
+            host = parsed.hostname or ""
+            if ":" in host:
+                host = f"[{host}]"
+            if host and parsed.port:
+                host = f"{host}:{parsed.port}"
+        except ValueError:
+            host = ""
+        super().__init__(
+            f"the server answered {code} and redirected to "
+            f"{host or '(an unreadable location)'}. A redirect is never "
+            "followed, because it would carry the credential to that host")
+        self.code = code
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RedirectRefused(code, newurl)
+
+
 def http_get(path: str, args: argparse.Namespace) -> dict:
     """GET one path from the cluster --es names.
 
@@ -348,8 +377,10 @@ def http_get(path: str, args: argparse.Namespace) -> dict:
         req.add_header("Authorization", f"Basic {tok}")
     elif api_key:
         req.add_header("Authorization", f"ApiKey {api_key}")
-    with urllib.request.urlopen(  # nosec B310
-            req, context=getattr(args, "tls", None), timeout=120) as r:
+    opener = urllib.request.build_opener(
+        _RefuseRedirects(),
+        urllib.request.HTTPSHandler(context=getattr(args, "tls", None)))
+    with opener.open(req, timeout=120) as r:  # nosec B310
         return json.load(r)
 
 

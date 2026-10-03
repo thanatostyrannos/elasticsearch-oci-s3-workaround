@@ -16,6 +16,7 @@ import tempfile
 import threading
 import types
 import unittest
+import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -29,6 +30,8 @@ from generation_chain.sources.http_reads import HttpReader
 from generation_chain.sources.s3 import S3Credentials
 
 import reclaim_test_protocol as protocol
+import snapshot_churn_rig as rig
+import snapshot_sizes as sizes
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET = "SECRETKEY123"
@@ -246,6 +249,82 @@ class VerifyRestorableRefusesRedirects(_Pair):
         self.second.body = json.dumps({"status": "green"}).encode()
         done = self._run(self.second)
         self.assertIn("status=green", done.stdout)
+
+
+class SizeReportRefusesRedirects(_Pair):
+
+    def _args(self, server):
+        return types.SimpleNamespace(
+            es=server.url, user="elastic", password=SECRET, api_key_value=None,
+            tls=None, repo="repo")
+
+    def test_a_redirect_is_a_request_failure_and_is_not_followed(self):
+        # The report sends the Basic credential on its first call. A
+        # followed redirect hands that credential to whatever host answers.
+        with self.assertRaises(urllib.error.URLError) as raised:
+            sizes.http_get("/x", self._args(self.first))
+        self.assert_nothing_followed(str(raised.exception))
+
+    def test_the_listing_reports_the_refusal_without_the_credential(self):
+        # The operator reads this message; it must name the host and never
+        # echo the credential or the full Location.
+        err = io.StringIO()
+        real, sys.stderr = sys.stderr, err
+        try:
+            names = sizes.fetch_snapshot_listing(self._args(self.first))
+        finally:
+            sys.stderr = real
+        self.assertIsNone(names)
+        self.assert_nothing_followed(err.getvalue())
+
+    def test_every_redirect_status_is_refused(self):
+        # 307 and 308 keep method and headers, so an allowlist of 301 and
+        # 302 would still leak the credential.
+        for status in (301, 303, 307, 308):
+            self.first.status = status
+            self.first.seen.clear()
+            with self.assertRaises(urllib.error.URLError) as raised:
+                sizes.http_get("/x", self._args(self.first))
+            self.assertIn(str(status), str(raised.exception))
+            self.assertEqual(self.second.seen, [])
+
+    def test_a_plain_answer_is_still_read(self):
+        # A refusal that broke the normal path would stop every report.
+        self.second.body = b'{"ok": true}'
+        self.assertEqual(sizes.http_get("/x", self._args(self.second)),
+                         {"ok": True})
+
+
+class ChurnRigRefusesRedirects(_Pair):
+
+    def test_an_elasticsearch_redirect_is_an_error_and_is_not_followed(self):
+        # The rig sends the Basic credential on every call, including the
+        # connectivity probe a redirecting endpoint would catch.
+        client = rig.Es(self.first.url, "elastic", SECRET, None)
+        with self.assertRaises(rig.EsError) as raised:
+            client.get("/")
+        self.assert_nothing_followed(str(raised.exception))
+
+    def test_an_s3_redirect_is_refused_and_is_not_followed(self):
+        # The SigV4 signature in the request headers is a reusable secret
+        # for its validity window; a followed redirect would replay it.
+        store = rig.S3(self.first.url, "us-east-1", "AK", SECRET, "bucket")
+        with self.assertRaises(urllib.error.URLError) as raised:
+            store.list("p/")
+        self.assert_nothing_followed(str(raised.exception))
+
+    def test_a_plain_elasticsearch_answer_is_still_read(self):
+        # A refusal that broke the normal path would stop every rig run.
+        self.second.body = b'{"ok": true}'
+        client = rig.Es(self.second.url, "elastic", SECRET, None)
+        self.assertEqual(client.get("/"), {"ok": True})
+
+    def test_a_plain_s3_answer_is_still_read(self):
+        # Same, for the store: the listing must still reach the bucket.
+        self.second.body = (b'<ListBucketResult><IsTruncated>false'
+                            b'</IsTruncated></ListBucketResult>')
+        store = rig.S3(self.second.url, "us-east-1", "AK", SECRET, "bucket")
+        self.assertEqual(store.list("p/"), [])
 
 
 if __name__ == "__main__":

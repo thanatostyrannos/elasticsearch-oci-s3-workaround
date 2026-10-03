@@ -102,14 +102,14 @@ class Credentials(unittest.TestCase):
             def read(self_inner):
                 return b"{}"
 
-        def fake_urlopen(req, **_kwargs):
+        def fake_open(_opener, req, **_kwargs):
             seen["auth"] = req.get_header("Authorization")
             return Answer()
 
         args.es = "https://es.example:9200"
         args.tls = None
-        with mock.patch.object(sizes.urllib.request, "urlopen",
-                               fake_urlopen):
+        with mock.patch.object(sizes.urllib.request.OpenerDirector,
+                               "open", fake_open):
             sizes.http_get("/_cat", args)
         return seen["auth"]
 
@@ -171,7 +171,8 @@ class Credentials(unittest.TestCase):
     def test_an_argv_secret_refuses_before_any_network_call(self):
         # The refusal has to precede the first request, or the secret has
         # already crossed the wire by the time the operator sees the error.
-        with mock.patch.object(sizes.urllib.request, "urlopen") as opened:
+        with mock.patch.object(sizes.urllib.request.OpenerDirector,
+                               "open") as opened:
             with contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as raised:
                     with mock.patch.object(sys, "argv", [
