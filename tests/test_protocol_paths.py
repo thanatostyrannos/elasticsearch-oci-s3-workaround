@@ -24,6 +24,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import package
+from unittest import mock
+from test_package import committed_copy
 import reclaim_test_protocol as harness
 
 FILE_ROOT_ENV_VAR = "GENCHAIN_FILE_ROOT"
@@ -214,7 +216,10 @@ class TheArchiveLandsInTheResolvedDirectory(unittest.TestCase):
         os.symlink(cls.real, link)
         os.environ[FILE_ROOT_ENV_VAR] = os.path.join(cls.tmp, "somewhere-else")
         try:
-            cls.archive = package.build(link)
+            # A committed copy of the working tree, so uncommitted edits to
+            # shipped files do not stop the suite a contributor runs first.
+            with mock.patch.object(package, "ROOT", committed_copy(cls.tmp)):
+                cls.archive = package.build(link)
         finally:
             os.environ.pop(FILE_ROOT_ENV_VAR, None)
 
