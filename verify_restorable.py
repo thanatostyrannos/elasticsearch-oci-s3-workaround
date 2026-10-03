@@ -22,6 +22,7 @@ beside the cluster, so getting it is one line:
 """
 import argparse
 import base64
+import http.client
 import json
 import os
 import ssl
@@ -254,11 +255,20 @@ def request(method, path, body=None, timeout=300):
             return e.code, raw.decode(errors="replace")
 
 
+# Names the step in progress, so a network failure says which call died.
+STEP = "start"
+
+
 def call(method, path, body=None, timeout=300):
     try:
         return request(method, path, body, timeout)
     except RedirectRefused as refused:
         fail(str(refused))
+    except (OSError, http.client.HTTPException) as problem:
+        # URLError, socket timeouts, resets and a connection closed mid
+        # response all land here. The message carries the error class and
+        # text only, never the request, so the Authorization header stays out.
+        fail(f"{STEP}: {problem.__class__.__name__}: {problem}")
 
 
 def fail(msg):
@@ -287,6 +297,7 @@ def delete_probe(name, restore_unanswered):
               f"Delete it by hand: DELETE /{name}")
 
 
+STEP = "cluster health"
 print("== cluster ==")
 _, h = call("GET", "/_cluster/health")
 print(f"  status={h.get('status')} nodes={h.get('number_of_nodes')} "
@@ -316,6 +327,7 @@ if h.get("status") == "red":
     print(f"  none of them appear in any snapshot of {REPO}, so this is damage "
           "this repository did not cause and cannot fix; continuing")
 
+STEP = "snapshot listing"
 print("== snapshots ==")
 _, s = call("GET",
             f"/_snapshot/{path_segment(REPO)}/_all?ignore_unavailable=true")
@@ -351,6 +363,7 @@ if not snaps:
     print("  no completed snapshot to restore from yet, not a failure")
     sys.exit(0)
 
+STEP = "integrity check"
 print("== integrity ==")
 code, v = call("POST", f"/_snapshot/{path_segment(REPO)}/_verify_integrity",
                timeout=600)
@@ -358,6 +371,7 @@ anomalies = v.get("anomalies") if isinstance(v, dict) else None
 print(f"  http={code} anomalies={anomalies if anomalies is not None else v if code!=200 else 0}")
 
 # The only check that matters. Restore and count.
+STEP = "restore"
 print("== restore, which is the only check that survives the others passing ==")
 # A `partial-` index is a frozen-tier searchable-snapshot mount. Restoring one
 # yields an index whose data still lives in the object store, so it counts zero

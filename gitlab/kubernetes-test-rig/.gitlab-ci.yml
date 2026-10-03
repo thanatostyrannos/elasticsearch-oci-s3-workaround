@@ -162,11 +162,25 @@ teardown:rig:
         template_job=$(kubectl -n "$KUBE_NAMESPACE" get job \
           -l "app.kubernetes.io/instance=${HELM_RELEASE},rig-component=teardown-manual" \
           -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-        if [ -n "$template_job" ]; then
-          kubectl -n "$KUBE_NAMESPACE" create job \
-            --from="job/${template_job}" "teardown-retry-${CI_JOB_ID}" || true
+        if [ -z "$template_job" ]; then
+          echo "no teardown-manual template Job found for release $HELM_RELEASE in $KUBE_NAMESPACE." >&2
+          echo "Nothing was torn down. The release is still installed and its load generator may still be running." >&2
+          echo "The teardown:manual job needs the release installed with teardown.standalone.enabled=true;" >&2
+          echo "otherwise run snapshot_churn_rig.py teardown by hand against the rig's Elasticsearch and bucket." >&2
+          exit 1
         fi
-        echo "run the teardown:manual job in this pipeline if that did not work either"
+        kubectl -n "$KUBE_NAMESPACE" create job \
+          --from="job/${template_job}" "teardown-retry-${CI_JOB_ID}" || exit 1
+        retry_rc=0
+        kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete \
+          "job/teardown-retry-${CI_JOB_ID}" --timeout 8m || retry_rc=$?
+        kubectl -n "$KUBE_NAMESPACE" logs "job/teardown-retry-${CI_JOB_ID}" || true
+        if [ "$retry_rc" -ne 0 ]; then
+          echo "the teardown retry Job did not complete; the release is still installed." >&2
+          echo "run the teardown:manual job in this pipeline, or run snapshot_churn_rig.py teardown by hand." >&2
+          exit "$retry_rc"
+        fi
+        echo "teardown retry Job completed; run helm uninstall again to remove the release."
       fi
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
