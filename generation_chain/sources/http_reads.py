@@ -23,6 +23,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable, Dict, FrozenSet, Mapping, Optional
 
+from ..body_limits import MAX_BLOB_BYTES, BodyTooLarge, read_capped
 from ..errors import ForbiddenMethod, SourceReadError
 from ..redirects import RedirectRefused, refusing_urlopen
 
@@ -85,7 +86,9 @@ class HttpReader:
 
     def get(self, url: str, headers: Mapping[str, str], method: str = "GET",
             timeout: float = DEFAULT_TIMEOUT_SECONDS,
-            critical: bool = False) -> Response:
+            critical: bool = False,
+            max_bytes: int = MAX_BLOB_BYTES) -> Response:
+        """One read, refused when the body exceeds `max_bytes`."""
         # NOT an assert. `python3 -O` strips assert, and this single check is
         # what makes "reads and never deletes" true. Under -O the stripped
         # version let a DELETE through to the transport, measured, so the
@@ -102,9 +105,13 @@ class HttpReader:
         last = ""
         for attempt in range(policy.max_attempts):
             try:
-                return self._once(url, headers, method, timeout)
+                return self._once(url, headers, method, timeout,
+                                  max_bytes)
             except RedirectRefused as exc:
                 # An answer, not weather: a retry meets the same redirect.
+                raise SourceReadError(f"{url}: {exc}") from exc
+            except BodyTooLarge as exc:
+                # An answer, not weather: a retry meets the same body.
                 raise SourceReadError(f"{url}: {exc}") from exc
             except urllib.error.HTTPError as exc:
                 last = f"{exc.code} from {url}: {_detail(exc)}"
@@ -127,7 +134,7 @@ class HttpReader:
         raise SourceReadError(last or f"no answer from {url}")
 
     def _once(self, url: str, headers: Mapping[str, str], method: str,
-              timeout: float) -> Response:
+              timeout: float, max_bytes: int) -> Response:
         request = urllib.request.Request(url, method=method)
         for name, value in headers.items():
             request.add_header(name, value)
@@ -135,7 +142,7 @@ class HttpReader:
         with self._opener(request, timeout=timeout) as response:
             return Response(status=getattr(response, "status", 200),
                             headers=dict(getattr(response, "headers", {})),
-                            body=response.read())
+                            body=read_capped(response, max_bytes, "the response"))
 
     def _pause(self, policy: RetryPolicy, attempt: int,
                retry_after: Optional[float]) -> float:

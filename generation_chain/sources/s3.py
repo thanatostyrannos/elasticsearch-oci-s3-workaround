@@ -16,6 +16,7 @@ from xml.parsers import expat
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from ..body_limits import MAX_BLOB_BYTES, MAX_XML_BODY_BYTES
 from ..credentials import Secret, as_secret
 from ..errors import ForbiddenMethod, RunRefused, SourceReadError
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader
@@ -99,14 +100,6 @@ def refuse_plain_http_cluster(endpoint: str, allowed: bool) -> None:
 # on this runtime, so a rule that flags this as an XXE file read is overstating
 # it. The denial of service is real; the disclosure is not.
 
-# The largest body either parser accepts. The biggest legitimate responses are
-# a ListObjectsV2 page of 1000 keys and a DeleteObjects result for 1000 keys.
-# A key is at most 1024 bytes, and XML escaping can grow one by a factor of
-# five (`&` becomes `&amp;`), so 1000 worst-case keys are about 5.1 MB, and
-# the per-entry metadata (ETag, LastModified, Owner, error Code and Message)
-# adds under 1 KB each, about 1 MB. 16 MiB is roughly 2.5 times that sum and
-# stays far below the memory a hostile body can make expat spend.
-MAX_XML_BODY_BYTES = 16 * 1024 * 1024
 
 _DOCTYPE = "<!DOCTYPE"
 _ENTITY = "<!ENTITY"
@@ -260,7 +253,8 @@ class S3CompatibleSource:
 
     def _request(self, method: str, canonical_uri: str,
                  params: Dict[str, Optional[str]],
-                 critical: bool = False) -> bytes:
+                 critical: bool = False,
+                 max_bytes: int = MAX_BLOB_BYTES) -> bytes:
         if method not in ALLOWED_METHODS:
             raise ForbiddenMethod(
                 f"{method} is not a method this package may send; it reads "
@@ -284,7 +278,8 @@ class S3CompatibleSource:
         if query:
             url += "?" + query
         return self.reader.get(url, headers, method=method,
-                               timeout=self.timeout, critical=critical).body
+                               timeout=self.timeout, critical=critical,
+                               max_bytes=max_bytes).body
 
     # -- the source interface ---------------------------------------------
 
@@ -316,7 +311,7 @@ class S3CompatibleSource:
                 "max-keys": str(MAX_KEYS_PER_PAGE),
                 "encoding-type": "url",
                 "continuation-token": token,
-            }, critical=True)
+            }, critical=True, max_bytes=MAX_XML_BODY_BYTES)
             page, token = self._page(body)
             keys.extend(page)
             if on_page is not None:

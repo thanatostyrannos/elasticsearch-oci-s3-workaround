@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 
 from ..credentials import require_private
 from ..errors import ForbiddenMethod, GenerationChainError, SourceReadError
+from ..body_limits import MAX_BLOB_BYTES, MAX_XML_BODY_BYTES
 from .http_reads import ALLOWED_METHODS, DEFAULT_TIMEOUT_SECONDS, HttpReader, Response
 from .signing import oci_signature
 from .signing.rsa import RsaPrivateKey
@@ -143,7 +144,8 @@ class OciNativeSource:
                 f"/b/{oci_signature.quote_segment(self.bucket)}/o")
 
     def _request(self, method: str, path_and_query: str,
-                 critical: bool = False) -> Response:
+                 critical: bool = False,
+                 max_bytes: int = MAX_BLOB_BYTES) -> Response:
         if method not in ALLOWED_METHODS:
             raise ForbiddenMethod(
                 f"{method} is not a method this package may send; it reads "
@@ -161,7 +163,8 @@ class OciNativeSource:
         }
         return self.reader.get(
             f"{self.scheme}://{self.host}{path_and_query}", headers,
-            method=method, timeout=self.timeout, critical=critical)
+            method=method, timeout=self.timeout, critical=critical,
+            max_bytes=max_bytes)
 
     # -- the source interface ---------------------------------------------
 
@@ -192,7 +195,7 @@ class OciNativeSource:
             })
             response = self._request(
                 "GET", self._base_path() + (f"?{query}" if query else ""),
-                critical=True)
+                critical=True, max_bytes=MAX_XML_BODY_BYTES)
             page, following = self._page(response)
             keys.extend(page)
             if on_page is not None:
