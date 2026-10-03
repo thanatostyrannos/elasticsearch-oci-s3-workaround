@@ -161,7 +161,10 @@ class RenderedPods(unittest.TestCase):
         out = render(*IN_CLUSTER, *WITH_KEY, *ASK, *TLS_ON,
                      show="audit-cronjob.yaml")
         self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertIn("--elasticsearch https://", out.stdout)
+        # The URL reaches the script through env, so the flag line reads the
+        # variable and the https address sits in the env entry.
+        self.assertIn('--elasticsearch "$AUDIT_ES_URL"', out.stdout)
+        self.assertRegex(out.stdout, r'AUDIT_ES_URL\n\s+value: "https://')
         self.assertNotIn("http://r-es-rig-es-http", out.stdout)
         self.assertIn("--es-ca-cert /es-ca-cert/ca.crt", out.stdout)
         self.assertIn("r-es-rig-es-http-certs-public", out.stdout)
@@ -172,7 +175,8 @@ class RenderedPods(unittest.TestCase):
         # fail every call or push the password over http.
         out = render(*IN_CLUSTER, *WITH_KEY, *TLS_ON, show="qualify-job.yaml")
         self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertIn("--elasticsearch https://", out.stdout)
+        self.assertIn('--elasticsearch "$Q_ES_URL"', out.stdout)
+        self.assertRegex(out.stdout, r'Q_ES_URL\n\s+value: "https://')
         self.assertIn("--es-ca-cert /es-ca-cert/ca.crt", out.stdout)
         self.assertIn("r-es-rig-es-http-certs-public", out.stdout)
 

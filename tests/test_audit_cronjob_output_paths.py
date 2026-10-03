@@ -1,6 +1,6 @@
 """The audit CronJob must put only its own output files under the run directory.
 
-The template builds one shell string of flags and hands it to the audit. These
+The template builds the flag list as positional parameters and hands it to the audit. These
 checks read the template text, because rendering it needs helm and the suite
 runs with the standard library alone.
 """
@@ -29,7 +29,7 @@ class AuditOutputPaths(unittest.TestCase):
         # bare /output path, runs overwrite each other and the earlier
         # evidence is gone.
         for flag, name in OUTPUT_FLAGS.items():
-            self.assertIn(f'args="$args {flag} $RUN_DIR/{name}"', TEMPLATE)
+            self.assertIn(f'set -- "$@" {flag} "$RUN_DIR/{name}"', TEMPLATE)
 
     def test_run_directory_is_set_before_the_first_output_flag(self):
         # The flags expand $RUN_DIR when the line runs. If the assignment moves

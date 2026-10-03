@@ -56,23 +56,77 @@ spec:
           env:
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
+            - name: Q_OUT_PATH
+              value: {{ .Values.qualify.outPath | quote }}
+            - name: Q_REPORT_FILE
+              value: {{ .Values.churnRig.reportFilePath | quote }}
+            - name: Q_CYCLES
+              value: {{ .Values.qualify.cycles | int64 | quote }}
+            - name: Q_START
+              value: {{ .Values.qualify.start | int64 | quote }}
+            - name: Q_MODE
+              value: {{ .Values.qualify.mode | quote }}
+            - name: Q_MIN_DOCS
+              value: {{ .Values.qualify.minDocsPerShard | int64 | quote }}
+            - name: Q_SETTLE_TIMEOUT
+              value: {{ .Values.qualify.settleTimeout | int64 | quote }}
+            - name: Q_FRESH_SNAPSHOTS
+              value: {{ .Values.qualify.freshSnapshots | int64 | quote }}
+            - name: Q_SLEEP
+              value: {{ .Values.qualify.sleep | int64 | quote }}
+            - name: Q_TRANSPORT
+              value: {{ .Values.qualify.transport | quote }}
+            - name: Q_ENDPOINT
+              value: {{ .Values.qualify.endpoint | quote }}
+            - name: Q_REGION
+              value: {{ .Values.qualify.region | quote }}
+            - name: Q_BUCKET
+              value: {{ .Values.qualify.bucket | quote }}
+            - name: Q_PREFIX
+              value: {{ .Values.qualify.prefix | quote }}
+            - name: Q_CREDENTIALS
+              value: {{ printf "/secrets/%s" .Values.credentials.keys.credentialsJson | quote }}
+            - name: Q_REPOSITORY
+              value: {{ .Values.qualify.repository | quote }}
+            - name: Q_DATA_STREAM
+              value: {{ .Values.qualify.dataStream | quote }}
+            {{- if .Values.qualify.settlePoll }}
+            - name: Q_SETTLE_POLL
+              value: {{ .Values.qualify.settlePoll | quote }}
+            {{- end }}
+            {{- if .Values.qualify.ociNamespace }}
+            - name: Q_OCI_NAMESPACE
+              value: {{ .Values.qualify.ociNamespace | quote }}
+            {{- end }}
+            {{- if .Values.qualify.timeout }}
+            - name: Q_TIMEOUT
+              value: {{ .Values.qualify.timeout | quote }}
+            {{- end }}
+            {{- if .Values.qualify.askElasticsearch }}
+            - name: Q_ES_URL
+              value: {{ include "rig.esUrl" . | quote }}
+            - name: Q_ES_USER
+              value: {{ .Values.credentials.harnessEsUser | quote }}
+            - name: Q_ES_PASSWORD_FILE
+              value: {{ printf "/secrets/%s" .Values.credentials.keys.esPassword | quote }}
+            {{- end }}
           command: ["/bin/sh", "-c"]
           args:
             - |
               set -eu
-              mkdir -p "$(dirname "{{ .Values.qualify.outPath }}")"
+              mkdir -p "$(dirname "$Q_OUT_PATH")"
               {{- if .Values.churnRig.enabled }}
               echo "waiting for the load generator's first snapshot to expire"
               i=0
               while [ "$i" -lt 60 ]; do
-                if [ -f "{{ .Values.churnRig.reportFilePath }}" ] && grep -q first_snapshot_expired "{{ .Values.churnRig.reportFilePath }}"; then
+                if [ -f "$Q_REPORT_FILE" ] && grep -q first_snapshot_expired "$Q_REPORT_FILE"; then
                   echo "  a snapshot has expired: objects are now being stranded"
                   break
                 fi
                 i=$((i + 1))
                 sleep 30
               done
-              if [ -f "{{ .Values.churnRig.reportFilePath }}" ] && ! grep -q first_snapshot_expired "{{ .Values.churnRig.reportFilePath }}"; then
+              if [ -f "$Q_REPORT_FILE" ] && ! grep -q first_snapshot_expired "$Q_REPORT_FILE"; then
                 echo "no snapshot expired in 30 minutes; the loop will still run, but expect it to find nothing yet" >&2
               fi
               {{- else }}
@@ -82,52 +136,51 @@ spec:
               # integer as float64, and Go's default float formatting renders
               # it in scientific notation (e.g. "1e+05"), which this tool's
               # argparse int() refuses.
-              args="--cycles {{ .Values.qualify.cycles | int64 }} --start {{ .Values.qualify.start | int64 }} --mode {{ .Values.qualify.mode }}"
-              args="$args --min-docs-per-shard {{ .Values.qualify.minDocsPerShard | int64 }}"
-              args="$args --settle-timeout {{ .Values.qualify.settleTimeout | int64 }}"
-              args="$args --fresh-snapshots {{ .Values.qualify.freshSnapshots | int64 }}"
+              set -- --cycles "$Q_CYCLES" --start "$Q_START" --mode "$Q_MODE"
+              set -- "$@" --min-docs-per-shard "$Q_MIN_DOCS"
+              set -- "$@" --settle-timeout "$Q_SETTLE_TIMEOUT"
+              set -- "$@" --fresh-snapshots "$Q_FRESH_SNAPSHOTS"
               {{- if .Values.qualify.settlePoll }}
-              args="$args --settle-poll {{ .Values.qualify.settlePoll }}"
+              set -- "$@" --settle-poll "$Q_SETTLE_POLL"
               {{- end }}
-              args="$args --sleep {{ .Values.qualify.sleep | int64 }}"
-              args="$args --transport {{ .Values.qualify.transport }}"
-              args="$args --endpoint {{ .Values.qualify.endpoint }} --region {{ .Values.qualify.region }}"
+              set -- "$@" --sleep "$Q_SLEEP"
+              set -- "$@" --transport "$Q_TRANSPORT"
+              set -- "$@" --endpoint "$Q_ENDPOINT" --region "$Q_REGION"
               {{- if .Values.qualify.ociNamespace }}
-              args="$args --namespace {{ .Values.qualify.ociNamespace }}"
+              set -- "$@" --namespace "$Q_OCI_NAMESPACE"
               {{- end }}
-              args="$args --bucket {{ .Values.qualify.bucket }} --prefix {{ .Values.qualify.prefix }}"
-              args="$args --credentials /secrets/{{ .Values.credentials.keys.credentialsJson }}"
+              set -- "$@" --bucket "$Q_BUCKET" --prefix "$Q_PREFIX"
+              set -- "$@" --credentials "$Q_CREDENTIALS"
               {{- if .Values.qualify.askElasticsearch }}
-              args="$args --elasticsearch {{ include "rig.esUrl" . }}"
-              args="$args --es-user {{ .Values.credentials.harnessEsUser }}"
-              args="$args --es-password-file /secrets/{{ .Values.credentials.keys.esPassword }}"
+              set -- "$@" --elasticsearch "$Q_ES_URL"
+              set -- "$@" --es-user "$Q_ES_USER"
+              set -- "$@" --es-password-file "$Q_ES_PASSWORD_FILE"
               {{- if include "rig.hasEsCa" . }}
-              args="$args --es-ca-cert /es-ca-cert/ca.crt"
+              set -- "$@" --es-ca-cert /es-ca-cert/ca.crt
               {{- end }}
               {{- end }}
-              args="$args --repository {{ .Values.qualify.repository }}"
-              args="$args --data-stream {{ .Values.qualify.dataStream }}"
-              args="$args --out {{ .Values.qualify.outPath }}"
+              set -- "$@" --repository "$Q_REPOSITORY"
+              set -- "$@" --data-stream "$Q_DATA_STREAM"
+              set -- "$@" --out "$Q_OUT_PATH"
               {{- if .Values.qualify.timeout }}
-              args="$args --timeout {{ .Values.qualify.timeout }}"
+              set -- "$@" --timeout "$Q_TIMEOUT"
               {{- end }}
               {{- if .Values.qualify.dryRunOnly }}
-              args="$args --dry-run-only"
+              set -- "$@" --dry-run-only
               echo "DRY RUN ONLY. Nothing will be deleted. qualify.dryRunOnly is true."
               {{- else }}
               echo "DELETES ARE ENABLED for this run (qualify.dryRunOnly is false)."
               {{- end }}
-              echo "starting: python3 reclaim_test_protocol.py $args"
+              echo "starting: python3 reclaim_test_protocol.py $*"
               # A failing protocol must still reach the report below, so errexit is off for this one command.
               status=0
-              # shellcheck disable=SC2086
-              python3 reclaim_test_protocol.py $args || status=$?
+              python3 reclaim_test_protocol.py "$@" || status=$?
               echo "done, exit $status"
               echo "totals, read from the per-cycle execute files rather than the summary:"
-              if ls "{{ .Values.qualify.outPath }}"/exec-*.txt >/dev/null 2>&1; then
+              if ls "$Q_OUT_PATH"/exec-*.txt >/dev/null 2>&1; then
                 awk '/^deleted:/{d+=$2} /^failed:/{f+=$2} /^unconfirmed:/{u+=$2}
                      END {printf "    deleted=%d failed=%d unconfirmed=%d\n", d, f, u}' \
-                    "{{ .Values.qualify.outPath }}"/exec-*.txt
+                    "$Q_OUT_PATH"/exec-*.txt
               else
                 echo "    no execute files: nothing was deleted"
               fi

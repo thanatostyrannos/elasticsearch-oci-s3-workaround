@@ -144,6 +144,9 @@ unconditionally.
 */}}
 {{- define "rig.sourceInitContainers" -}}
 {{- if .Values.source.enabled }}
+{{- if and .Values.source.existingSshSecret (not .Values.source.sshKnownHosts) }}
+{{- fail "source.existingSshSecret is set but source.sshKnownHosts is empty. The clone will not trust a host key it has not been given; paste the output of `ssh-keyscan <host>` after checking it against the host's published fingerprint." }}
+{{- end }}
 - name: clone-source
   image: {{ .Values.source.cloneImage | quote }}
   command:
@@ -155,14 +158,26 @@ unconditionally.
       mkdir -p /root/.ssh
       cp /ssh/* /root/.ssh/
       chmod 600 /root/.ssh/*
-      ssh-keyscan -H "$(echo "$REPO_URL" | sed -E 's#.*@##; s#:.*##; s#/.*##')" >> /root/.ssh/known_hosts 2>/dev/null || true
+      : "${SSH_KNOWN_HOSTS:?source.sshKnownHosts is required for an SSH clone}"
+      printf '%s\n' "$SSH_KNOWN_HOSTS" > /root/.ssh/known_hosts
+      export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"
       {{- end }}
-      git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" /workspace
+      case "$REPO_REF" in -*) echo "source.ref must not start with a dash" >&2; exit 1;; esac
+      git clone --no-checkout -- "$REPO_URL" /workspace
+      cd /workspace
+      commit="$(git rev-parse --verify --quiet "refs/remotes/origin/$REPO_REF^{commit}" \
+        || git rev-parse --verify --quiet "$REPO_REF^{commit}")" \
+        || { echo "source.ref $REPO_REF is not a branch, tag or commit in $REPO_URL" >&2; exit 1; }
+      git checkout --detach "$commit"
   env:
     - name: REPO_URL
       value: {{ .Values.source.repoUrl | quote }}
     - name: REPO_REF
       value: {{ .Values.source.ref | quote }}
+    {{- if .Values.source.existingSshSecret }}
+    - name: SSH_KNOWN_HOSTS
+      value: {{ .Values.source.sshKnownHosts | quote }}
+    {{- end }}
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
   resources:
@@ -222,13 +237,21 @@ rig.credentialVolumes), so only those keys are copied.
   env:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
+    - name: RUN_AS_UID
+      value: {{ $root.Values.securityContext.runAsUser | int64 | quote }}
+    - name: RUN_AS_GID
+      value: {{ $root.Values.securityContext.runAsGroup | int64 | quote }}
+    {{- if $eck }}
+    - name: PASSWORD_KEY
+      value: {{ $root.Values.credentials.keys.esPassword | quote }}
+    {{- end }}
   command:
     - python3
     - -c
     - |
       import os, pathlib, shutil
       raw, out = pathlib.Path("/secrets-raw"), pathlib.Path("/secrets")
-      uid, gid = {{ $root.Values.securityContext.runAsUser | int64 }}, {{ $root.Values.securityContext.runAsGroup | int64 }}
+      uid, gid = int(os.environ["RUN_AS_UID"]), int(os.environ["RUN_AS_GID"])
 
       for src in sorted(raw.iterdir()):
           if src.is_file():
@@ -246,7 +269,7 @@ rig.credentialVolumes), so only those keys are copied.
       # veto never runs as the superuser.
       eck = pathlib.Path("/eck-elastic-user/elastic")
       if eck.exists():
-          path = out / {{ $root.Values.credentials.keys.esPassword | quote }}
+          path = out / os.environ["PASSWORD_KEY"]
           path.write_text(eck.read_text().strip())
           os.chown(path, uid, gid)
           os.chmod(path, 0o600)
@@ -529,6 +552,8 @@ so it removes exactly what the previous run created.
   env:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
+    - name: STATE_FILE
+      value: {{ .Values.churnRig.stateFilePath | quote }}
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
   # Runs the exact same teardown command as the standalone teardown Job
@@ -542,7 +567,7 @@ so it removes exactly what the previous run created.
     - -c
     - |
       set -eu
-      if [ ! -f {{ .Values.churnRig.stateFilePath | quote }} ]; then
+      if [ ! -f "$STATE_FILE" ]; then
         echo "no previous state file; nothing to tear down"
         exit 0
       fi
