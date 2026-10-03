@@ -124,7 +124,7 @@ class TheObjectStoreClientNeverRelaxes(unittest.TestCase):
         with open(os.path.join(ROOT, "snapshot_churn_rig.py")) as handle:
             source = handle.read()
         body = source[source.index("class S3:"):source.index("def make_s3(")]
-        self.assertIn("urlopen(r, timeout=60)", body)
+        self.assertIn("_S3_OPENER.open(r, timeout=60)", body)
         self.assertNotIn("context=", body)
 
 
@@ -148,16 +148,16 @@ class TheSizeReportCannotBeAimedElsewhere(unittest.TestCase):
             def read(self_inner):
                 return b"{}"
 
-        def fake_urlopen(req, **_kwargs):
+        def fake_open(_opener, req, **_kwargs):
             seen["url"] = req.full_url
             return Answer()
 
-        original = sizes.urllib.request.urlopen
-        sizes.urllib.request.urlopen = fake_urlopen
+        original = sizes.urllib.request.OpenerDirector.open
+        sizes.urllib.request.OpenerDirector.open = fake_open
         try:
             sizes.http_get("/_snapshot/backups", args)
         finally:
-            sizes.urllib.request.urlopen = original
+            sizes.urllib.request.OpenerDirector.open = original
         self.assertEqual(seen["url"],
                          "https://127.0.0.1:9200/_snapshot/backups")
 
