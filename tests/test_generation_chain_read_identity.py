@@ -358,7 +358,7 @@ class ANameTwoSnapshotsHaveCarried(unittest.TestCase):
 
 
 class WriterUuidCollisions(unittest.TestCase):
-    """A Lucene writer identity seen under two directories drops both.
+    """A believed Lucene writer identity claimed under another directory drops it.
 
     Measured on two captured Elasticsearch 9.5.2 repositories: overlap 0 across
     every cross-directory pairing, including two shards of ONE index. See
@@ -369,7 +369,7 @@ class WriterUuidCollisions(unittest.TestCase):
     def test_two_directories_claiming_one_writer_are_both_named(self):
         # There is no way to tell which of the two reads was the wrong one, so
         # neither directory is believed. Naming only one would be a guess.
-        collisions = identity.writer_uuid_collisions({
+        collisions = _believed_everywhere({
             "indices/a/0": [_Doc({"w1", "w2"})],
             "indices/b/0": [_Doc({"w2", "w3"})],
             "indices/c/0": [_Doc({"w4"})]})
@@ -378,7 +378,7 @@ class WriterUuidCollisions(unittest.TestCase):
     def test_a_writer_uuid_in_one_directory_is_no_collision(self):
         # The abuse case. A check that fired on healthy data would drop every
         # shard of every repository, and coverage would go to zero.
-        collisions = identity.writer_uuid_collisions({
+        collisions = _believed_everywhere({
             "indices/a/0": [_Doc({"w1"}), _Doc({"w1", "w2"})],
             "indices/b/0": [_Doc({"w3"})]})
         self.assertEqual({}, collisions)
@@ -387,9 +387,46 @@ class WriterUuidCollisions(unittest.TestCase):
         # An older segment carries no writer uuid, so an empty set is NO SIGNAL
         # rather than a claim of ownership. Reading absence as evidence here
         # would drop shards in a repository that pre-dates the field.
-        collisions = identity.writer_uuid_collisions({
+        collisions = _believed_everywhere({
             "indices/a/0": [_Doc(set())], "indices/b/0": [_Doc(set())]})
         self.assertEqual({}, collisions)
+
+    def test_a_claim_from_a_document_nobody_believed_still_counts(self):
+        # The witness can be a document a check rejected, or one whose
+        # directory a later check dropped. If only believed documents
+        # counted, that second fault would hide the contradiction and the
+        # forged file list under `indices/a/0` would be read as live data.
+        sightings = identity.WriterUuidSightings()
+        sightings.record("indices/a/0", _Doc({"w1"}))
+        sightings.record("indices/b/0", _Doc({"w1"}))
+        collisions = identity.writer_uuid_collisions(
+            {"indices/a/0": {"w1"}}, sightings)
+        self.assertEqual({"indices/a/0": {"indices/b/0"}}, collisions)
+
+    def test_a_directory_s_own_rejected_document_never_counts_against_it(self):
+        # The abuse case for the wider evidence. A directory's era documents
+        # are rejected routinely once a delete has removed a segment they
+        # name, and a rewritten index leaves its old writers only in those.
+        # Counting them against the directory itself would drop it.
+        sightings = identity.WriterUuidSightings()
+        sightings.record("indices/a/0", _Doc({"w-old"}))
+        sightings.record("indices/a/0", _Doc({"w-new"}))
+        sightings.record("indices/b/0", _Doc({"w-b"}))
+        collisions = identity.writer_uuid_collisions(
+            {"indices/a/0": {"w-new"}, "indices/b/0": {"w-b"}}, sightings)
+        self.assertEqual({}, collisions)
+
+
+def _believed_everywhere(by_directory):
+    """Every document both parsed and was believed, the old check's only case."""
+    sightings = identity.WriterUuidSightings()
+    believed = {}
+    for directory, documents in by_directory.items():
+        believed[directory] = set()
+        for document in documents:
+            sightings.record(directory, document)
+            believed[directory] |= document.writer_uuids
+    return identity.writer_uuid_collisions(believed, sightings)
 
 
 class _Doc:
