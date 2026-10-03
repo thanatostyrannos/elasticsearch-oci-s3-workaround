@@ -211,13 +211,35 @@ def describe_path(path):
     return "is not a regular file"
 
 
+FILE_ROOT_ENV_VAR = "GENCHAIN_FILE_ROOT"
+
+
+def confined(path, what):
+    """The symlink-resolved path, refused when it leaves GENCHAIN_FILE_ROOT.
+
+    The same rule generation_chain/paths.py applies, copied because this
+    script stays single-file: with the variable unset any path resolves, and
+    with it set nothing outside that directory is opened.
+    """
+    resolved = os.path.realpath(os.path.expanduser(path))
+    named = os.environ.get(FILE_ROOT_ENV_VAR, "").strip()
+    if named:
+        root = os.path.realpath(os.path.expanduser(named))
+        if resolved != root and not resolved.startswith(
+                root.rstrip(os.sep) + os.sep):
+            die(f"{what} {path!r} resolves to {resolved!r}, which is outside "
+                f"{root!r}. {FILE_ROOT_ENV_VAR} confines this run to that "
+                f"directory, so nothing was opened")
+    return resolved
+
+
 def resolve_input_file(path, what):
     """The resolved path of a file this script may read, or a refusal.
 
     Callers open what this returns rather than what they passed, so the file
     that was checked is the file that is read.
     """
-    resolved = os.path.realpath(path)
+    resolved = confined(path, what)
     if not os.path.isfile(resolved):
         die(f"{what} {path!r} cannot be read: it resolves to {resolved!r}, "
             f"which {describe_path(resolved)}")

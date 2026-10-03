@@ -75,6 +75,27 @@ class Credentials(unittest.TestCase):
         os.chmod(path, mode)
         return path
 
+    def test_a_secret_inside_the_file_root_is_accepted(self):
+        # A scheduled job confined with GENCHAIN_FILE_ROOT keeps its secret
+        # inside that directory; refusing it would get the confinement unset.
+        path = self.secret("s3cret")
+        os.environ["GENCHAIN_FILE_ROOT"] = self.dir.name
+        code, _, _ = self.run_check("--user", "bob", "--password-file", path)
+        self.assertEqual(code, 0)
+
+    def test_a_secret_outside_the_file_root_is_refused_unread(self):
+        # Abuse case: a command line naming a file outside the confined
+        # directory is refused before the file is opened, and the refusal
+        # never quotes what the file holds.
+        path = self.secret("s3cret")
+        with tempfile.TemporaryDirectory() as elsewhere:
+            os.environ["GENCHAIN_FILE_ROOT"] = elsewhere
+            code, err, _ = self.run_check("--user", "bob",
+                                          "--password-file", path)
+        self.assertEqual(code, 2)
+        self.assertIn("GENCHAIN_FILE_ROOT", err)
+        self.assertNotIn("s3cret", err)
+
     def run_check(self, *extra):
         """Parse and check, return (exit code, stderr, parsed args)."""
         parser = sizes.build_parser()

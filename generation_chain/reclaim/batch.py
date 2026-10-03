@@ -30,7 +30,7 @@ from ..sources.s3 import parse_xml_body
 # fetches it, and it is spelled http:// because that is the string the S3
 # API defines; writing https:// would name a different namespace and the
 # store would not recognise the document.
-NAMESPACE = "http://s3.amazonaws.com/doc/2006-03-01/"
+NAMESPACE = "http://s3.amazonaws.com/doc/2006-03-01/"  # NOSONAR: a namespace name, never fetched
 MAX_KEYS_PER_BATCH = 1000
 DELETED_ENTRY = "Deleted"
 ERROR_ENTRY = "Error"
