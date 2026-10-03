@@ -41,6 +41,8 @@ class TheSecretFilePathIsCheckedBeforeAnythingIsOpened(unittest.TestCase):
         self.secret_file = os.path.join(self.directory, "password")
         with open(self.secret_file, "w") as handle:
             handle.write(SECRET + "\n")
+        # Owner-only, as the chart stages it. A looser file is refused.
+        os.chmod(self.secret_file, 0o600)
 
     def _refusal(self, path):
         with self.assertRaises(ValueError) as raised:

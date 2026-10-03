@@ -168,6 +168,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # cycle shells out to `python3 -m generation_chain` in ROOT. Two copies of
 # one refusal drift, and then one bad path gets two different answers.
 sys.path.insert(0, ROOT)
+from generation_chain.credentials import (  # noqa: E402
+    CredentialError, require_private)
 from generation_chain.paths import PathRefused, checked_path  # noqa: E402
 from generation_chain.redirects import refusing_urlopen  # noqa: E402
 
@@ -226,6 +228,8 @@ def read_secret_file(path, what):
     that names nothing and say which flag carried it, which beats a ValueError
     raised from inside `open` with no flag attached.
 
+    A file with any group or other permission bit is refused unread.
+
     Every message quotes the path and never the contents, because the contents
     are the secret.
     """
@@ -233,6 +237,10 @@ def read_secret_file(path, what):
         resolved = checked_path(path, what)
     except PathRefused as refusal:
         raise ValueError(str(refusal)) from refusal
+    try:
+        require_private(resolved)
+    except CredentialError as refusal:
+        raise ValueError(f"{what}: {refusal}") from refusal
     try:
         with open(resolved) as handle:
             return handle.read().strip()
