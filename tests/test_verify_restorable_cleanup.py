@@ -27,6 +27,7 @@ class FakeElasticsearch(http.server.HTTPServer):
         self.count = count if count is not None else {"count": 5}
         self.delete_status = delete_status
         self.deletes = []
+        self.drop_when = ()
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -47,6 +48,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _answer(self):
         path = self.path.split("?")[0]
+        if any(marker in path for marker in self.server.drop_when):
+            return self._drop()
         if self.command == "DELETE":
             self.server.deletes.append(path)
             return self._send(self.server.delete_status, {"acknowledged": True})
