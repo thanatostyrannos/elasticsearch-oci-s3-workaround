@@ -99,6 +99,7 @@ import json
 import os
 import re
 import ssl
+import stat
 import sys
 import time
 import urllib.error
@@ -317,14 +318,24 @@ def missing_ca_hint(args):
             % (host, ECK_CA_EXTRACTION))
 
 
+GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
+
+
 def read_secret_file(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
+    resolved = resolve_input_file(path, what)
     try:
-        with open(resolve_input_file(path, what)) as handle:
+        mode = os.stat(resolved).st_mode
+        if mode & GROUP_AND_WORLD:
+            die(f"{what} {path!r} is mode {stat.S_IMODE(mode):04o}, which "
+                f"gives group or other users a permission bit. A secret file "
+                f"must have none, or other users on this host can read it. "
+                f"Run `chmod 600 {path}` and try again. Nothing was read")
+        with open(resolved) as handle:
             return handle.read().strip()
     except OSError as problem:
         die(f"{what} {path!r} could not be read: "

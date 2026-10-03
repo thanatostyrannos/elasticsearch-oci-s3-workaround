@@ -176,7 +176,7 @@ def require_private(path: str) -> None:
 
     A file that arrived by `scp` lands at 0644 by default, and that is the
     common way a credential leaks on a shared host. The message names the file,
-    the mode found and the mode required, because a refusal that only
+    the mode found and the remedy, because a refusal that only
     complains costs an hour and one that names the remedy costs a minute.
     """
     try:
@@ -186,10 +186,10 @@ def require_private(path: str) -> None:
             f"cannot read {path}: {exc.strerror}") from None
     if mode & GROUP_AND_WORLD:
         raise CredentialError(
-            f"{path} is mode {stat.S_IMODE(mode):04o} and must be 0600 or "
-            f"0400. Any other mode lets other users on this host read a "
-            f"credential. Run `chmod 600 {path}` and try again. Nothing was "
-            f"read")
+            f"{path} is mode {stat.S_IMODE(mode):04o}, which gives group or "
+            f"other users a permission bit. A credential must have none, or "
+            f"other users on this host can read it. Run `chmod 600 {path}` "
+            f"and try again. Nothing was read")
 
 
 def load_s3(explicit: Optional[str], profile: str = "default"):

@@ -274,9 +274,10 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
         if info.st_mode & GROUP_AND_WORLD:
             parser.error(
                 f"{flag} {path!r} is mode {stat.S_IMODE(info.st_mode):04o} "
-                f"and must be 0600 or 0400, or other users on this host can "
-                f"read it. Run `chmod 600 {path}` and try again. Nothing "
-                f"was read")
+                f"which gives group or other users a permission bit. A "
+                f"secret file must have none, or other users on this host "
+                f"can read it. Run `chmod 600 {path}` and try again. "
+                f"Nothing was read")
         with open(resolved) as handle:
             value = handle.read().strip()
     except OSError as problem:

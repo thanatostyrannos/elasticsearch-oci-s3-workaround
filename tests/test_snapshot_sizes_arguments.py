@@ -189,7 +189,7 @@ class Credentials(unittest.TestCase):
         code, err, _ = self.run_check("--user", "bob",
                                       "--password-file", path)
         self.assertEqual(code, 2)
-        self.assertIn("0600", err)
+        self.assertIn("chmod 600", err)
         self.assertNotIn("s3cret", err)
 
     def test_a_group_readable_api_key_file_is_refused(self):
