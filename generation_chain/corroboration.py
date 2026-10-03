@@ -63,6 +63,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 
+from .body_limits import MAX_JSON_ANSWER_BYTES, BodyTooLarge, read_capped
 from .credentials import as_secret
 from .errors import GenerationChainError
 from .model import Condemnation
@@ -196,7 +197,12 @@ class ElasticsearchVeto:
         try:
             with self._opener(request, timeout=self.timeout,
                               context=self._context) as response:
-                body = response.read()
+                body = read_capped(response, MAX_JSON_ANSWER_BYTES,
+                                   f"Elasticsearch's answer for {path}")
+        except BodyTooLarge as exc:
+            raise CorroborationUnavailable(
+                f"{exc}. Corroboration was asked for and could not be "
+                "obtained, so this run explains nothing") from exc
         except RedirectRefused as exc:
             raise CorroborationUnavailable(
                 f"Elasticsearch for {path}: {exc}") from exc

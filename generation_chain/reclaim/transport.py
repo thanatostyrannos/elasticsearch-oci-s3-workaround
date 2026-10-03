@@ -32,6 +32,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Mapping, Tuple
 
+from ..body_limits import (MAX_BLOB_BYTES, MAX_XML_BODY_BYTES, BodyTooLarge,
+                           read_capped)
 from ..errors import GenerationChainError
 from ..redirects import RedirectRefused, refusing_urlopen
 from ..sources.s3 import S3Credentials
@@ -129,7 +131,7 @@ def _amz_date() -> str:
 def _send_with_retries(build: Callable[[], urllib.request.Request], url: str,
                        timeout: float, policy: RetryPolicy, opener: Callable,
                        sleep: Callable[[float], None],
-                       jitter: Callable[[], float]) -> bytes:
+                       jitter: Callable[[], float], max_bytes: int) -> bytes:
     """Send what `build` returns, re-signed per attempt, and return the body.
 
     `build` runs once per attempt so every attempt carries a fresh
@@ -139,7 +141,10 @@ def _send_with_retries(build: Callable[[], urllib.request.Request], url: str,
     for attempt in range(policy.max_attempts):
         try:
             with opener(build(), timeout=timeout) as response:
-                return response.read()
+                return read_capped(response, max_bytes, "the response")
+        except BodyTooLarge as exc:
+            # The request was answered, so a retry meets the same body.
+            raise TransportError(f"{url}: {exc}") from exc
         except RedirectRefused as exc:
             # The request was answered, so there is nothing to retry.
             raise TransportError(f"{url}: {exc}") from exc
@@ -192,7 +197,7 @@ def send_batch_delete(*, scheme: str, host: str, region: str, bucket: str,
                                       method="POST")
 
     return _send_with_retries(build, url, timeout, policy, opener, sleep,
-                              jitter)
+                              jitter, MAX_XML_BODY_BYTES)
 
 
 def fetch_object(*, scheme: str, host: str, region: str, bucket: str,
@@ -218,7 +223,7 @@ def fetch_object(*, scheme: str, host: str, region: str, bucket: str,
         return urllib.request.Request(url, headers=headers, method="GET")
 
     return _send_with_retries(build, url, timeout, policy, opener, sleep,
-                              jitter)
+                              jitter, MAX_BLOB_BYTES)
 
 
 def _detail(exc: urllib.error.HTTPError) -> str:
