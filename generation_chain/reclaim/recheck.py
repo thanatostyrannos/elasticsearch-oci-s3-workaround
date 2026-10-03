@@ -21,18 +21,36 @@ test the safety model is usually argued about: the set difference behind the
 manifest is Elasticsearch's own and shard-local, and a subset of what
 Elasticsearch would collect itself.
 
-Everything here is a pure function over values, so the decisions can be tested
-without a cluster.
+The same window also lets the manifest drift away from its store. An
+approval binds the manifest's bytes, and the store comes from the command
+line, so `target_problem` reads the target's `index.latest` and the catalog it
+names and refuses unless they show the repository the manifest was derived
+from, at its anchor generation or later. A byte copy of the repository taken
+earlier shares every key and sits at a lower generation; an unrelated one
+carries another uuid.
+
+Everything here is a pure function over values, or over a read callable the
+caller supplies, so the decisions can be tested without a cluster or a store.
 """
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Callable, Iterable, Optional, Sequence, Tuple
+
+from ..errors import GenerationChainError
+from ..formats.latest import INDEX_LATEST_KEY, parse_index_latest
+from ..formats.repository_data import parse_repository_data
 
 # An hour. Long enough to read a manifest, look at it, and decide; short enough
 # that the cluster is unlikely to have gained a mount since. Not a measurement,
 # a judgement, and the operator can change it.
 DEFAULT_MAX_MANIFEST_AGE_SECONDS = 3600
+
+# How far ahead of this host's clock a derivation time may sit before the age
+# stops meaning anything. Covers ordinary skew between the host that derived
+# and the host that deletes; a record further ahead than this came from a
+# wrong clock or an edit.
+CLOCK_SKEW_SECONDS = 300
 
 
 def staleness_problem(age_seconds: float, maximum: float,
@@ -46,9 +64,15 @@ def staleness_problem(age_seconds: float, maximum: float,
     """
     if maximum <= 0:
         return None
+    if age_seconds < -CLOCK_SKEW_SECONDS:
+        return (f"{path} records a derivation time {int(-age_seconds)}s in "
+                "the future, so its age cannot be measured. A clock on the "
+                "host that derived it or on this one is wrong. Derive it "
+                "again. To act on it anyway, say so with "
+                "--max-manifest-age 0.")
     if age_seconds <= maximum:
         return None
-    return (f"{path} was written {int(age_seconds)}s ago and the limit is "
+    return (f"{path} was derived {int(age_seconds)}s ago and the limit is "
             f"{int(maximum)}s. The cluster can gain a mounted searchable "
             "snapshot over these blobs in that time, and the protection was "
             "checked when the manifest was derived, not now. Derive it again. "
@@ -115,3 +139,48 @@ def protection_problem(protected: Sequence[str], total: int) -> Optional[str]:
             f"{shown}{more}\n"
             "Nothing was deleted. Derive the manifest again against the "
             "cluster as it is now.")
+
+
+def missing_derivation_problem(path: str) -> str:
+    """Why a manifest with a bare completion marker must not be executed."""
+    return (f"{path} records no derivation: no repository uuid, no anchor "
+            "generation and no derivation time. Without them this run cannot "
+            "check that the target is the repository the manifest came from, "
+            "or how old the manifest is. Nothing was deleted. Derive it again "
+            "with the current audit tool.")
+
+
+def target_problem(derivation,
+                   read: Callable[[str], bytes]) -> Optional[str]:
+    """Why the target store is not the repository the manifest names, or None.
+
+    `read` takes a key relative to the repository root and returns its bytes,
+    raising a `GenerationChainError` when it cannot. A target that cannot be
+    read is refused, because a store that cannot say which repository it is
+    has not said it is the right one.
+    """
+    try:
+        generation = parse_index_latest(read(INDEX_LATEST_KEY))
+        catalog = parse_repository_data(read(f"index-{generation}"),
+                                        generation)
+    except GenerationChainError as exc:
+        return ("the target's index.latest, or the catalog it names, could "
+                "not be read, so this run cannot tell which repository it "
+                f"is. Nothing was deleted. Check --bucket and --prefix: {exc}")
+    if catalog.repository_uuid != derivation.repository_uuid:
+        return (f"the target is repository {catalog.repository_uuid}, and "
+                "the manifest was derived from repository "
+                f"{derivation.repository_uuid}. A copy or a different "
+                "repository can share every key in this manifest and still "
+                "need them. Nothing was deleted. Check --endpoint, --bucket "
+                "and --prefix.")
+    if generation < derivation.anchor_generation:
+        return (f"the target's index.latest names generation {generation}, "
+                "and the manifest was derived at generation "
+                f"{derivation.anchor_generation}. A target behind the "
+                "manifest is an older copy of the repository, or one whose "
+                "index.latest lags its newest catalog, and either way it can "
+                "still reference keys the manifest names. Nothing was "
+                "deleted. Point at the live repository, or derive the "
+                "manifest again against this one.")
+    return None

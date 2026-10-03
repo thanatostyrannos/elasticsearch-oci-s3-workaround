@@ -11,7 +11,9 @@ That is a time-of-check gap. It is not the absence test, and it is the only
 path left where this tool could remove a blob a running cluster still needs.
 """
 
+import json
 import os
+import struct
 import sys
 import time
 import types
@@ -21,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from generation_chain.reclaim import recheck
+from generation_chain.reclaim.manifest import Derivation
+from generation_chain.reclaim.transport import TransportError
 
 
 class AStaleManifestIsRefused(unittest.TestCase):
@@ -47,6 +51,91 @@ class AStaleManifestIsRefused(unittest.TestCase):
         problem = recheck.staleness_problem(age_seconds=7200, maximum=3600,
                                             path="m.tsv")
         self.assertIn("derive", problem.lower())
+
+
+class AManifestFromTheFutureIsRefused(unittest.TestCase):
+
+    def test_a_derivation_time_well_ahead_of_this_clock_is_refused(self):
+        # Abuse case: a record hours in the future gives a negative age,
+        # which passes any limit forever. A wrong clock on the deriving host
+        # or an edited record both look like this.
+        problem = recheck.staleness_problem(
+            age_seconds=-2 * recheck.CLOCK_SKEW_SECONDS, maximum=3600,
+            path="m.tsv")
+        self.assertIsNotNone(problem)
+        self.assertIn("future", problem)
+
+    def test_ordinary_skew_between_two_hosts_is_tolerated(self):
+        # Use case: the audit runs in a pod and the delete on a jump host,
+        # and their clocks differ by seconds. Refusing that would make every
+        # fresh manifest need --max-manifest-age 0, which disables the check.
+        self.assertIsNone(recheck.staleness_problem(
+            age_seconds=-30, maximum=3600, path="m.tsv"))
+
+
+def _catalog(uuid):
+    document = {"min_version": "7.12.0", "snapshots": [], "indices": {},
+                "index_metadata_identifiers": {}}
+    if uuid is not None:
+        document["uuid"] = uuid
+    return json.dumps(document).encode("utf-8")
+
+
+def _store(latest, catalogs):
+    """A read callable over `index.latest` = `latest` and `catalogs`."""
+    objects = {"index.latest": struct.pack(">q", latest)}
+    objects.update({f"index-{n}": body for n, body in catalogs.items()})
+
+    def read(key):
+        if key not in objects:
+            raise TransportError(f"404 for {key}")
+        return objects[key]
+    return read
+
+
+class TheTargetMustBeTheRepositoryTheManifestNames(unittest.TestCase):
+
+    derivation = Derivation(repository_uuid="repo-a", anchor_generation=5,
+                            derived_at=0.0)
+
+    def test_the_same_repository_at_the_anchor_or_later_passes(self):
+        # Use case: the live repository moves on after a derivation, so its
+        # generation is usually higher by execute time. Refusing that would
+        # refuse almost every real run.
+        for latest in (5, 9):
+            self.assertIsNone(recheck.target_problem(
+                self.derivation, _store(latest, {latest: _catalog("repo-a")})))
+
+    def test_another_repository_is_refused(self):
+        # Abuse case: the wrong --bucket or --prefix names a repository whose
+        # keys match this manifest's layout. Neutered under
+        # "the-target-must-carry-the-manifest-s-uuid".
+        problem = recheck.target_problem(
+            self.derivation, _store(7, {7: _catalog("repo-b")}))
+        self.assertIsNotNone(problem)
+        self.assertIn("repo-b", problem)
+
+    def test_a_catalog_with_no_uuid_is_refused(self):
+        # Abuse case: a catalog that states no uuid is no opinion, not a
+        # match, the same rule the audit applies when it anchors.
+        self.assertIsNotNone(recheck.target_problem(
+            self.derivation, _store(7, {7: _catalog(None)})))
+
+    def test_an_older_copy_of_the_same_repository_is_refused(self):
+        # Abuse case: a copy taken before the deletes the manifest describes
+        # still holds the snapshots those blobs belong to. Neutered under
+        # "the-target-must-be-at-or-past-the-anchor".
+        problem = recheck.target_problem(
+            self.derivation, _store(4, {4: _catalog("repo-a")}))
+        self.assertIsNotNone(problem)
+        self.assertIn("generation 4", problem)
+
+    def test_a_target_that_cannot_be_read_is_refused(self):
+        # Abuse case: a 404 on index.latest, or on the catalog it names,
+        # says nothing about which repository this is. Neutered under
+        # "an-unreadable-target-is-refused".
+        self.assertIsNotNone(recheck.target_problem(
+            self.derivation, _store(6, {})))
 
 
 class AKeyNowProtectedStopsTheRun(unittest.TestCase):

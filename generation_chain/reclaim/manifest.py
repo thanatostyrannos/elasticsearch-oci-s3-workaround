@@ -19,6 +19,13 @@ about to act on, so an edited or superseded manifest fails there even when it
 fails nothing here. Marker and approval answer two different questions, and
 the safety argument needs both answered.
 
+THE DERIVATION RECORD. The marker line also carries the repository uuid,
+the anchor generation and the derivation time (see `reporting/manifest.py`).
+A manifest written before the record existed carries the bare marker. This
+module still reads it, so a dry run can say what is wrong with it, and hands
+back no `derivation`. `cli.py` then refuses to execute it. A record that is
+present but malformed is refused here, the same as any other damaged line.
+
 The structural checks that remain, a trailing newline and a matching column
 count on every row, are belt-and-suspenders on top of the marker rather than
 instead of it: they catch the ordinary shapes a corrupted or hand-spliced
@@ -34,21 +41,38 @@ keys instead of reading them, which is the one thing the design here forbids.
 
 from __future__ import annotations
 
+import calendar
 import hashlib
+import re
+import time
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ..errors import GenerationChainError
 from ..paths import PathRefused, checked_path
-from ..reporting.manifest import COMPLETION_MARKER, MANIFEST_COLUMNS
+from ..reporting.manifest import (COMPLETION_MARKER, DERIVATION_FIELDS,
+                                  DERIVED_AT_FORMAT, MANIFEST_COLUMNS)
 
 EXPECTED_HEADER = "\t".join(MANIFEST_COLUMNS)
 _KEY_COLUMN = MANIFEST_COLUMNS.index("key")
 _MARKER_LINE = COMPLETION_MARKER.rstrip("\n")
+_GENERATION = re.compile(r"^(0|[1-9][0-9]*)$")
 
 
 class ManifestError(GenerationChainError):
     """The file named is not a manifest this package can safely act on."""
+
+
+@dataclass(frozen=True)
+class Derivation:
+    """Which repository a manifest was derived from, at which generation, when.
+
+    `derived_at` is seconds since the epoch.
+    """
+
+    repository_uuid: str
+    anchor_generation: int
+    derived_at: float
 
 
 @dataclass(frozen=True)
@@ -64,6 +88,8 @@ class ManifestData:
     keys: Tuple[str, ...]
     digest: str
     byte_length: int
+    # None for a manifest whose marker carries no derivation record.
+    derivation: Optional[Derivation] = None
 
 
 def load_manifest(path: str) -> ManifestData:
@@ -116,7 +142,7 @@ def load_manifest(path: str) -> ManifestData:
             f"{header!r}. A file from a different tool, a different version "
             "of this one, or a listing rather than a manifest, is refused "
             "rather than guessed at")
-    if not rest or rest[-1] != _MARKER_LINE:
+    if not rest or not _is_marker(rest[-1]):
         raise ManifestError(
             f"{path} carries no {_MARKER_LINE!r} as its last line. That "
             "marker is written only once every row is in place and only "
@@ -125,6 +151,7 @@ def load_manifest(path: str) -> ManifestData:
             "hand instead of through --manifest FILE, or the write never "
             "reached this line. None of those is a manifest this package "
             "may act on")
+    derivation = _derivation(path, rest[-1])
     rows = rest[:-1]
 
     keys: List[str] = []
@@ -139,4 +166,43 @@ def load_manifest(path: str) -> ManifestData:
         keys.append(fields[_KEY_COLUMN])
 
     return ManifestData(path=path, keys=tuple(keys), digest=digest,
-                        byte_length=len(raw))
+                        byte_length=len(raw), derivation=derivation)
+
+
+def _is_marker(line: str) -> bool:
+    return line == _MARKER_LINE or line.startswith(_MARKER_LINE + "\t")
+
+
+def _derivation(path: str, line: str) -> Optional[Derivation]:
+    """The record on a marker line, None for a bare marker.
+
+    Strict on purpose: exactly the three fields, in the order the audit
+    writes them. A record that parses loosely is a record a hand edit can
+    bend into naming a different repository or a younger manifest.
+    """
+    if line == _MARKER_LINE:
+        return None
+    fields = line.split("\t")[1:]
+    names = [field.split("=", 1)[0] for field in fields]
+    if names != list(DERIVATION_FIELDS) or any("=" not in f for f in fields):
+        raise ManifestError(
+            f"{path} has a malformed derivation record on its marker line. "
+            f"Expected {', '.join(DERIVATION_FIELDS)} in that order, found "
+            f"{line!r}. Derive the manifest again")
+    values = dict(field.split("=", 1) for field in fields)
+    uuid = values["repository_uuid"]
+    generation = values["anchor_generation"]
+    if not uuid.strip() or not _GENERATION.match(generation):
+        raise ManifestError(
+            f"{path} records repository_uuid={uuid!r} and "
+            f"anchor_generation={generation!r}, which do not name a "
+            "repository generation. Derive the manifest again")
+    try:
+        stamp = time.strptime(values["derived_at"], DERIVED_AT_FORMAT)
+    except ValueError:
+        raise ManifestError(
+            f"{path} records derived_at={values['derived_at']!r}, not a UTC "
+            f"time in the form {DERIVED_AT_FORMAT}. Derive the manifest "
+            "again") from None
+    return Derivation(repository_uuid=uuid, anchor_generation=int(generation),
+                      derived_at=float(calendar.timegm(stamp)))

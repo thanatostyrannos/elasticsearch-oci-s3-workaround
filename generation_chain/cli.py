@@ -416,6 +416,10 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
         stderr.write(f"{exc}\n")
         return EXIT_USAGE
 
+    # Taken before the veto is fetched and before anything is read, so the
+    # age a reclaim run measures from it never understates how old the
+    # evidence behind the manifest is.
+    derived_at = time.time()
     try:
         veto = _corroboration(args)
     except CorroborationUnavailable as exc:
@@ -436,7 +440,7 @@ def main(argv: Optional[Sequence[str]] = None, stdin: Optional[TextIO] = None,
         return EXIT_REFUSED
     try:
         _write(result, transport, source.describe(), args, stdout, stderr,
-               sizes=_reported_sizes(source))
+               sizes=_reported_sizes(source), derived_at=derived_at)
     except (PathRefused, OSError) as exc:
         stderr.write(f"an output file could not be written: {exc}\n")
         return EXIT_USAGE
@@ -515,7 +519,8 @@ def safe_unlink(path: str) -> None:
         pass
 
 
-def _write_manifest_file(result: AuditResult, handle: TextIO) -> None:
+def _write_manifest_file(result: AuditResult, handle: TextIO,
+                         derived_at: float) -> None:
     """The manifest, and a marker naming it whole once every row is written.
 
     An operator reading `--coverage-json` already sees `refused`; this puts
@@ -524,15 +529,24 @@ def _write_manifest_file(result: AuditResult, handle: TextIO) -> None:
     a refused run's file, and this module's own unit tests calling
     `write_manifest` directly, stay exactly what they were: a header with no
     claim attached to it.
+
+    The marker carries the repository uuid, the anchor generation and
+    `derived_at`, which reclaim checks against the target before deleting.
+    A run that completed without an anchor would leave nothing to check, so
+    it gets no marker, and reclaim refuses the file as unfinished.
     """
     manifest_writer.write_manifest(result.condemned, handle)
-    if not result.coverage.refused:
-        handle.write(manifest_writer.COMPLETION_MARKER)
+    coverage = result.coverage
+    if coverage.refused or coverage.repository_uuid is None \
+            or coverage.current_generation is None:
+        return
+    handle.write(manifest_writer.completion_line(
+        coverage.repository_uuid, coverage.current_generation, derived_at))
 
 
 def _write(result: AuditResult, transport: str, location: str,
            args: argparse.Namespace, stdout: TextIO, stderr: TextIO,
-           sizes=None) -> None:
+           sizes=None, *, derived_at: float) -> None:
     coverage_report.write_report(result, transport, location, stderr,
                                  sizes=sizes)
     dropped = manifest_writer.excluded_keys(result.condemned)
@@ -542,7 +556,8 @@ def _write(result: AuditResult, transport: str, location: str,
                      "written to a tab separated file.\n")
     if args.manifest:
         _write_atomically(args.manifest,
-                          lambda h: _write_manifest_file(result, h),
+                          lambda h: _write_manifest_file(result, h,
+                                                         derived_at),
                           "--manifest")
     else:
         manifest_writer.write_manifest(result.condemned, stdout)

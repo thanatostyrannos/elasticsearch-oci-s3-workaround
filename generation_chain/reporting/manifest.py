@@ -14,6 +14,7 @@ is the one way this package could be made to name a key it never derived.
 from __future__ import annotations
 
 import re
+import time
 from typing import Iterable, List, Sequence, TextIO
 
 from ..derivation.classification import Placement
@@ -36,6 +37,20 @@ UNSAFE = re.compile(r"[\x00-\x1f\x7f]")
 # tests, and the direct callers in this project's liveness tests)
 # never sees rows that were not actually written pretending otherwise.
 COMPLETION_MARKER = "# derivation complete\n"
+
+# The marker line also carries the derivation record, tab separated after the
+# marker text, so the record sits inside the bytes an operator approves:
+#
+#   # derivation complete<TAB>repository_uuid=U<TAB>anchor_generation=N<TAB>derived_at=YYYY-MM-DDTHH:MM:SSZ
+#
+# `reclaim` refuses to execute without it. It checks the target's
+# `index.latest` against the uuid and the generation, and it measures
+# `--max-manifest-age` from `derived_at`, which a copy cannot refresh the way
+# it refreshes an mtime. `cut -f1` still reads the first field as the bare
+# marker text.
+DERIVATION_FIELDS: Sequence[str] = (
+    "repository_uuid", "anchor_generation", "derived_at")
+DERIVED_AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def is_writable_key(key: str) -> bool:
@@ -70,6 +85,19 @@ def write_manifest(condemned: Iterable[Condemnation], stream: TextIO) -> int:
         ]) + "\n")
         written += 1
     return written
+
+
+def completion_line(repository_uuid: str, anchor_generation: int,
+                    derived_at: float) -> str:
+    """The marker line with the derivation record a reclaim run checks.
+
+    `derived_at` is seconds since the epoch, written in UTC to the second.
+    """
+    stamp = time.strftime(DERIVED_AT_FORMAT, time.gmtime(derived_at))
+    values = (_field(repository_uuid), str(int(anchor_generation)), stamp)
+    record = "".join(f"\t{name}={value}"
+                     for name, value in zip(DERIVATION_FIELDS, values))
+    return COMPLETION_MARKER.rstrip("\n") + record + "\n"
 
 
 def write_classification(placements: Iterable[Placement],
