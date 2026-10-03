@@ -298,5 +298,89 @@ class CorroborationNeedsACredentialTheAuditCanRead(unittest.TestCase):
                          protocol.corroboration_credential_problem(args))
 
 
+# A throwaway self-signed certificate with no key kept; it only has to parse.
+TEST_CA_PEM = """-----BEGIN CERTIFICATE-----
+MIIDDTCCAfWgAwIBAgIUQmaC8rIar0H6VnrwnMvA9K6AXNIwDQYJKoZIhvcNAQEL
+BQAwFTETMBEGA1UEAwwKdGVzdC1lcy1jYTAgFw0yNjEwMDIyMzE2NDBaGA8yMTI2
+MDkwODIzMTY0MFowFTETMBEGA1UEAwwKdGVzdC1lcy1jYTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAJ3vyUQtalf6L1sMXVRRRjIg2QOg9IENkErqOMRY
+bvakvcnzWaGanoP7L4ZCg8TkjP4PaKo8Pg9WyBPqFwBg+8rIGjhCiYzR1+pyjGhY
+4lrGjS+6qFnsLI3IFYxWCu1Wy6OkhpYrQOKPpwyVneyKBM4Z5DnWc2bTNTMKu2DE
+xHpSoObd9zphDCyg2zuzSZLB/4I6VK4dLbNjnEd8KgRPML5DnOdUYz3UZXEikof+
+AL3983+YuUjbynIR/a3QfMpfn55YBUtzkMuQ63LPhuvaE8Y9goPD7FrJnpLcKlws
+Y6DIcBb9UmpIDOUvvMv3GX1qttNfLBHTjhIsiGWJrPsNlwsCAwEAAaNTMFEwHQYD
+VR0OBBYEFN+OlyCpQFyelp4QDJT5UQCwTSrjMB8GA1UdIwQYMBaAFN+OlyCpQFye
+lp4QDJT5UQCwTSrjMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
+AAP1wWLySp0TwRXCKmabyhSVVsQhIqDn2OkUVFb3C+uXSidDhtXiSjnmoDAnEwX9
+D/IRRUxZ3axyDulp20IEXWHTStz9lh08CfLSOgnt56tkCvDGQk7yaT7hh4oYymC0
+IwLRDvS1AQMR4DJEXGdSW16gUzJj6eRWzVv2ZRJ9dYNlVOX/j1t9VAM0vJGGgRwi
+CkJWmHr8oF9BBOXNEaBcbW6OoTysGKCHWLumgXfWCy5f3ZSczsJ73EA56Eq2nrlP
+iKy+839JPeMQ0y86OvTDINKNn5wunFPYvKDarQrZB5AdoObY/etLQWMKd7okmGVX
+U2lkwC7e3N/mnUyLYSE8u7M=
+-----END CERTIFICATE-----
+"""
+
+
+class EsCaCert(unittest.TestCase):
+    def test_es_call_hands_urlopen_a_verifying_context_with_the_ca(self):
+        # With ECK TLS on, the harness must trust the operator CA and still
+        # verify. If the context stopped verifying, the harness password would
+        # go to whoever answers on the pod network.
+        import ssl
+        seen = {}
+
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"{}"
+
+        def fake(req, timeout=None, context=None):
+            seen["context"] = context
+            return Resp()
+
+        original = protocol.refusing_urlopen
+        protocol.refusing_urlopen = fake
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                ca = os.path.join(tmp, "ca.crt")
+                with open(ca, "w") as fh:
+                    fh.write(TEST_CA_PEM)
+                args = _args(elasticsearch="https://es.example:9200",
+                             es_user="u", es_password="p", es_ca_cert=ca)
+                protocol.es_call(args, "/x")
+        finally:
+            protocol.refusing_urlopen = original
+        ctx = seen["context"]
+        self.assertEqual(ctx.verify_mode, ssl.CERT_REQUIRED)
+        self.assertTrue(ctx.check_hostname)
+
+    def test_child_commands_receive_the_ca(self):
+        # The audit and reclaim runs the harness starts talk to the same
+        # cluster. Without the flag they fail verification and every cycle
+        # reports a broken veto.
+        args = _args(elasticsearch="https://es:9200", repository="r",
+                     es_ca_cert="/ca.pem")
+        self.assertIn("--es-ca-cert", protocol.reclaim_command(args, "m.tsv"))
+
+    def test_abuse_a_missing_ca_file_is_refused_before_any_cycle(self):
+        # A wrong path must stop the run at the command line. Silently
+        # falling back to the system store would hide a mis-mounted CA.
+        out = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "reclaim_test_protocol.py"),
+             "--endpoint", "http://127.0.0.1:9", "--region", "r",
+             "--bucket", "b", "--prefix", "p/", "--credentials", "/nonexistent",
+             "--out", "/tmp/x", "--mode", "metadata",
+             "--es-ca-cert", "/nonexistent-ca.pem"],
+            capture_output=True, text=True)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("--es-ca-cert", out.stderr)
+
+    def test_abuse_there_is_no_flag_that_disables_verification(self):
+        # An insecure mode would let a lab habit reach a real cluster.
+        src = open(os.path.join(ROOT, "reclaim_test_protocol.py")).read()
+        self.assertNotIn("CERT_NONE", src)
+        self.assertNotIn("--es-insecure", src)
+
+
 if __name__ == "__main__":
     unittest.main()

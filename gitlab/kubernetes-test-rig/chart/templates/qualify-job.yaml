@@ -44,7 +44,7 @@ spec:
         fsGroup: {{ .Values.securityContext.fsGroup | int64 }}
       initContainers:
         {{- include "rig.sourceInitContainers" . | nindent 8 }}
-        {{- include "rig.credentialStagingInit" . | nindent 8 }}
+        {{- include "rig.credentialStagingInit" (dict "root" . "keys" (list .Values.credentials.keys.credentialsJson .Values.credentials.keys.esPassword)) | nindent 8 }}
         {{- include "rig.waitForElasticsearch" . | nindent 8 }}
       containers:
         - name: qualify
@@ -101,6 +101,9 @@ spec:
               args="$args --elasticsearch {{ include "rig.esUrl" . }}"
               args="$args --es-user {{ .Values.credentials.harnessEsUser }}"
               args="$args --es-password-file /secrets/{{ .Values.credentials.keys.esPassword }}"
+              {{- if include "rig.hasEsCa" . }}
+              args="$args --es-ca-cert /es-ca-cert/ca.crt"
+              {{- end }}
               {{- end }}
               args="$args --repository {{ .Values.qualify.repository }}"
               args="$args --data-stream {{ .Values.qualify.dataStream }}"
@@ -139,10 +142,16 @@ spec:
             - name: credentials
               mountPath: /secrets
               readOnly: true
+            {{- if include "rig.hasEsCa" . }}
+            {{- include "rig.esCaMount" . | nindent 12 }}
+            {{- end }}
       volumes:
         {{- include "rig.sourceVolumes" . | nindent 8 }}
         - name: state
           persistentVolumeClaim:
             claimName: {{ include "rig.fullname" . }}-state
-        {{- include "rig.credentialVolumes" . | nindent 8 }}
+        {{- include "rig.credentialVolumes" (dict "root" . "keys" (list .Values.credentials.keys.credentialsJson .Values.credentials.keys.esPassword)) | nindent 8 }}
+        {{- if include "rig.hasEsCa" . }}
+        {{- include "rig.esCaVolume" . | nindent 8 }}
+        {{- end }}
 {{- end }}
