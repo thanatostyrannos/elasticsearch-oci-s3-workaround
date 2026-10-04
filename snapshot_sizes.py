@@ -489,6 +489,20 @@ class Parser(argparse.ArgumentParser):
 FETCH_ERRORS = (urllib.error.URLError, OSError, ssl.SSLError, ValueError)
 
 
+def _describe(value) -> str:
+    """A short name for the shape of a parsed answer, never its content."""
+    return "an object without that list" if isinstance(value, dict) \
+        else f"a JSON {type(value).__name__}"
+
+
+def expect_object(data, what: str) -> dict:
+    """data if it is a JSON object, else ValueError, which FETCH_ERRORS covers."""
+    if not isinstance(data, dict):
+        raise ValueError(f"{what} answered {_describe(data)}, "
+                         f"not an object")
+    return data
+
+
 def index_store_snapshot(settings_body: dict | None) -> dict | None:
     """The index.store.snapshot subtree of one index, if it has one."""
     store = (((settings_body or {}).get("settings") or {})
@@ -518,7 +532,10 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     data = http_get(
         "/*/_settings?filter_path=*.settings.index.store.snapshot", args)
     mounted: dict[str, dict] = {}
-    for index, body in (data or {}).items():
+    for index, body in expect_object(data, "_settings").items():
+        if not isinstance(body, dict):
+            raise ValueError(f"_settings answered {_describe(body)} for "
+                             f"index {index!r}, not an object")
         snap = index_store_snapshot(body)
         name = snap.get("snapshot_name") if snap else None
         if not name or snap.get("repository_name") != args.repo:
@@ -680,7 +697,11 @@ def fetch_slm_policies(args: argparse.Namespace) -> dict[str, str]:
         f"/_snapshot/{path_segment(args.repo)}/*"
         f"?filter_path=snapshots.snapshot,snapshots.metadata.policy", args)
     out: dict[str, str] = {}
-    for s in (data or {}).get("snapshots") or []:
+    listed = expect_object(data, "the SLM metadata listing").get("snapshots")
+    for s in listed or []:
+        if not isinstance(s, dict):
+            raise ValueError("the SLM metadata listing holds a snapshot "
+                             "entry that is not an object")
         name = s.get("snapshot")
         pol = (s.get("metadata") or {}).get("policy")
         if name and pol:
@@ -969,12 +990,25 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
         print(f"ES returned HTTP {e.code} for {args.es}: {e.reason} "
               f"(check the credentials and the repo name)", file=sys.stderr)
         return None
-    except (urllib.error.URLError, OSError, ssl.SSLError) as e:
-        print(f"cannot reach {args.es}: {e} "
+    except FETCH_ERRORS as e:
+        # A body that is not JSON (ValueError) is an answer, not a dead
+        # connection, so it gets its own wording.
+        what = ("did not answer with a usable snapshot listing"
+                if isinstance(e, ValueError) else "cannot be reached")
+        print(f"{args.es} {what}: {e} "
               f"(check the URL, port-forward, and --ca-cert)",
               file=sys.stderr)
         return None
-    return [s["snapshot"] for s in listing.get("snapshots", [])]
+    snapshots = listing.get("snapshots") if isinstance(listing, dict) else None
+    if (not isinstance(snapshots, list)
+            or not all(isinstance(s, dict) and isinstance(
+                s.get("snapshot"), str) for s in snapshots)):
+        print(f"{args.es} did not answer with a usable snapshot listing: "
+              f"expected an object with a list of named snapshots, got "
+              f"{_describe(listing)} (is something other than the cluster "
+              f"answering?)", file=sys.stderr)
+        return None
+    return [s["snapshot"] for s in snapshots]
 
 
 def fetch_status_rows(args: argparse.Namespace,
@@ -991,11 +1025,19 @@ def fetch_status_rows(args: argparse.Namespace,
             st = http_get(
                 f"/_snapshot/{path_segment(args.repo)}/"
                 f"{','.join(path_segment(n) for n in chunk)}/_status", args)
-        except (urllib.error.URLError, OSError, ssl.SSLError) as e:
+        except FETCH_ERRORS as e:
             print(f"_status fetch failed for batch {i//args.batch + 1}: {e} "
                   f"(partial results discarded)", file=sys.stderr)
             return None
-        for s in st.get("snapshots", []):
+        batch_rows = st.get("snapshots") if isinstance(st, dict) else None
+        if not isinstance(batch_rows, list) or not all(
+                isinstance(s, dict) for s in batch_rows):
+            print(f"_status fetch failed for batch {i//args.batch + 1}: "
+                  f"expected an object with a list of snapshots, got "
+                  f"{_describe(st)} (partial results discarded)",
+                  file=sys.stderr)
+            return None
+        for s in batch_rows:
             stats = s.get("stats", {})
             rows.append((
                 stats.get("start_time_in_millis", 0),

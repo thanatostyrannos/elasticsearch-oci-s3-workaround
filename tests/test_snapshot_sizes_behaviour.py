@@ -299,8 +299,7 @@ class Classification(unittest.TestCase):
                 "i2": settings_body(i2=("r", "s", "true", None))["i2"],
                 "other": settings_body(other=("elsewhere", "t", "true",
                                               None))["other"],
-                "plain": {"settings": {"index": {"number_of_shards": 1}}},
-                "junk": None}
+                "plain": {"settings": {"index": {"number_of_shards": 1}}}}
         with mock.patch.object(sizes, "http_get", return_value=data):
             mounted = sizes.fetch_mounted_set(mock.Mock(repo="r"))
         self.assertEqual(list(mounted), ["s"])
