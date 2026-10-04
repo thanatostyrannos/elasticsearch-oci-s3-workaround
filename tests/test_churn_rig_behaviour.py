@@ -667,8 +667,10 @@ class StateFile(TempDirCase):
         path = self.path("secret")
         pathlib.Path(path).write_text("hunter2")
         os.chmod(path, stat.S_IWUSR)
-        _, _, err = self.refusal(rig.read_secret_file, path,
-                                 "--password-file")
+        root = {"GENCHAIN_SECRET_ROOT": os.path.dirname(path)}
+        with mock.patch.dict(os.environ, root):
+            _, _, err = self.refusal(rig.read_secret_file, path,
+                                     "--password-file")
         self.assertNotIn("hunter2", err)
         self.assertIn("PermissionError", err)
 

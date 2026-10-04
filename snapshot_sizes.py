@@ -256,25 +256,25 @@ def tls_context(args: argparse.Namespace):
 PASSWORD_ENV = "ES_PASSWORD"
 API_KEY_ENV = "GENCHAIN_ES_API_KEY"
 GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
-FILE_ROOT_ENV_VAR = "GENCHAIN_FILE_ROOT"
+SECRET_ROOT_ENV_VAR = "GENCHAIN_SECRET_ROOT"
 
 
-def confined(parser: argparse.ArgumentParser, path: str, flag: str) -> str:
-    """The symlink-resolved path, refused when it leaves GENCHAIN_FILE_ROOT.
+def confined_secret_path(parser: argparse.ArgumentParser, path: str,
+                         flag: str) -> str:
+    """The symlink-resolved secret path, refused outside the secret root.
 
-    The same rule generation_chain/paths.py applies, copied because this
-    script stays single-file: with the variable unset any path resolves, and
-    with it set nothing outside that directory is opened.
+    The root is GENCHAIN_SECRET_ROOT when that is set and not empty, and the
+    current directory otherwise. The check runs on every call, so a path
+    taken from the command line never reaches open() unchecked.
     """
     resolved = os.path.realpath(os.path.expanduser(path))
-    named = os.environ.get(FILE_ROOT_ENV_VAR, "").strip()
-    if named:
-        root = os.path.realpath(os.path.expanduser(named))
-        if resolved != root and not resolved.startswith(
-                root.rstrip(os.sep) + os.sep):
-            parser.error(f"{flag} {path!r} resolves to {resolved!r}, which is "
-                         f"outside {root!r}. {FILE_ROOT_ENV_VAR} confines "
-                         f"this run to that directory, so nothing was opened")
+    named = os.environ.get(SECRET_ROOT_ENV_VAR, "").strip()
+    root = os.path.realpath(os.path.expanduser(named) if named else os.getcwd())
+    if os.path.commonpath([root, resolved]) != root:
+        parser.error(f"{flag} {path!r} resolves to {resolved!r}, which is "
+                     f"outside the secret root {root!r}. Nothing was opened. "
+                     f"Move the file under that directory, or set "
+                     f"{SECRET_ROOT_ENV_VAR} to the directory that holds it")
     return resolved
 
 
@@ -286,7 +286,7 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
     empty or not a regular file is refused too, so a bad path fails at the
     command line instead of as a 401 from the cluster.
     """
-    resolved = confined(parser, path, flag)
+    resolved = confined_secret_path(parser, path, flag)
     try:
         info = os.stat(resolved)
         if not stat.S_ISREG(info.st_mode):
@@ -1352,10 +1352,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--user", help="basic auth user name only; the password "
                    f"comes from --password-file or {PASSWORD_ENV}")
     p.add_argument("--password-file", metavar="PATH",
-                   help="file (mode 0600) holding the basic auth password")
+                   help="file (mode 0600) holding the basic auth password; it "
+                        f"must sit under the current directory or "
+                        f"{SECRET_ROOT_ENV_VAR}")
     p.add_argument("--api-key-file", metavar="PATH",
-                   help="file (mode 0600) holding the ApiKey header value; "
-                        f"{API_KEY_ENV} also works")
+                   help="file (mode 0600) holding the ApiKey header value; it "
+                        f"must sit under the current directory or "
+                        f"{SECRET_ROOT_ENV_VAR}. {API_KEY_ENV} also works")
     p.add_argument("--api-key", metavar="REFUSED",
                    help="refused: a key on argv shows in the process list. "
                         "Use --api-key-file")

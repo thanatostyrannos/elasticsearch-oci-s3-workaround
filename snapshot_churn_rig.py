@@ -211,26 +211,7 @@ def describe_path(path):
     return "is not a regular file"
 
 
-FILE_ROOT_ENV_VAR = "GENCHAIN_FILE_ROOT"
-
-
-def confined(path, what):
-    """The symlink-resolved path, refused when it leaves GENCHAIN_FILE_ROOT.
-
-    The same rule generation_chain/paths.py applies, copied because this
-    script stays single-file: with the variable unset any path resolves, and
-    with it set nothing outside that directory is opened.
-    """
-    resolved = os.path.realpath(os.path.expanduser(path))
-    named = os.environ.get(FILE_ROOT_ENV_VAR, "").strip()
-    if named:
-        root = os.path.realpath(os.path.expanduser(named))
-        if resolved != root and not resolved.startswith(
-                root.rstrip(os.sep) + os.sep):
-            die(f"{what} {path!r} resolves to {resolved!r}, which is outside "
-                f"{root!r}. {FILE_ROOT_ENV_VAR} confines this run to that "
-                f"directory, so nothing was opened")
-    return resolved
+SECRET_ROOT_ENV_VAR = "GENCHAIN_SECRET_ROOT"
 
 
 def resolve_input_file(path, what):
@@ -239,7 +220,7 @@ def resolve_input_file(path, what):
     Callers open what this returns rather than what they passed, so the file
     that was checked is the file that is read.
     """
-    resolved = confined(path, what)
+    resolved = os.path.realpath(os.path.expanduser(path))
     if not os.path.isfile(resolved):
         die(f"{what} {path!r} cannot be read: it resolves to {resolved!r}, "
             f"which {describe_path(resolved)}")
@@ -343,13 +324,34 @@ def missing_ca_hint(args):
 GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
 
 
+def confined_secret_path(path, what):
+    """The symlink-resolved secret path, refused outside the secret root.
+
+    The root is GENCHAIN_SECRET_ROOT when that is set and not empty, and the
+    current directory otherwise. The check runs on every call, so a path
+    taken from the command line never reaches open() unchecked.
+    """
+    resolved = os.path.realpath(os.path.expanduser(path))
+    named = os.environ.get(SECRET_ROOT_ENV_VAR, "").strip()
+    root = os.path.realpath(os.path.expanduser(named) if named else os.getcwd())
+    if os.path.commonpath([root, resolved]) != root:
+        die(f"{what} {path!r} resolves to {resolved!r}, which is outside "
+            f"the secret root {root!r}. Nothing was opened. Move the file "
+            f"under that directory, or set {SECRET_ROOT_ENV_VAR} to the "
+            f"directory that holds it")
+    return resolved
+
+
 def read_secret_file(path, what):
     """The one line in a secret file, or a refusal naming what would not open.
 
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
-    resolved = resolve_input_file(path, what)
+    resolved = confined_secret_path(path, what)
+    if not os.path.isfile(resolved):
+        die(f"{what} {path!r} cannot be read: it resolves to {resolved!r}, "
+            f"which {describe_path(resolved)}")
     try:
         mode = os.stat(resolved).st_mode
         if mode & GROUP_AND_WORLD:
@@ -1511,7 +1513,8 @@ def build_parser():
                         "--password-file or ES_PASSWORD, never from argv")
     g.add_argument("--password-file", metavar="PATH",
                    help="file holding the Elasticsearch password, so the "
-                        "secret stays out of the process list")
+                        "secret stays out of the process list; it must sit "
+                        f"under the current directory or {SECRET_ROOT_ENV_VAR}")
     g.add_argument("--ca-cert", metavar="PATH",
                    help="PEM bundle holding the CA that signed the https "
                         "endpoint's certificate. Verification is always on "
@@ -1563,8 +1566,9 @@ def build_parser():
                    help="access key id for listing; S3_ACCESS_KEY works "
                         "too")
     g.add_argument("--s3-secret-key-file", metavar="PATH",
-                   help="file holding the secret key; S3_SECRET_KEY works "
-                        "too. Never passed on argv")
+                   help="file holding the secret key; it must sit under the "
+                        f"current directory or {SECRET_ROOT_ENV_VAR}. "
+                        "S3_SECRET_KEY works too. Never passed on argv")
 
     r = sub.add_parser(
         "run", parents=[common],

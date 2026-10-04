@@ -686,6 +686,12 @@ class CredentialsOnTheWire(ServerCase):
         handle.close()
         os.chmod(handle.name, 0o600)
         self.addCleanup(os.unlink, handle.name)
+        # Secret files must sit under GENCHAIN_SECRET_ROOT or the working
+        # directory; this one is in the system temp directory.
+        root = mock.patch.dict(
+            os.environ, {"GENCHAIN_SECRET_ROOT": os.path.dirname(handle.name)})
+        root.start()
+        self.addCleanup(root.stop)
         return handle.name
 
     def test_a_basic_auth_run_sends_the_header_to_every_request(self):
