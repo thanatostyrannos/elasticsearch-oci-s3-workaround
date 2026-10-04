@@ -259,22 +259,26 @@ GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
 SECRET_ROOT_ENV_VAR = "GENCHAIN_SECRET_ROOT"
 
 
-def confined_secret_path(parser: argparse.ArgumentParser, path: str,
-                         flag: str) -> str:
-    """The symlink-resolved secret path, refused outside the secret root.
+class SecretPathRefused(Exception):
+    """A secret file path that resolves outside the secret root."""
+
+
+def confined_secret_path(path: str, flag: str) -> str:
+    """The symlink-resolved secret path, or SecretPathRefused outside the root.
 
     The root is GENCHAIN_SECRET_ROOT when that is set and not empty, and the
-    current directory otherwise. The check runs on every call, so a path
-    taken from the command line never reaches open() unchecked.
+    current directory otherwise. The check runs on every call and raises,
+    so a path taken from the command line never reaches open() unchecked.
     """
     resolved = os.path.realpath(os.path.expanduser(path))
     named = os.environ.get(SECRET_ROOT_ENV_VAR, "").strip()
     root = os.path.realpath(os.path.expanduser(named) if named else os.getcwd())
     if os.path.commonpath([root, resolved]) != root:
-        parser.error(f"{flag} {path!r} resolves to {resolved!r}, which is "
-                     f"outside the secret root {root!r}. Nothing was opened. "
-                     f"Move the file under that directory, or set "
-                     f"{SECRET_ROOT_ENV_VAR} to the directory that holds it")
+        raise SecretPathRefused(
+            f"{flag} {path!r} resolves to {resolved!r}, which is outside the "
+            f"secret root {root!r}. Nothing was opened. Move the file under "
+            f"that directory, or set {SECRET_ROOT_ENV_VAR} to the directory "
+            f"that holds it")
     return resolved
 
 
@@ -286,7 +290,10 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
     empty or not a regular file is refused too, so a bad path fails at the
     command line instead of as a 401 from the cluster.
     """
-    resolved = confined_secret_path(parser, path, flag)
+    try:
+        resolved = confined_secret_path(path, flag)
+    except SecretPathRefused as refusal:
+        parser.error(str(refusal))
     try:
         info = os.stat(resolved)
         if not stat.S_ISREG(info.st_mode):
