@@ -554,6 +554,8 @@ so it removes exactly what the previous run created.
       value: "1"
     - name: STATE_FILE
       value: {{ .Values.churnRig.stateFilePath | quote }}
+    - name: GENCHAIN_SECRET_ROOT
+      value: /secrets
   securityContext:
     {{- include "rig.securityContext" . | nindent 4 }}
   # Runs the exact same teardown command as the standalone teardown Job

@@ -63,6 +63,9 @@ class Credentials(unittest.TestCase):
         self.addCleanup(self.dir.cleanup)
         env = {k: v for k, v in os.environ.items()
                if k not in ("ES_PASSWORD", "GENCHAIN_ES_API_KEY")}
+        # Most cases test credential handling, not confinement, so the
+        # secret root is the directory their secrets are written to.
+        env["GENCHAIN_SECRET_ROOT"] = self.dir.name
         patcher = mock.patch.dict(os.environ, env, clear=True)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -75,25 +78,55 @@ class Credentials(unittest.TestCase):
         os.chmod(path, mode)
         return path
 
-    def test_a_secret_inside_the_file_root_is_accepted(self):
-        # A scheduled job confined with GENCHAIN_FILE_ROOT keeps its secret
-        # inside that directory; refusing it would get the confinement unset.
+    def test_a_secret_in_the_current_directory_is_accepted(self):
+        # The default for an operator running from the directory that holds
+        # the file; refusing it would need a variable for every manual run.
         path = self.secret("s3cret")
-        os.environ["GENCHAIN_FILE_ROOT"] = self.dir.name
-        code, _, _ = self.run_check("--user", "bob", "--password-file", path)
+        del os.environ["GENCHAIN_SECRET_ROOT"]
+        with mock.patch("os.getcwd", return_value=self.dir.name):
+            code, _, _ = self.run_check("--user", "bob",
+                                        "--password-file", path)
         self.assertEqual(code, 0)
 
-    def test_a_secret_outside_the_file_root_is_refused_unread(self):
-        # Abuse case: a command line naming a file outside the confined
-        # directory is refused before the file is opened, and the refusal
-        # never quotes what the file holds.
+    def test_a_secret_elsewhere_is_refused_unread(self):
+        # Abuse case: an agent that builds the command line from untrusted
+        # text passes a 0600 private key as --password-file. Only the root
+        # check stops it being sent to the cluster as the password.
         path = self.secret("s3cret")
-        with tempfile.TemporaryDirectory() as elsewhere:
-            os.environ["GENCHAIN_FILE_ROOT"] = elsewhere
+        del os.environ["GENCHAIN_SECRET_ROOT"]
+        with tempfile.TemporaryDirectory() as elsewhere, \
+                mock.patch("os.getcwd", return_value=elsewhere):
             code, err, _ = self.run_check("--user", "bob",
                                           "--password-file", path)
         self.assertEqual(code, 2)
-        self.assertIn("GENCHAIN_FILE_ROOT", err)
+        self.assertIn("GENCHAIN_SECRET_ROOT", err)
+        self.assertNotIn("s3cret", err)
+
+    def test_the_secret_root_variable_makes_its_directory_readable(self):
+        # A scheduled job keeps its secrets in a mounted directory while its
+        # working directory is elsewhere; it must still start.
+        path = self.secret("s3cret")
+        os.environ["GENCHAIN_SECRET_ROOT"] = self.dir.name
+        with tempfile.TemporaryDirectory() as elsewhere, \
+                mock.patch("os.getcwd", return_value=elsewhere):
+            code, _, _ = self.run_check("--user", "bob",
+                                        "--password-file", path)
+        self.assertEqual(code, 0)
+
+    def test_a_link_inside_the_root_to_a_file_outside_is_refused(self):
+        # Abuse case: a symlink placed inside the root must not carry the
+        # read out to a file the root was meant to keep out of reach.
+        with tempfile.TemporaryDirectory() as elsewhere:
+            target = os.path.join(elsewhere, "key")
+            with open(target, "w") as handle:
+                handle.write("s3cret")
+            os.chmod(target, 0o600)
+            link = os.path.join(self.dir.name, "pw")
+            os.symlink(target, link)
+            os.environ["GENCHAIN_SECRET_ROOT"] = self.dir.name
+            code, err, _ = self.run_check("--user", "bob",
+                                          "--password-file", link)
+        self.assertEqual(code, 2)
         self.assertNotIn("s3cret", err)
 
     def run_check(self, *extra):

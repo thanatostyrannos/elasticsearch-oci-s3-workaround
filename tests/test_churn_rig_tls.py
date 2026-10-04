@@ -26,6 +26,7 @@ import sys
 import tempfile
 import unittest
 import urllib.parse
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -35,9 +36,10 @@ import snapshot_churn_rig as rig
 RIG = os.path.join(ROOT, "snapshot_churn_rig.py")
 
 
-def run_rig(argv):
+def run_rig(argv, env=None):
     """The rig, run to completion, with its two streams joined."""
     done = subprocess.run([sys.executable, RIG] + argv, cwd=ROOT, text=True,
+                          env=None if env is None else {**os.environ, **env},
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           timeout=60)
     return done.returncode, done.stdout
@@ -269,17 +271,24 @@ class PathRefusalsNameTheFlagAndNeverTheContents(unittest.TestCase):
         self.assertNotIn("Traceback", out)
 
     def test_a_readable_secret_file_gives_its_one_line(self):
+        # Secret files are confined to the secret root, so the root is the
+        # directory this file is in, as the chart sets it for the Jobs.
         with tempfile.NamedTemporaryFile("w", suffix=".txt") as handle:
             handle.write("  secret-value\n")
             handle.flush()
-            self.assertEqual(
-                rig.read_secret_file(handle.name, "--password-file"),
-                "secret-value")
+            root = {"GENCHAIN_SECRET_ROOT": os.path.dirname(handle.name)}
+            with mock.patch.dict(os.environ, root):
+                self.assertEqual(
+                    rig.read_secret_file(handle.name, "--password-file"),
+                    "secret-value")
 
     def test_a_secret_file_that_is_a_directory_shows_no_contents(self):
         with tempfile.TemporaryDirectory() as directory:
+            # The directory is the secret root, so the refusal under test is
+            # the one about the file type, not about the root.
             code, out = run_rig(["status", "--es", "http://127.0.0.1:1",
-                                 "--password-file", directory])
+                                 "--password-file", directory],
+                                {"GENCHAIN_SECRET_ROOT": directory})
         self.assertNotEqual(code, 0)
         self.assertIn("is a directory", out)
 

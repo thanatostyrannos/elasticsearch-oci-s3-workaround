@@ -45,6 +45,8 @@ spec:
           env:
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
+            - name: GENCHAIN_SECRET_ROOT
+              value: /secrets
           command: ["python3", "snapshot_churn_rig.py", "run"]
           args:
             - --es

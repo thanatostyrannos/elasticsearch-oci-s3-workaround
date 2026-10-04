@@ -24,6 +24,12 @@ class SecretModeCase(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
+        # These cases test the mode check, so the secret root is the
+        # directory the secrets are written to.
+        patcher = mock.patch.dict(
+            os.environ, {"GENCHAIN_SECRET_ROOT": self.dir.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def secret(self, mode):
         path = os.path.join(self.dir.name, "secret")
@@ -85,36 +91,107 @@ class TheChurnRigRefusesAGroupOrWorldReadableSecret(SecretModeCase):
             rig.read_secret_file(link, "--password-file")
 
 
-class TheChurnRigHonoursTheFileRoot(SecretModeCase):
-    """GENCHAIN_FILE_ROOT confines what the rig opens, as it does the audit."""
+class TheChurnRigConfinesSecretFiles(SecretModeCase):
+    """A secret file must sit under the current directory or the secret root."""
 
-    def test_a_secret_inside_the_root_is_read(self):
-        # A scheduled job that sets the root and keeps its secret there must
-        # still start; a confinement that refused this would be switched off.
+    def setUp(self):
+        super().setUp()
+        self.other = tempfile.TemporaryDirectory()
+        self.addCleanup(self.other.cleanup)
+
+    def unset_root(self):
+        patcher = mock.patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("GENCHAIN_SECRET_ROOT", None)
+
+    def refusal(self, path):
+        import io
+        import contextlib
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured), \
+                contextlib.redirect_stdout(captured):
+            with self.assertRaises(SystemExit) as raised:
+                rig.read_secret_file(path, "--password-file")
+        self.assertEqual(raised.exception.code, 2)
+        return captured.getvalue()
+
+    def test_a_secret_in_the_current_directory_is_read(self):
+        # The default for an operator who runs the rig by hand from the
+        # directory holding pw.txt. If this failed, every manual run would
+        # need an environment variable first.
+        self.unset_root()
         path = self.secret(0o600)
-        with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": self.dir.name}):
+        with mock.patch("os.getcwd", return_value=self.dir.name):
             self.assertEqual(rig.read_secret_file(path, "--password-file"),
                              SECRET)
 
-    def test_a_secret_outside_the_root_is_refused_unread(self):
-        # Abuse case: a command line assembled by a wrapper or an agent names
-        # a file outside the directory the job was confined to. The rig must
-        # refuse before opening it, as generation_chain does.
+    def test_a_secret_elsewhere_is_refused_unread(self):
+        # Abuse case: an agent that builds the command line from untrusted
+        # text passes --password-file ~/.ssh/id_rsa. The key is mode 0600, so
+        # only the root check stops it being sent as the password.
+        self.unset_root()
         path = self.secret(0o600)
-        with tempfile.TemporaryDirectory() as elsewhere:
-            with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": elsewhere}):
-                with self.assertRaises(SystemExit):
-                    rig.read_secret_file(path, "--password-file")
+        with mock.patch("os.getcwd", return_value=self.other.name):
+            text = self.refusal(path)
+        self.assertIn("GENCHAIN_SECRET_ROOT", text)
+        self.assertIn(os.path.realpath(self.other.name), text)
+
+    def test_the_secret_root_variable_makes_that_directory_readable(self):
+        # The chart stages secrets under /secrets while the working directory
+        # is the source checkout. If this failed, every rig Job would exit 2.
+        path = self.secret(0o600)
+        with mock.patch("os.getcwd", return_value=self.other.name):
+            self.assertEqual(rig.read_secret_file(path, "--password-file"),
+                             SECRET)
+
+    def test_an_empty_secret_root_variable_falls_back_to_the_directory(self):
+        # Abuse case: a Job template that renders the variable as an empty
+        # string must not turn the confinement off.
+        path = self.secret(0o600)
+        with mock.patch.dict(os.environ, {"GENCHAIN_SECRET_ROOT": " "}), \
+                mock.patch("os.getcwd", return_value=self.other.name):
+            self.refusal(path)
 
     def test_a_link_inside_the_root_to_a_file_outside_is_refused(self):
-        # Abuse case: the check runs on the resolved path, so a symlink placed
-        # inside the root cannot carry the read outside it.
-        with tempfile.TemporaryDirectory() as root:
-            link = os.path.join(root, "pw")
-            os.symlink(self.secret(0o600), link)
-            with mock.patch.dict(os.environ, {"GENCHAIN_FILE_ROOT": root}):
-                with self.assertRaises(SystemExit):
-                    rig.read_secret_file(link, "--password-file")
+        # Abuse case: the check runs on the resolved path, so a symlink put
+        # inside the root cannot carry the read to a key outside it.
+        link = os.path.join(self.dir.name, "pw")
+        with open(os.path.join(self.other.name, "key"), "w") as handle:
+            handle.write(SECRET)
+        os.chmod(handle.name, 0o600)
+        os.symlink(handle.name, link)
+        self.refusal(link)
+
+    def test_a_sibling_directory_sharing_the_root_prefix_is_refused(self):
+        # Abuse case: /secrets-old starts with the text /secrets. A string
+        # prefix test would let it through; the path test must not.
+        sibling = self.dir.name + "-old"
+        os.mkdir(sibling)
+        self.addCleanup(os.rmdir, sibling)
+        path = os.path.join(sibling, "pw")
+        with open(path, "w") as handle:
+            handle.write(SECRET)
+        os.chmod(path, 0o600)
+        self.addCleanup(os.remove, path)
+        self.refusal(path)
+
+    def test_the_refusal_never_contains_the_secret(self):
+        # The refusal reaches job logs, and the file holds the credential.
+        path = self.secret(0o600)
+        with mock.patch.dict(os.environ, {
+                "GENCHAIN_SECRET_ROOT": self.other.name}):
+            self.assertNotIn(SECRET, self.refusal(path))
+
+    def test_a_state_file_outside_the_secret_root_is_still_read(self):
+        # The state file lives on its own volume, not under /secrets. If the
+        # confinement reached it, no rig could tear down its own state.
+        path = os.path.join(self.other.name, "rig-state.json")
+        with open(path, "w") as handle:
+            handle.write("{}")
+        self.assertEqual(
+            rig.resolve_input_file(path, "--state-file"),
+            os.path.realpath(path))
 
 
 class TheReclaimProtocolRefusesAGroupOrWorldReadableSecret(SecretModeCase):
