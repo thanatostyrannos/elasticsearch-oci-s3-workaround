@@ -69,6 +69,7 @@ class FakeElasticsearch:
         self.scheme = "http"
         if tls:
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(*tls)
             self.httpd.socket = context.wrap_socket(self.httpd.socket,
                                                     server_side=True)
