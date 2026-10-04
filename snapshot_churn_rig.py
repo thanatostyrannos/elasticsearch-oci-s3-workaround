@@ -324,18 +324,23 @@ def missing_ca_hint(args):
 GROUP_AND_WORLD = stat.S_IRWXG | stat.S_IRWXO
 
 
+class SecretPathRefused(Exception):
+    """A secret file path that resolves outside the secret root."""
+
+
 def confined_secret_path(path, what):
-    """The symlink-resolved secret path, refused outside the secret root.
+    """The symlink-resolved secret path, or SecretPathRefused outside the root.
 
     The root is GENCHAIN_SECRET_ROOT when that is set and not empty, and the
-    current directory otherwise. The check runs on every call, so a path
-    taken from the command line never reaches open() unchecked.
+    current directory otherwise. The check runs on every call and raises,
+    so a path taken from the command line never reaches open() unchecked.
     """
     resolved = os.path.realpath(os.path.expanduser(path))
     named = os.environ.get(SECRET_ROOT_ENV_VAR, "").strip()
     root = os.path.realpath(os.path.expanduser(named) if named else os.getcwd())
     if os.path.commonpath([root, resolved]) != root:
-        die(f"{what} {path!r} resolves to {resolved!r}, which is outside "
+        raise SecretPathRefused(
+            f"{what} {path!r} resolves to {resolved!r}, which is outside "
             f"the secret root {root!r}. Nothing was opened. Move the file "
             f"under that directory, or set {SECRET_ROOT_ENV_VAR} to the "
             f"directory that holds it")
@@ -348,7 +353,10 @@ def read_secret_file(path, what):
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
-    resolved = confined_secret_path(path, what)
+    try:
+        resolved = confined_secret_path(path, what)
+    except SecretPathRefused as refusal:
+        die(str(refusal))
     if not os.path.isfile(resolved):
         die(f"{what} {path!r} cannot be read: it resolves to {resolved!r}, "
             f"which {describe_path(resolved)}")

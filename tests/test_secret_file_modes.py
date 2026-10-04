@@ -15,6 +15,7 @@ sys.path.insert(0, ROOT)
 
 import reclaim_test_protocol as protocol
 import snapshot_churn_rig as rig
+import snapshot_sizes as sizes
 from generation_chain.credentials import CredentialError, require_private
 
 SECRET = "correct-horse-battery-staple"
@@ -192,6 +193,37 @@ class TheChurnRigConfinesSecretFiles(SecretModeCase):
         self.assertEqual(
             rig.resolve_input_file(path, "--state-file"),
             os.path.realpath(path))
+
+
+class TheSecretRootCheckRaises(SecretModeCase):
+    """The containment check raises instead of exiting, in both scripts."""
+
+    def test_the_rig_check_raises_outside_the_root(self):
+        # SonarQube's path-traversal analysis only treats the check as a
+        # guard when it raises; a check that calls die() reads to it as
+        # falling through to open(), and the security rating drops to C.
+        outside = self.secret(0o600)
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.dict(os.environ, {"GENCHAIN_SECRET_ROOT": root}):
+                with self.assertRaises(rig.SecretPathRefused):
+                    rig.confined_secret_path(outside, "--password-file")
+
+    def test_the_sizes_check_raises_outside_the_root(self):
+        # Same guard in snapshot_sizes.py, for the same reason.
+        outside = self.secret(0o600)
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.dict(os.environ, {"GENCHAIN_SECRET_ROOT": root}):
+                with self.assertRaises(sizes.SecretPathRefused):
+                    sizes.confined_secret_path(outside, "--password-file")
+
+    def test_a_path_inside_the_root_is_returned_resolved(self):
+        # Use case: the check must hand back the path it checked, or the
+        # caller would open something else.
+        inside = self.secret(0o600)
+        with mock.patch.dict(os.environ,
+                             {"GENCHAIN_SECRET_ROOT": self.dir.name}):
+            self.assertEqual(sizes.confined_secret_path(inside, "--pw"),
+                             os.path.realpath(inside))
 
 
 class TheReclaimProtocolRefusesAGroupOrWorldReadableSecret(SecretModeCase):
