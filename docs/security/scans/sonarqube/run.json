@@ -1,0 +1,9 @@
+{
+  "commit": "23fc2c4236b4834ef96204e5c53f27c27367e835",
+  "workflow": "Build",
+  "run_id": 37242103707,
+  "run_url": "https://github.com/thanatostyrannos/elasticsearch-oci-s3-workaround/actions/runs/37242103707",
+  "artifact": "sonar-findings-23fc2c4236b4834ef96204e5c53f27c27367e835",
+  "artifact_id": 11317699495,
+  "downloaded": "2026-10-04"
+}
