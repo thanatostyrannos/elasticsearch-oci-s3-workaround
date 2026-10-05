@@ -297,6 +297,37 @@ class TheReleaseRefusesToCarryACredential(unittest.TestCase):
         self.assertIn("_leak_probe.py", str(raised.exception))
 
 
+class EveryPrivateKeyLabelIsRefused(unittest.TestCase):
+    """The gate itself, on bodies the test assembles independently."""
+
+    def test_each_private_key_armour_stops_the_build(self):
+        # ENCRYPTED is what openssl writes for a passphrase-protected PKCS#8
+        # key, DSA and PGP are the older and the GnuPG forms. A gate that
+        # knew only four labels shipped any of these, and a key in a release
+        # archive is a key handed to everyone who downloads it.
+        for kind in ("", "RSA ", "EC ", "OPENSSH ", "ENCRYPTED ", "DSA ",
+                     "PGP "):
+            body = (_PEM_HEAD + kind + _PEM_TAIL[:-5] + " BLOCK-----\n"
+                    if kind == "PGP " else _PEM_HEAD + kind + _PEM_TAIL)
+            with self.subTest(kind=kind):
+                with self.assertRaises(package.ReleaseRefused):
+                    package._refuse_credentials("x.py", body.encode())
+
+    def test_a_label_without_exact_armour_is_still_refused(self):
+        # A key pasted into a document with its dashes turned into en
+        # dashes still carries the key. The gate matches the label, not
+        # the punctuation around it.
+        body = "\u2013\u2013 BE" + "GIN RSA PRIV" + "ATE KEY \u2013\u2013\nMIIE"
+        with self.assertRaises(package.ReleaseRefused):
+            package._refuse_credentials("doc.md", body.encode())
+
+    def test_ordinary_text_about_keys_ships(self):
+        # The counterpart: the shipped docs talk about private keys in
+        # prose. A gate that refused the words would refuse every release.
+        package._refuse_credentials(
+            "doc.md", b"Keep the private key out of the repository.")
+
+
 class TheReleaseReflectsACommit(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

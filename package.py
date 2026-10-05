@@ -19,12 +19,14 @@ The list below names what goes in rather than what stays out. An exclusion list
 fails open: a directory added next year ships by accident. An allowlist fails
 closed, which is the direction this project resolves every other uncertainty.
 
-That boundary is also where the security surface narrows. Every
-credential-shaped string a scanner finds in this repository lives under
-`tests/`: a real-format RSA key pinning the OCI signing vector, AWS's published
-example key pair, and the detection patterns belonging to the committed-
-credential scanner itself. None of it ships, and `PACKAGED_MUST_NOT_CONTAIN`
-refuses the build rather than trusting that to stay true.
+That boundary is also where the security surface narrows. A real-format RSA
+key pinning the OCI signing vector and the detection patterns belonging to the
+committed-credential scanner live under `tests/` and do not ship. AWS's
+published example key pair does ship, in `generation_chain/selftest.py`,
+because the operator's self-test checks the SigV4 signer against the
+signature AWS publishes for that pair.
+`PRIVATE_KEY_LABEL` refuses the build if any shipped file carries private key
+armour, rather than trusting the exclusions to stay true.
 
 THE PAYLOAD DIGEST, AND THE ORDERING PROBLEM IT SOLVES
 
@@ -110,14 +112,12 @@ PACKAGED_FILES = (
 #   snapshot_sizes.py       a reporting side tool, not on the reclaim path
 #   CONTRIBUTING.md         addressed to contributors, not operators
 
-# Shapes that must never appear in a shipped file. The build refuses rather
-# than warning, because a warning in a build log is a warning nobody reads.
-PACKAGED_MUST_NOT_CONTAIN = (
-    b"BEGIN RSA PRIVATE KEY",
-    b"BEGIN PRIVATE KEY",
-    b"BEGIN EC PRIVATE KEY",
-    b"BEGIN OPENSSH PRIVATE KEY",
-)
+# A private key label of any kind: RSA, EC, OPENSSH, ENCRYPTED, DSA, PGP or
+# none. Matched on the label alone, without the dashes, so armour that lost
+# its exact punctuation on the way into a document is still caught. The build
+# refuses rather than warning, because a warning in a build log is a warning
+# nobody reads.
+PRIVATE_KEY_LABEL = re.compile(rb"BEGIN [A-Z0-9 ]*PRIVATE KEY")
 
 DOCUMENTATION_PREFIXES = ("docs/", "README.md", "FACTS.md")
 
@@ -285,13 +285,13 @@ def release_stem(version):
 
 
 def _refuse_credentials(relative, body):
-    for shape in PACKAGED_MUST_NOT_CONTAIN:
-        if shape in body:
-            raise ReleaseRefused(
-                f"{relative} carries {shape.decode()!r} and would have been "
-                "shipped. Nothing in the release set may contain key "
-                "material. Fix the file or remove it from the release set; "
-                "do not relax this check.")
+    found = PRIVATE_KEY_LABEL.search(body)
+    if found:
+        raise ReleaseRefused(
+            f"{relative} carries {found.group().decode()!r} and would have "
+            "been shipped. Nothing in the release set may contain key "
+            "material. Fix the file or remove it from the release set; "
+            "do not relax this check.")
 
 
 def is_documentation(relative):
