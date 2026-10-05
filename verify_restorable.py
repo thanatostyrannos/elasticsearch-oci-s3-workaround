@@ -26,6 +26,7 @@ import http.client
 import json
 import os
 import ssl
+import stat
 import sys
 import time
 import urllib.error
@@ -90,6 +91,10 @@ def read_secret(path, what):
     as an authentication error, which sends whoever is on call looking at
     the cluster instead of at the flag.
 
+    A file with any group or other permission bit is refused unread, and so
+    is a file that holds nothing, which would otherwise authenticate as the
+    user with an empty password and fail on the cluster instead.
+
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
@@ -98,12 +103,20 @@ def read_secret(path, what):
         sys.exit(f"{what} {path!r} is not a regular file "
                  f"(it resolves to {resolved!r})")
     try:
+        mode = os.stat(resolved).st_mode
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            sys.exit(f"{what} {path!r} is mode {stat.S_IMODE(mode):04o}, "
+                     "which gives group or other users a permission bit. "
+                     f"Run `chmod 600 {path}` and try again. Nothing was read")
         with open(resolved) as handle:
-            return handle.read().strip()
+            value = handle.read().strip()
     except OSError as problem:
         sys.exit(f"{what} {path!r} could not be read: "
                  f"{problem.__class__.__name__}: "
                  f"{problem.strerror or problem}")
+    if not value:
+        sys.exit(f"{what} {path!r} is empty")
+    return value
 
 
 def _pinned_context(ca_cert):
