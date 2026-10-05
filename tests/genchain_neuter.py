@@ -70,6 +70,7 @@ MODULES = [
     "tests.test_reclaim_recheck",
     "tests.test_reclaim_target_binding",
     "tests.test_transport_targets",
+    "tests.test_path_and_endpoint_validation",
     "tests.test_generation_chain_formats",
     "tests.test_security_findings",
 ]
@@ -458,6 +459,10 @@ CASES = [
     # -- reclaim: the one request that deletes goes only to a host ---------
     ("the-delete-host-must-be-a-host", "reclaim/transport.py",
      "    if re.fullmatch(HOST_PATTERN, host) is None:", "    if False:"),
+    ("the-delete-target-must-be-sendable", "reclaim/transport.py",
+     "    _refuse_unsendable_target(scheme, host)\n"
+     "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n",
+     "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n"),
 
     # -- reclaim: the audit path still cannot see the deleter --------------
     ("the-audit-path-never-imports-reclaim",
