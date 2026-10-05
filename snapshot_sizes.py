@@ -1060,6 +1060,37 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
     return [s["snapshot"] for s in snapshots]
 
 
+def _count(value) -> int | None:
+    """value when it is a whole number of bytes or milliseconds, else None."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def status_row(entry: dict, asked: list[str]) -> tuple | None:
+    """One _status entry as (start_ms, name, incremental, total, state).
+
+    None when the entry names no snapshot that was asked for, or lacks a
+    start time or either size. A default would put a made-up row in a
+    report or an export that another tool acts on.
+    """
+    name = entry.get("snapshot")
+    stats = entry.get("stats")
+    if not isinstance(name, str) or name not in asked \
+            or not isinstance(stats, dict):
+        return None
+    incremental = stats.get("incremental")
+    total = stats.get("total")
+    numbers = (_count(stats.get("start_time_in_millis")),
+               _count(incremental.get("size_in_bytes"))
+               if isinstance(incremental, dict) else None,
+               _count(total.get("size_in_bytes"))
+               if isinstance(total, dict) else None)
+    if None in numbers:
+        return None
+    return (numbers[0], name, numbers[1], numbers[2], entry.get("state", "?"))
+
+
 def fetch_status_rows(args: argparse.Namespace,
                       names: list[str]) -> list[tuple] | None:
     """(start_ms, name, incremental, total, state) per snapshot, or None.
@@ -1086,15 +1117,16 @@ def fetch_status_rows(args: argparse.Namespace,
                   f"{_describe(st)} (partial results discarded)",
                   file=sys.stderr)
             return None
-        for s in batch_rows:
-            stats = s.get("stats", {})
-            rows.append((
-                stats.get("start_time_in_millis", 0),
-                s.get("snapshot", "?"),
-                stats.get("incremental", {}).get("size_in_bytes", 0),
-                stats.get("total", {}).get("size_in_bytes", 0),
-                s.get("state", "?"),
-            ))
+        batch = [status_row(s, chunk) for s in batch_rows]
+        answered = {r[1] for r in batch if r is not None}
+        if None in batch or answered != set(chunk) \
+                or len(batch) != len(chunk):
+            print(f"_status fetch failed for batch {i//args.batch + 1}: "
+                  f"the answer did not carry a name and sizes for exactly "
+                  f"the {len(chunk)} snapshot(s) asked for "
+                  f"(partial results discarded)", file=sys.stderr)
+            return None
+        rows.extend(batch)
         print(f"# fetched {min(i + args.batch, len(names))}/{len(names)}",
               file=sys.stderr)
     return rows

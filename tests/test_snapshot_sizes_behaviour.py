@@ -105,14 +105,20 @@ def settings_body(**mounts):
 
 
 def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
-            status_log=None):
-    """Routes for a healthy cluster holding `snaps` in repository `repo`."""
+            status_log=None, status_answer=None):
+    """Routes for a healthy cluster holding `snaps` in repository `repo`.
+
+    `status_answer`, when given, turns the names one _status request asked
+    for into the body it answers with, in place of the faithful one.
+    """
     by_name = {s[0]: s for s in snaps}
 
     def status(path):
         names = path.split("/")[3].split(",")
         if status_log is not None:
             status_log.append(names)
+        if status_answer is not None:
+            return 200, status_answer(names)
         return 200, status_body(*[by_name[n] for n in names])
 
     return {
@@ -536,6 +542,46 @@ class EmitClassified(ServerCase):
         es = self.serve(routes)
         code, out, _ = run_tool(es.url, "--emit-classified")
         self.assertEqual((code, out), (1, ""))
+
+    def test_an_unusable_status_answer_writes_nothing(self):
+        # The export is the list retention tooling reads. A pinned snapshot
+        # that _status left out disappears from it, and one with no stats is
+        # exported with sizes of 0, and either way the run exited 0.
+        by_name = {s[0]: s for s in SNAPS}
+
+        def faithful(names):
+            return status_body(*[by_name[n] for n in names])
+
+        def omitting_mount(names):
+            return status_body(*[by_name[n] for n in names
+                                 if n != "mount-1"])
+
+        def null_stats(names):
+            body = faithful(names)
+            body["snapshots"][0]["stats"] = None
+            return body
+
+        def nameless(names):
+            body = faithful(names)
+            del body["snapshots"][0]["snapshot"]
+            return body
+
+        def sizeless(names):
+            body = faithful(names)
+            del body["snapshots"][0]["stats"]["total"]
+            return body
+
+        for answer in (omitting_mount, null_stats, nameless, sizeless):
+            with self.subTest(answer=answer.__name__):
+                es = self.serve(cluster(SNAPS, MOUNTS, POLICIES,
+                                        status_answer=answer))
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = os.path.join(tmp, "c.tsv")
+                    code, out, err = run_tool(es.url, "--emit-classified",
+                                              "--out", path)
+                    exists = os.path.exists(path)
+                self.assertEqual((code, out, exists), (1, "", False))
+                self.assertNotIn("Traceback", err)
 
     def test_an_empty_repository_is_an_error_not_an_empty_export(self):
         # An empty file is what "nothing to protect" looks like downstream.
