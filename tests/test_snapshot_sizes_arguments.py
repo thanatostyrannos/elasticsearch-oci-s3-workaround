@@ -288,6 +288,39 @@ class Credentials(unittest.TestCase):
                                     "--api-key-file", key)
         self.assertEqual(code, 2)
 
+    def test_a_secret_holding_a_line_break_is_refused_unechoed(self):
+        # http.client refuses a header value with a line break and quotes
+        # the whole header in its error, which the tool printed: the API key
+        # landed on stderr and in the CI log. Every source gets the check.
+        for source in ("env", "file"):
+            with self.subTest(source=source):
+                os.environ.pop("GENCHAIN_ES_API_KEY", None)
+                extra = ()
+                if source == "env":
+                    os.environ["GENCHAIN_ES_API_KEY"] = "id:s3cr\net"
+                else:
+                    extra = ("--api-key-file", self.secret("id:s3cr\net\n"))
+                code, err, _ = self.run_check(*extra)
+                self.assertEqual(code, 2)
+                self.assertNotIn("s3cr", err)
+
+    def test_an_environment_secret_is_trimmed_like_a_file_secret(self):
+        # A variable filled from a file or a here-doc carries its trailing
+        # newline. Sent as is, the password fails as a 401 that points at
+        # the cluster rather than at the variable.
+        os.environ["ES_PASSWORD"] = "  fromenv\n"
+        code, _, args = self.run_check("--user", "bob")
+        self.assertEqual(code, 0)
+        want = base64.b64encode(b"bob:fromenv").decode()
+        self.assertEqual(self.header(args), "Basic " + want)
+
+    def test_a_blank_environment_secret_is_refused(self):
+        # Whitespace alone is not a password. Sent anyway, it authenticates
+        # as nothing and reads as a cluster fault.
+        os.environ["ES_PASSWORD"] = "   "
+        code, _, _ = self.run_check("--user", "bob")
+        self.assertEqual(code, 2)
+
     def test_a_password_file_wins_over_the_environment_only_by_refusal(self):
         # Abuse: both file and variable set. Silently preferring one hides
         # which secret was used.

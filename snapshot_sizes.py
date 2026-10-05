@@ -300,6 +300,25 @@ def confined_secret_path(path: str, flag: str) -> str:
     return resolved
 
 
+def checked_secret(parser: argparse.ArgumentParser, value: str,
+                   source: str) -> str:
+    """value with surrounding whitespace removed, or a refusal.
+
+    Every secret source goes through here, the files and the environment
+    alike. A value left empty, or one holding a line break or another
+    control character, is refused. http.client rejects such a header and
+    quotes it whole in the error this tool would print. The refusal names
+    the source and never the value.
+    """
+    value = value.strip()
+    if not value:
+        parser.error(f"{source} is empty")
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in value):
+        parser.error(f"{source} holds a line break or another control "
+                     f"character; nothing was sent")
+    return value
+
+
 def read_secret_file(parser: argparse.ArgumentParser, path: str,
                      flag: str) -> str:
     """The one line in a secret file, or a refusal that never quotes it.
@@ -324,13 +343,11 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
                 f"can read it. Run `chmod 600 {path}` and try again. "
                 f"Nothing was read")
         with open(resolved) as handle:
-            value = handle.read().strip()
+            value = handle.read()
     except OSError as problem:
         parser.error(f"{flag} {path!r} could not be read: "
                      f"{problem.strerror or problem.__class__.__name__}")
-    if not value:
-        parser.error(f"{flag} {path!r} is empty")
-    return value
+    return checked_secret(parser, value, f"{flag} {path!r}")
 
 
 def resolve_credentials(parser: argparse.ArgumentParser,
@@ -352,6 +369,8 @@ def resolve_credentials(parser: argparse.ArgumentParser,
                      f"and pass --api-key-file PATH, or set {API_KEY_ENV}")
 
     password = os.environ.get(PASSWORD_ENV) or None
+    if password is not None:
+        password = checked_secret(parser, password, PASSWORD_ENV)
     if args.password_file:
         if password is not None:
             parser.error(f"--password-file and {PASSWORD_ENV} are both set; "
@@ -359,6 +378,8 @@ def resolve_credentials(parser: argparse.ArgumentParser,
         password = read_secret_file(parser, args.password_file,
                                     "--password-file")
     api_key = os.environ.get(API_KEY_ENV) or None
+    if api_key is not None:
+        api_key = checked_secret(parser, api_key, API_KEY_ENV)
     if args.api_key_file:
         if api_key is not None:
             parser.error(f"--api-key-file and {API_KEY_ENV} are both set; "
