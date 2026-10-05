@@ -1,8 +1,9 @@
 """Teardown must delete only the indices this harness created.
 
-Teardown resolves ``*<prefix>*`` and deletes what comes back. That selection is
-the last thing standing between a prefix typed at a shell and an index nobody
-meant to touch. ``check_prefix_free`` guards the run path, but teardown accepts
+Teardown resolves ``*<data stream>*`` and deletes the indices
+``teardown_index_scope`` picks out of the answer. That selection is the last
+thing standing between a name typed at a shell and an index nobody meant to
+touch. ``check_prefix_free`` guards the run path, but teardown accepts
 a prefix, proceeds with no state file after a warning, and has no preflight of
 its own, so nothing else is in front of it.
 """
