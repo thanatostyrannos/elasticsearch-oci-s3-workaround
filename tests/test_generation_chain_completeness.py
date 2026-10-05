@@ -236,6 +236,50 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
                              defects)
 
 
+class AShortLiveListMeetsAnUnusableDeclaration(unittest.TestCase):
+    """A truncated current file list that only the declared size can see.
+
+    `wide/0`'s current document leaves out `__w0a` from both of its halves.
+    Live `s2` still uses that blob and deleted `s1` named it, so a run that
+    believes the short list condemns a live segment. The document still
+    parses, names `s2`, and has a witness unique to its directory, so the
+    one statement left to contradict it is `s2`'s declared size for `wide`.
+    Each test below damages that statement a different way, and the check
+    has to fail closed every time rather than switch itself off.
+    """
+
+    LIVE = f"{WIDE_0}/__w0a"
+
+    def _audit(self, **defects):
+        self.dir = tempfile.mkdtemp(prefix="genchain-short-live-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.built = repo.build(self.dir, HISTORY, defects=repo.Defects(
+            truncated_current={("wide", 0): ["__w0a"]}, **defects))
+        return run_audit(LocalMirrorSource(self.dir))
+
+    def _code(self, result, directory):
+        doubt = result.coverage.shards_dropped.get(directory)
+        return doubt.code if doubt is not None else None
+
+    def test_the_declared_size_catches_the_short_list(self):
+        # The control. If this stopped holding, every test below would pass
+        # or fail for a reason unrelated to the declaration it damages.
+        result = self._audit()
+        self.assertEqual(shards.EXTENT_SIZE, self._code(result, WIDE_0))
+        self.assertNotIn(self.LIVE, result.keys)
+
+    def test_a_size_left_out_drops_the_index(self):
+        # A size that is not declared is not a size that matched. The skip
+        # this replaced turned the only check that sees a short live list
+        # off, and `__w0a` went into the manifest while `s2` still restores
+        # from it. Neutered under "an-undeclared-size-is-not-a-match".
+        result = self._audit(index_detail_changes={
+            ("s2", "wide"): {"size_in_bytes": repo.REMOVE}})
+        self.assertEqual(shards.EXTENT_SIZE_NOT_DECLARED,
+                         self._code(result, WIDE_0))
+        self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
+
+
 class ADroppedShardContributesNoIndexMetadata(unittest.TestCase):
     """An index this run could not read through contributes nothing at all.
 

@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import genchain_repo as repo
 from generation_chain import run_audit
 from generation_chain.derivation.identity import WRITER_UUID_COLLISION
+from generation_chain.derivation.shards import EXTENT_SIZE_NOT_DECLARED
 
 D = repo.directory_of("i", 0)
 A = repo.directory_of("j", 0)
@@ -160,6 +161,20 @@ class AWitnessThatParsedIsNotLostToALaterCheck(unittest.TestCase):
         store.forge_d()
         store.rewrite_a()
         result = store.audit()
+        self.assertEqual(WRITER_UUID_COLLISION, _dropped(result).get(D))
+        self.assertEqual(set(), store.live_named(result))
+
+    def test_a_witness_dropped_for_an_undeclared_size_still_witnesses(self):
+        # The same witness, dropped by the newest reason the extent check
+        # has: s2 declares no size for index j. A fix that made that drop
+        # without keeping A's era writers would trade one live key for
+        # another, `__d1` here.
+        store = _Store(self, dict(index_detail_changes={
+            ("s2", "j"): {"size_in_bytes": repo.REMOVE}}))
+        store.forge_d()
+        store.rewrite_a()
+        result = store.audit()
+        self.assertEqual(EXTENT_SIZE_NOT_DECLARED, _dropped(result).get(A))
         self.assertEqual(WRITER_UUID_COLLISION, _dropped(result).get(D))
         self.assertEqual(set(), store.live_named(result))
 

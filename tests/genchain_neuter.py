@@ -175,7 +175,10 @@ CASES = [
      "    if False:"),
     ("a-snapshot-must-account-for-its-declared-size",
      "derivation/shards.py",
-     "            if total != declared.size_in_bytes:", "            if False:"),
+     "        if total != declared.size_in_bytes:", "        if False:"),
+    ("an-undeclared-size-is-not-a-match",
+     "derivation/shards.py",
+     "        if declared.size_in_bytes is None:", "        if False:"),
     ("an-undeclared-shard-count-is-not-a-complete-traversal",
      "derivation/shards.py",
      "        if declared is None:\n            # No shard count declared for this index, so there is nothing to\n"

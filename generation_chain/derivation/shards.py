@@ -67,6 +67,7 @@ EXTENT_SHARD_COUNT = "snapshot-declares-a-different-shard-count"
 EXTENT_TOTAL_SHARDS = "snapshot-declares-a-different-total-shard-count"
 EXTENT_SIZE = "snapshot-declares-a-different-size"
 EXTENT_NOT_DECLARED = "snapshot-declares-no-shard-count-for-this-index"
+EXTENT_SIZE_NOT_DECLARED = "snapshot-declares-no-size-for-this-index"
 
 
 @dataclass
@@ -770,15 +771,25 @@ def _measure_against(extent, snapshot_name: str, touched: Set[str],
                 f"shard(s) for index {index_name!r} and this run read "
                 f"{len(read)}"))
             continue
-        if declared.size_in_bytes is not None:
-            total = sum(h.current.length_by_snapshot_name.get(snapshot_name, 0)
-                        for h in read)
-            if total != declared.size_in_bytes:
-                _drop_indices(histories, dropped, {index_uuid}, Doubt(
-                    EXTENT_SIZE,
-                    f"snapshot {snapshot_name!r} declares "
-                    f"{declared.size_in_bytes} bytes for index {index_name!r} "
-                    f"and the file lists this run read add up to {total}"))
+        if declared.size_in_bytes is None:
+            # The size is the one declaration that sees a current file list
+            # which lost an entry from both of its halves. Without it there
+            # is nothing to measure that list against, the same as a missing
+            # shard count above.
+            _drop_indices(histories, dropped, {index_uuid}, Doubt(
+                EXTENT_SIZE_NOT_DECLARED,
+                f"snapshot {snapshot_name!r} declares no size for index "
+                f"{index_name!r}, so this run cannot tell whether the file "
+                "lists it read are complete"))
+            continue
+        total = sum(h.current.length_by_snapshot_name.get(snapshot_name, 0)
+                    for h in read)
+        if total != declared.size_in_bytes:
+            _drop_indices(histories, dropped, {index_uuid}, Doubt(
+                EXTENT_SIZE,
+                f"snapshot {snapshot_name!r} declares "
+                f"{declared.size_in_bytes} bytes for index {index_name!r} "
+                f"and the file lists this run read add up to {total}"))
 
     if extent.total_shards is not None and total_read != extent.total_shards:
         _drop_indices(histories, dropped, touched, Doubt(
