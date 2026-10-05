@@ -69,6 +69,7 @@ MODULES = [
     "tests.test_reclaim_cli",
     "tests.test_reclaim_recheck",
     "tests.test_reclaim_target_binding",
+    "tests.test_transport_targets",
     "tests.test_security_findings",
 ]
 
@@ -380,6 +381,10 @@ CASES = [
      "            try:\n"
      "                header = checksum_header(\n"
      "                    args.checksum_algorithm, batch.build_request_body(keys))"),
+
+    # -- reclaim: the one request that deletes goes only to a host ---------
+    ("the-delete-host-must-be-a-host", "reclaim/transport.py",
+     "    if re.fullmatch(HOST_PATTERN, host) is None:", "    if False:"),
 
     # -- reclaim: the audit path still cannot see the deleter --------------
     ("the-audit-path-never-imports-reclaim",

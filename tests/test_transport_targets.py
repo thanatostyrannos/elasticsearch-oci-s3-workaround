@@ -24,15 +24,22 @@ from generation_chain.reclaim.transport import TransportError, send_batch_delete
 from generation_chain.sources.s3 import S3Credentials
 
 
-class _RefusingOpener:
-    """An opener that fails the test by having been reached at all."""
+class _CountingOpener:
+    """An opener that answers like a store and counts what reached it.
+
+    It never raises. An opener that raised to fail the test had its error
+    turned into the very TransportError the refusal tests expect, because
+    the transport catches every exception a send can raise, so those tests
+    passed with the host check deleted. A request that gets through here
+    succeeds instead, and the test sees no refusal and a nonzero count.
+    """
 
     def __init__(self):
         self.calls = 0
 
     def __call__(self, *args, **kwargs):
         self.calls += 1
-        raise AssertionError("a request was sent that should have been refused")
+        return _Response(b"<DeleteResult/>")
 
 
 class _Response:
@@ -72,7 +79,10 @@ class HostsThatAreRefused(unittest.TestCase):
     """Every one of these is a host that stops being a host inside a URL."""
 
     def setUp(self):
-        self.opener = _RefusingOpener()
+        self.opener = _CountingOpener()
+        # Every refusal below also has to have sent nothing. Neutered under
+        # "the-delete-host-must-be-a-host".
+        self.addCleanup(lambda: self.assertEqual(self.opener.calls, 0))
 
     def test_a_host_carrying_a_path_is_refused(self):
         # The one that a list of forbidden characters misses. Everything
@@ -121,11 +131,6 @@ class HostsThatAreRefused(unittest.TestCase):
         with self.assertRaises(TransportError) as caught:
             _send("store.example.com/x", self.opener)
         self.assertIn("store.example.com/x", str(caught.exception))
-
-    def test_the_refusal_says_nothing_was_sent(self):
-        with self.assertRaises(TransportError) as caught:
-            _send("store.example.com/x", self.opener)
-        self.assertIn("Nothing was sent", str(caught.exception))
 
 
 class HostsThatGoThrough(unittest.TestCase):
