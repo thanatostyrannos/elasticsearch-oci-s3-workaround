@@ -161,6 +161,11 @@ CASES = [
      "    if unaccounted:", "    if False:"),
     ("the-catalog-s-two-halves-must-agree", "formats/repository_data.py",
      "            if index_uuid not in indices:", "            if False:"),
+    ("an-absent-shard-generations-list-is-refused",
+     "formats/repository_data.py",
+     "    if \"shard_generations\" not in entry:\n        raise ShapeGateError(",
+     "    if \"shard_generations\" not in entry:\n        return ()\n"
+     "        raise ShapeGateError("),
     # -- traversal completeness -------------------------------------------
     ("a-snapshot-must-account-for-its-declared-indices",
      "derivation/shards.py",

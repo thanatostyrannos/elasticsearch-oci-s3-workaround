@@ -402,6 +402,16 @@ class AbsenceIsNeverEvidence(unittest.TestCase):
         self.assertEqual(set(),
                          self.built.live_blob_keys & set(result.keys))
 
+    def test_an_anchor_index_with_no_shard_generations_refuses_the_run(self):
+        # A renamed shard_generations field used to read as "this index has
+        # no shards", which is an absence standing in for an answer. At the
+        # anchor that is a catalog this run cannot read, so it refuses
+        # rather than reporting a survey that skipped the index.
+        _rename_shard_generations(self.dir, 2, "wide")
+        result = run_audit(LocalMirrorSource(self.dir))
+        self.assertIsNotNone(result.coverage.refused)
+        self.assertEqual((), tuple(result.keys))
+
     def test_a_store_that_cannot_answer_is_not_a_store_that_said_no(self):
         # The one measured place where this tool's report was WRONG rather than
         # conservative. Folding "could not answer" into "does not hold" made
@@ -552,6 +562,18 @@ def _blank_shard_generation(root: str, generation: int, index: str,
     for entry in document["indices"].values():
         if entry["id"] == repo.index_uuid(index):
             entry["shard_generations"][shard] = None
+    repo.overwrite(root, key,
+                   json.dumps(document, sort_keys=True).encode("utf-8"))
+
+
+def _rename_shard_generations(root: str, generation: int, index: str) -> None:
+    """Move one index's shard_generations to a name this reader does not know."""
+    import json
+    key = f"index-{generation}"
+    document = json.loads(repo.read(root, key).decode("utf-8"))
+    for entry in document["indices"].values():
+        if entry["id"] == repo.index_uuid(index):
+            entry["shard_gens"] = entry.pop("shard_generations")
     repo.overwrite(root, key,
                    json.dumps(document, sort_keys=True).encode("utf-8"))
 

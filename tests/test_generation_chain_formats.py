@@ -16,7 +16,8 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import genchain_fixtures as fx
-from generation_chain.errors import BlobFormatError, ShapeGateError
+from generation_chain.errors import (BlobFormatError, ShapeGateError,
+                                     UnsupportedRepository)
 from generation_chain.formats.codec import unwrap
 from generation_chain.formats.latest import parse_index_latest
 from generation_chain.formats.repository_data import (parse_repository_data,
@@ -368,6 +369,17 @@ class TheCatalogsTwoHalvesMustAgree(unittest.TestCase):
                 "name": "s2", "uuid": "uuid-s2", "state": 1,
                 "index_metadata_lookup": {"iuuid-i": "lookup-i",
                                           "iuuid-missing": "lookup-x"}}]), 1)
+
+    def test_an_index_with_no_shard_generations_is_refused(self):
+        # Every catalog at or above the supported min_version writes
+        # shard_generations for every index. An absent list used to read as
+        # an index with no shards, so an upstream rename of the field left
+        # every shard unread and the run reported nothing wrong. Neutered
+        # under "an-absent-shard-generations-list-is-refused".
+        with self.assertRaises(ShapeGateError) as caught:
+            parse_repository_data(self._catalog(indices={
+                "i": {"id": "iuuid-i", "snapshots": ["uuid-s2"]}}), 1)
+        self.assertNotIsInstance(caught.exception, UnsupportedRepository)
 
     def test_an_index_whose_snapshot_lookup_omits_it_is_refused(self):
         # The direction that costs data. A snapshot whose lookup is SHORT by
