@@ -388,6 +388,26 @@ class EmitMounted(ServerCase):
         self.assertEqual(out.splitlines(), [
             "# repository: r U1", "mount-1\tMU1\tpartial\trestored-ix"])
 
+    def test_a_hidden_mounted_index_is_in_the_pinned_set(self):
+        # Elasticsearch leaves hidden indices out of a wildcard unless asked.
+        # A mount of a hidden index, such as one under a hidden alias, then
+        # pins a snapshot the export never names, and whatever reads the
+        # export deletes it under a live index. The stand-in answers the way
+        # Elasticsearch does.
+        hidden = settings_body(**{".hidden-mount": ("r", "mount-1", "true",
+                                                    "MU1")})
+
+        def answer(path):
+            return 200, hidden if "expand_wildcards=all" in path else {}
+
+        routes = cluster(SNAPS)
+        routes["/*/_settings"] = answer
+        es = self.serve(routes)
+        code, out, _ = run_tool(es.url, "--emit-mounted")
+        self.assertEqual(code, 0)
+        self.assertIn("mount-1", [line.split("\t")[0]
+                                  for line in out.splitlines()])
+
     def test_a_snapshot_with_no_uuid_gets_a_dash_placeholder(self):
         # A blank field would shift the columns the consumer parses.
         mounts = {"ix": ("r", "mount-1", "false", None)}

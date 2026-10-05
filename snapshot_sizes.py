@@ -575,8 +575,11 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     "uuid": str|None}} restricted to snapshots in args.repo. A snapshot backing
     both a partial and a full mount reports both flags true.
     """
+    # expand_wildcards=all, because a hidden index is left out of the
+    # wildcard otherwise, and a hidden mount pins its snapshot all the same.
     data = http_get(
-        "/*/_settings?filter_path=*.settings.index.store.snapshot", args)
+        "/*/_settings?expand_wildcards=all"
+        "&filter_path=*.settings.index.store.snapshot", args)
     mounted: dict[str, dict] = {}
     for index, body in expect_object(data, "_settings").items():
         if not isinstance(body, dict):
