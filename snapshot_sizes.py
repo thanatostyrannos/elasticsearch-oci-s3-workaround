@@ -572,8 +572,10 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     snapshot_uuid arrives with it and needs no extra request or filter term.
 
     Returns {snapshot_name: {"partial": bool, "full": bool, "indices": [...],
-    "uuid": str|None}} restricted to snapshots in args.repo. A snapshot backing
-    both a partial and a full mount reports both flags true.
+    "uuid": str|None, "uuids": set}} restricted to snapshots in args.repo.
+    "uuid" is the first uuid seen and "uuids" every one, since two mounts
+    can pin two snapshots that shared a name at different times. A snapshot
+    backing both a partial and a full mount reports both flags true.
     """
     # expand_wildcards=all, because a hidden index is left out of the
     # wildcard otherwise, and a hidden mount pins its snapshot all the same.
@@ -591,12 +593,15 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
             continue
         entry = mounted.setdefault(
             name, {"partial": False, "full": False, "indices": [],
-                   "uuid": None})
+                   "uuid": None, "uuids": set()})
         tier = "partial" if is_partial_mount(snap) else "full"
         entry[tier] = True
         entry["indices"].append(index)
+        uuid = snap.get("snapshot_uuid") or None
+        if uuid:
+            entry["uuids"].add(uuid)
         if not entry["uuid"]:
-            entry["uuid"] = snap.get("snapshot_uuid") or None
+            entry["uuid"] = uuid
     return mounted
 
 
@@ -692,13 +697,21 @@ def emit_mounted(args: argparse.Namespace) -> int:
     return 0
 
 
-def mounted_not_in_listing(mounted: dict, names: list[str]) -> list[str]:
+def mounted_not_in_listing(mounted: dict, listed: dict) -> list[str]:
     """Pinned snapshots that the repository listing does not contain.
 
-    Non-empty means a searchable-snapshot index is mounted against a snapshot
-    that has been deleted from the repository. See print_mounted_danger.
+    `listed` maps each listed name to its uuid, or None when the listing gave
+    none. A name counts as missing when it is not listed, or when a mount
+    pins a uuid other than the listed one: the snapshot was deleted and its
+    name reused. Non-empty means a searchable-snapshot index is mounted
+    against a snapshot that has been deleted from the repository. See
+    print_mounted_danger.
     """
-    return sorted(set(mounted) - set(names))
+    return sorted(
+        name for name, entry in mounted.items()
+        if name not in listed
+        or (listed[name] and any(uuid != listed[name]
+                                 for uuid in entry.get("uuids", ()))))
 
 
 def print_mounted_danger(missing: list[str], mounted: dict, repo: str,
@@ -970,7 +983,8 @@ def classified_rows(rows: list[tuple], split: dict,
     `missing` is mounted_not_in_listing()'s output: snapshots a mounted index
     still pins that the repository no longer lists. They have no _status entry
     (nothing left to ask about), so state is MISSING-FROM-CATALOG and every
-    measured field is '-'. Leaving them out would make the export claim a
+    measured field is '-'. A name the listing reuses for a newer snapshot
+    gets that row beside the live one. Leaving them out would make the export claim a
     repository is clean when its riskiest state is exactly what is absent.
 
     Sorted by start time then name; the danger rows sort first (no stamp).
@@ -1026,8 +1040,9 @@ def print_classified_summary(rows: list[tuple], missing: list[str],
               f"({written} row(s) written)", file=file)
 
 
-def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
-    """Snapshot names from the repository listing, or None after reporting.
+def fetch_snapshot_listing(args: argparse.Namespace) -> dict | None:
+    """{name: uuid or None} from the repository listing, in listing order,
+    or None after reporting.
 
     HTTPError is caught first on purpose: it subclasses URLError and OSError,
     and its status code is the actionable half of the message.
@@ -1057,7 +1072,8 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
               f"{_describe(listing)} (is something other than the cluster "
               f"answering?)", file=sys.stderr)
         return None
-    return [s["snapshot"] for s in snapshots]
+    return {s["snapshot"]: s.get("uuid") if isinstance(s.get("uuid"), str)
+            else None for s in snapshots}
 
 
 def _count(value) -> int | None:
@@ -1146,9 +1162,10 @@ def emit_classified(args: argparse.Namespace,
     snapshot as a plain backup, which is exactly the mistake the file exists
     to prevent. Discovery failure is exit 1 and no file is written.
     """
-    names = fetch_snapshot_listing(args)
-    if names is None:
+    listed = fetch_snapshot_listing(args)
+    if listed is None:
         return 1
+    names = list(listed)
     if not names:
         print("no snapshots found", file=sys.stderr)
         return 1
@@ -1172,7 +1189,7 @@ def emit_classified(args: argparse.Namespace,
     # The banner is unconditional: a --class filter changes what the FILE
     # holds, never whether the operator hears about a deleted-while-mounted
     # snapshot.
-    missing = mounted_not_in_listing(split["mounted"], names)
+    missing = mounted_not_in_listing(split["mounted"], listed)
     if missing:
         print_mounted_danger(missing, split["mounted"], args.repo)
 
@@ -1565,7 +1582,7 @@ def check_arguments(parser: argparse.ArgumentParser,
         parser.error(str(e))
 
 
-def print_split_header(args: argparse.Namespace, names: list, split: dict):
+def print_split_header(args: argparse.Namespace, listed: dict, split: dict):
     """What --split-frozen found, and a banner if a mount is unbacked."""
     print(f"# --split-frozen: {len(split['mounted'])} snapshot(s) pinned by "
           f"mounted indices, {len(split['policies'])} SLM-created",
@@ -1573,7 +1590,7 @@ def print_split_header(args: argparse.Namespace, names: list, split: dict):
     # A mount pinning a snapshot the repository no longer lists is the
     # deleted-while-mounted state: the index runs on leaked blobs that a
     # reachability sweep would classify ORPHAN.
-    gone = mounted_not_in_listing(split["mounted"], names)
+    gone = mounted_not_in_listing(split["mounted"], listed)
     if gone:
         print_mounted_danger(gone, split["mounted"], args.repo)
 
@@ -1581,9 +1598,10 @@ def print_split_header(args: argparse.Namespace, names: list, split: dict):
 def period_report(args: argparse.Namespace) -> int:
     """The human-readable per-period table, and the sizing section under
     --recommend."""
-    names = fetch_snapshot_listing(args)
-    if names is None:
+    listed = fetch_snapshot_listing(args)
+    if listed is None:
         return 1
+    names = list(listed)
     if not names:
         print("no snapshots found", file=sys.stderr)
         return 1
@@ -1596,7 +1614,7 @@ def period_report(args: argparse.Namespace) -> int:
         if split_error:
             print(f"# --split-frozen skipped: {split_error}", file=sys.stderr)
         else:
-            print_split_header(args, names, split)
+            print_split_header(args, listed, split)
 
     rows = fetch_status_rows(args, names)  # (start_ms, name, inc, total, state)
     if rows is None:

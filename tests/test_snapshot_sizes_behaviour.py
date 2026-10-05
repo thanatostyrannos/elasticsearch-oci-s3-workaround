@@ -105,8 +105,11 @@ def settings_body(**mounts):
 
 
 def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
-            status_log=None, status_answer=None):
+            status_log=None, status_answer=None, listed_uuids=None):
     """Routes for a healthy cluster holding `snaps` in repository `repo`.
+
+    `listed_uuids` maps a snapshot name to the uuid the listing reports for
+    it; a name left out is listed without one.
 
     `status_answer`, when given, turns the names one _status request asked
     for into the body it answers with, in place of the faithful one.
@@ -123,7 +126,11 @@ def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
 
     return {
         f"/_snapshot/{repo}/*?verbose=false": (
-            200, {"snapshots": [{"snapshot": s[0]} for s in snaps]}),
+            200, {"snapshots": [
+                dict({"snapshot": s[0]},
+                     **({"uuid": listed_uuids[s[0]]}
+                        if s[0] in (listed_uuids or {}) else {}))
+                for s in snaps]}),
         f"/_snapshot/{repo}/*?filter_path": (
             200, {"snapshots": [
                 {"snapshot": n, "metadata": {"policy": p}}
@@ -582,6 +589,28 @@ class EmitClassified(ServerCase):
                     exists = os.path.exists(path)
                 self.assertEqual((code, out, exists), (1, "", False))
                 self.assertNotIn("Traceback", err)
+
+    def test_a_mount_of_an_older_snapshot_with_a_reused_name_is_missing(self):
+        # A snapshot deleted and re-created under the same name has a new
+        # uuid. The mount still reads the old one's blobs, which no listed
+        # snapshot references, and a name-only check calls it safe.
+        mounts = {"restored-ix": ("r", "mount-1", "true", "OLD")}
+        es = self.serve(cluster(SNAPS, mounts, POLICIES,
+                                listed_uuids={"mount-1": "NEW"}))
+        _, out, _ = run_tool(es.url, "--emit-classified")
+        states = [r[5] for r in self.rows(out) if r[0] == "mount-1"]
+        self.assertIn(sizes.MISSING_STATE, states)
+
+    def test_a_mount_of_the_listed_snapshot_is_not_missing(self):
+        # The counterpart: the same uuid on both sides is the healthy case,
+        # and a false MISSING row would send the operator to remount a
+        # working index.
+        mounts = {"restored-ix": ("r", "mount-1", "true", "SAME")}
+        es = self.serve(cluster(SNAPS, mounts, POLICIES,
+                                listed_uuids={"mount-1": "SAME"}))
+        _, out, _ = run_tool(es.url, "--emit-classified")
+        states = [r[5] for r in self.rows(out) if r[0] == "mount-1"]
+        self.assertNotIn(sizes.MISSING_STATE, states)
 
     def test_an_empty_repository_is_an_error_not_an_empty_export(self):
         # An empty file is what "nothing to protect" looks like downstream.
