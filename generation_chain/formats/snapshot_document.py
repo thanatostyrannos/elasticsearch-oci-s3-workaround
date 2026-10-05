@@ -62,15 +62,19 @@ class SnapshotExtent:
     by_index_name: Mapping[str, IndexExtent]
 
     @property
-    def is_complete(self) -> bool:
-        """Whether Elasticsearch itself says every shard of this snapshot took.
+    def is_partial(self) -> bool:
+        """Whether Elasticsearch itself says some shard of this snapshot failed.
 
         A partial snapshot declares fewer successful shards than total, and
         its file lists legitimately do not cover its declared extent, so the
-        caller must not read that gap as a short read.
+        caller must not read that gap as a short read. More successful
+        shards than total is not partial. Elasticsearch never writes it, and
+        reading it as partial would switch the extent check off for a
+        document this reader has already misread.
         """
         return (self.total_shards is not None
-                and self.successful_shards == self.total_shards)
+                and self.successful_shards is not None
+                and self.successful_shards < self.total_shards)
 
 
 def snapshot_document_key(uuid: str) -> str:

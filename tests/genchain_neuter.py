@@ -204,7 +204,11 @@ CASES = [
      "        if False:"),
     ("a-partial-snapshot-is-not-measured-against-its-extent",
      "derivation/shards.py",
-     "        if not extent.is_complete:", "        if False:"),
+     "        if extent.is_partial:", "        if False:"),
+    ("only-fewer-successful-shards-is-partial",
+     "formats/snapshot_document.py",
+     "                and self.successful_shards < self.total_shards)",
+     "                and self.successful_shards != self.total_shards)"),
 
     # -- attribution -------------------------------------------------------
     ("index-metadata-needs-a-complete-live-set", "derivation/garbage.py",

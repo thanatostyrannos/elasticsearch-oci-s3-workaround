@@ -279,6 +279,16 @@ class AShortLiveListMeetsAnUnusableDeclaration(unittest.TestCase):
                          self._code(result, WIDE_0))
         self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
 
+    def test_more_successful_shards_than_total_is_still_measured(self):
+        # Elasticsearch never writes more successful shards than total. The
+        # partial-snapshot waiver read that contradiction as "partial" and
+        # stopped measuring, so one corrupt counter switched off the only
+        # check that sees this short list, and `__w0a` went into the
+        # manifest. Neutered under "only-fewer-successful-shards-is-partial".
+        result = self._audit(declared_successful_shards={"s2": 3})
+        self.assertEqual(shards.EXTENT_SIZE, self._code(result, WIDE_0))
+        self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
+
 
 class ADroppedShardContributesNoIndexMetadata(unittest.TestCase):
     """An index this run could not read through contributes nothing at all.

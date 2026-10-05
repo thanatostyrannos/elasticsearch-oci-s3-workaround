@@ -719,7 +719,7 @@ def _check_declared_extent(source: RepositorySource, chain: Chain,
                 f"live snapshot {snapshot.name!r} declares no usable "
                 "total_shards or successful_shards"))
             continue
-        if not extent.is_complete:
+        if extent.is_partial:
             # A partial snapshot legitimately does not cover what it set out to,
             # so a shortfall says nothing about this run's reading.
             notes.append(

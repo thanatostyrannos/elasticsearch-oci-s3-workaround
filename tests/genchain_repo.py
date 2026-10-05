@@ -147,6 +147,10 @@ class Defects:
     # value is written exactly as given, malformed ones included.
     index_detail_changes: Mapping[Tuple[str, str], Mapping[str, object]] = \
         field(default_factory=dict)
+    # successful_shards written as given rather than computed, for a
+    # document whose two counts contradict each other.
+    declared_successful_shards: Mapping[str, object] = field(
+        default_factory=dict)
     # A snapshot document that is absent, unreadable, or declares a partial run.
     missing_snapshot_documents: Sequence[str] = ()
     partial_snapshots: Sequence[str] = ()
@@ -430,6 +434,8 @@ def _write_snapshot_documents(
                 details[index][name] = value
     total = defects.declared_total_shards.get(snapshot_key, total)
     successful = 0 if snapshot_key in defects.partial_snapshots else total
+    successful = defects.declared_successful_shards.get(snapshot_key,
+                                                        successful)
 
     uuid = snapshot_uuid(snapshot_key)
     body = {
