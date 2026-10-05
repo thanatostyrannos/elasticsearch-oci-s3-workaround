@@ -118,9 +118,21 @@ def decode_payload(payload: bytes) -> Any:
 
 
 def _inflate(body: bytes) -> bytes:
-    for window in (15, -15, 47):
-        try:
-            return zlib.decompress(body, window)
-        except zlib.error:
-            continue
-    raise BlobFormatError("DEFLATE payload did not decompress")
+    """Raw DEFLATE, the one form Elasticsearch writes.
+
+    DeflateCompressor builds `new Deflater(level, true)`, which writes no
+    zlib or gzip wrapper, and every captured compressed document inflates
+    only as raw. The stream has to end exactly where the payload ends:
+    bytes after it, or a stream that never ends, are not a document
+    Elasticsearch wrote.
+    """
+    inflater = zlib.decompressobj(-15)
+    try:
+        out = inflater.decompress(body) + inflater.flush()
+    except zlib.error as exc:
+        raise BlobFormatError(
+            f"DEFLATE payload did not decompress: {exc}") from exc
+    if not inflater.eof or inflater.unused_data:
+        raise BlobFormatError(
+            "DEFLATE payload does not end where its stream ends")
+    return out

@@ -355,6 +355,15 @@ CASES = [
     ("the-codec-footer-names-algorithm-zero", "formats/codec.py",
      "    if footer_magic != FOOTER_MAGIC or algorithm != CHECKSUM_ALGORITHM:",
      "    if footer_magic != FOOTER_MAGIC:"),
+    ("only-raw-deflate-is-read", "formats/codec.py",
+     "    inflater = zlib.decompressobj(-15)\n",
+     "    inflater = zlib.decompressobj(47)\n"
+     "    if not body.startswith(b\"\\x78\"):\n"
+     "        inflater = zlib.decompressobj(-15)\n"),
+    ("a-deflate-stream-ends-with-its-payload", "formats/codec.py",
+     "    if not inflater.eof or inflater.unused_data:", "    if False:"),
+    ("a-smile-document-ends-at-its-root-value", "formats/smile.py",
+     "        if self._at != len(self._data):", "        if False:"),
     ("a-file-list-must-cover-what-the-commit-requires",
      "formats/shard_snapshots.py",
      "    if missing:", "    if False:"),

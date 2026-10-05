@@ -119,6 +119,10 @@ class _Decoder:
 
     def document(self) -> Any:
         value = self._value(self._byte(), depth=0)
+        if self._at != len(self._data):
+            raise BlobFormatError(
+                f"SMILE document carries {len(self._data) - self._at} "
+                "byte(s) after its root value")
         return value
 
     # -- raw reads --------------------------------------------------------

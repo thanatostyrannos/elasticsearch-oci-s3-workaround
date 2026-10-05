@@ -33,6 +33,11 @@ def shard_blob(document, **kwargs):
     return fx.codec_wrap(json.dumps(document).encode("utf-8"), **kwargs)
 
 
+def _framed(payload, codec_name="snapshots"):
+    """Codec framing around a payload used exactly as given."""
+    return fx.codec_wrap(payload, codec_name=codec_name)
+
+
 class IndexLatest(unittest.TestCase):
 
     def test_eight_big_endian_bytes_name_the_current_generation(self):
@@ -343,6 +348,28 @@ class CodecFraming(unittest.TestCase):
         with self.assertRaises(BlobFormatError):
             unwrap(blob, "snapshots")
 
+    def test_a_zlib_wrapped_payload_is_refused(self):
+        # Abuse case: Elasticsearch's DeflateCompressor writes raw DEFLATE
+        # with no zlib header, and every captured compressed document reads
+        # only that way. The zlib form was accepted because this project's
+        # own fixtures wrote it, which is a reader agreeing with its tests
+        # rather than with Elasticsearch.
+        # Neutered under "only-raw-deflate-is-read".
+        zlib_framed = b"DFL\x00" + zlib.compress(b'{"files": [], "snapshots": {}}')
+        with self.assertRaises(BlobFormatError):
+            unwrap(_framed(zlib_framed), "snapshots")
+
+    def test_bytes_after_the_deflate_stream_are_refused(self):
+        # Abuse case: a stream that ends before the payload does leaves bytes
+        # nobody decoded. Reading the stream and ignoring the rest is how a
+        # spliced or overwritten blob would pass as a document. Neutered
+        # under "a-deflate-stream-ends-with-its-payload".
+        compressor = zlib.compressobj(wbits=-15)
+        raw = (compressor.compress(b'{"files": [], "snapshots": {}}')
+               + compressor.flush())
+        with self.assertRaises(BlobFormatError):
+            unwrap(_framed(b"DFL\x00" + raw + b"junk"), "snapshots")
+
     def test_a_footer_naming_another_checksum_algorithm_is_refused(self):
         # Abuse case: Lucene writes checksum algorithm 0, a CRC32, and
         # refuses any other. The segments_N reader already refused another
@@ -382,6 +409,17 @@ class Smile(unittest.TestCase):
         # produce a file list that no Elasticsearch ever wrote.
         with self.assertRaises(BlobFormatError):
             decode_smile(b":)\n\x05\xfa\x83name\x2c\xfb")
+
+    def test_bytes_after_the_root_value_are_refused(self):
+        # Abuse case: the JSON branch refused trailing bytes and the SMILE
+        # branch returned after the first value, so `{}` followed by junk,
+        # or by a second document, read as `{}`. A file list cut short and
+        # padded would read as a smaller file list. Neutered under
+        # "a-smile-document-ends-at-its-root-value".
+        for tail in (b"junk", b"\xfa\xfb"):
+            with self.subTest(tail=tail):
+                with self.assertRaises(BlobFormatError):
+                    decode_smile(b":)\n\x05\xfa\xfb" + tail)
 
     def test_a_back_reference_to_a_table_the_header_disabled_raises(self):
         # Abuse case for a header flag byte that does not describe the body.

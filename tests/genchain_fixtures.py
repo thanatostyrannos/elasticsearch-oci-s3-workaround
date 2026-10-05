@@ -44,7 +44,10 @@ def codec_wrap(payload: bytes, codec_name: str = "snapshots",
                version: int = 1, deflate: bool = False) -> bytes:
     """Wrap a payload the way ChecksumBlobStoreFormat does."""
     if deflate:
-        payload = b"DFL\x00" + zlib.compress(payload)
+        # Raw DEFLATE, no zlib wrapper: what DeflateCompressor writes.
+        compressor = zlib.compressobj(wbits=-15)
+        payload = (b"DFL\x00" + compressor.compress(payload)
+                   + compressor.flush())
     body = (struct.pack(">I", CODEC_MAGIC)
             + _lucene_vint(len(codec_name)) + codec_name.encode("utf-8")
             + struct.pack(">I", version)
