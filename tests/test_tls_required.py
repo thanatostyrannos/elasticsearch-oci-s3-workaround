@@ -299,10 +299,15 @@ class TheSecretFileIsCheckedBeforeItIsRead(unittest.TestCase):
             self.skipTest("this user can read a mode-000 file")
         self.assertNotIn("hunter2", str(raised.exception))
 
+    def private_file(self, name, text):
+        path = os.path.join(self.workspace.name, name)
+        with open(path, "w") as handle:
+            handle.write(text)
+        os.chmod(path, 0o600)
+        return path
+
     def test_a_symlink_is_read_through_to_its_target(self):
-        target = os.path.join(self.workspace.name, "real.txt")
-        with open(target, "w") as handle:
-            handle.write("  secret-value\n")
+        target = self.private_file("real.txt", "  secret-value\n")
         link = os.path.join(self.workspace.name, "link.txt")
         os.symlink(target, link)
         self.assertEqual(self.read(link), "secret-value")
@@ -314,10 +319,26 @@ class TheSecretFileIsCheckedBeforeItIsRead(unittest.TestCase):
             self.read(link)
 
     def test_an_ordinary_file_still_gives_its_one_line(self):
-        target = os.path.join(self.workspace.name, "pw.txt")
-        with open(target, "w") as handle:
-            handle.write("  secret-value\n")
+        target = self.private_file("pw.txt", "  secret-value\n")
         self.assertEqual(self.read(target), "secret-value")
+
+    def test_a_file_other_users_can_read_is_refused_unread(self):
+        # The restore check runs with the cluster's elastic password. A
+        # 0644 file hands it to every account on the host, which is the
+        # refusal every other secret reader in the repository already makes.
+        target = self.private_file("pw.txt", "hunter2\n")
+        os.chmod(target, 0o644)
+        with self.assertRaises(SystemExit) as raised:
+            self.read(target)
+        self.assertNotIn("hunter2", str(raised.exception))
+
+    def test_an_empty_file_is_refused(self):
+        # An empty password becomes Basic "elastic:", every call answers
+        # 401, and the run fails on the cluster rather than on the flag
+        # that was wrong.
+        target = self.private_file("pw.txt", "  \n")
+        with self.assertRaises(SystemExit):
+            self.read(target)
 
 
 if __name__ == "__main__":

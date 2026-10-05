@@ -12,6 +12,7 @@ import io
 import json
 import os
 import ssl
+import stat
 import subprocess
 import sys
 import tempfile
@@ -105,19 +106,32 @@ def settings_body(**mounts):
 
 
 def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
-            status_log=None):
-    """Routes for a healthy cluster holding `snaps` in repository `repo`."""
+            status_log=None, status_answer=None, listed_uuids=None):
+    """Routes for a healthy cluster holding `snaps` in repository `repo`.
+
+    `listed_uuids` maps a snapshot name to the uuid the listing reports for
+    it; a name left out is listed without one.
+
+    `status_answer`, when given, turns the names one _status request asked
+    for into the body it answers with, in place of the faithful one.
+    """
     by_name = {s[0]: s for s in snaps}
 
     def status(path):
         names = path.split("/")[3].split(",")
         if status_log is not None:
             status_log.append(names)
+        if status_answer is not None:
+            return 200, status_answer(names)
         return 200, status_body(*[by_name[n] for n in names])
 
     return {
         f"/_snapshot/{repo}/*?verbose=false": (
-            200, {"snapshots": [{"snapshot": s[0]} for s in snaps]}),
+            200, {"snapshots": [
+                dict({"snapshot": s[0]},
+                     **({"uuid": listed_uuids[s[0]]}
+                        if s[0] in (listed_uuids or {}) else {}))
+                for s in snaps]}),
         f"/_snapshot/{repo}/*?filter_path": (
             200, {"snapshots": [
                 {"snapshot": n, "metadata": {"policy": p}}
@@ -126,6 +140,16 @@ def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
         f"/_snapshot/{repo}": (200, {repo: {"type": "s3", "uuid": repo_uuid}}),
         "/*/_settings": (200, settings_body(**(mounts or {}))),
     }
+
+
+def limit_file_size(limit):
+    """A preexec_fn capping the child's file writes at `limit` bytes."""
+    def apply():
+        import resource
+        import signal
+        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
+    return apply
 
 
 def run_tool(es_url, *argv, env=None):
@@ -388,6 +412,26 @@ class EmitMounted(ServerCase):
         self.assertEqual(out.splitlines(), [
             "# repository: r U1", "mount-1\tMU1\tpartial\trestored-ix"])
 
+    def test_a_hidden_mounted_index_is_in_the_pinned_set(self):
+        # Elasticsearch leaves hidden indices out of a wildcard unless asked.
+        # A mount of a hidden index, such as one under a hidden alias, then
+        # pins a snapshot the export never names, and whatever reads the
+        # export deletes it under a live index. The stand-in answers the way
+        # Elasticsearch does.
+        hidden = settings_body(**{".hidden-mount": ("r", "mount-1", "true",
+                                                    "MU1")})
+
+        def answer(path):
+            return 200, hidden if "expand_wildcards=all" in path else {}
+
+        routes = cluster(SNAPS)
+        routes["/*/_settings"] = answer
+        es = self.serve(routes)
+        code, out, _ = run_tool(es.url, "--emit-mounted")
+        self.assertEqual(code, 0)
+        self.assertIn("mount-1", [line.split("\t")[0]
+                                  for line in out.splitlines()])
+
     def test_a_snapshot_with_no_uuid_gets_a_dash_placeholder(self):
         # A blank field would shift the columns the consumer parses.
         mounts = {"ix": ("r", "mount-1", "false", None)}
@@ -441,13 +485,81 @@ class EmitMounted(ServerCase):
         self.assertEqual((code, out), (0, ""))
         self.assertEqual(written[1], "mount-1\tMU1\tpartial\trestored-ix")
 
-    def test_an_unwritable_out_path_fails_instead_of_printing_success(self):
+    def test_an_unwritable_out_path_fails_before_any_request(self):
         # Abuse: a directory that does not exist. Exiting 0 would hand the
-        # next stage a file that is not there.
+        # next stage a file that is not there, and finding out after every
+        # fetch wastes a run against a production cluster.
         es = self.serve(cluster(SNAPS, MOUNTS))
         bad = os.path.join(tempfile.gettempdir(), "no-such-dir-106", "x.tsv")
         code, _, _ = run_tool(es.url, "--emit-mounted", "--out", bad)
-        self.assertEqual(code, 1)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(es.requests, [])
+
+
+class OutIsWrittenWholeOrNotAtAll(ServerCase):
+    """--out holds the set of snapshots nothing may delete."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "mounted.tsv")
+        with open(self.path, "w") as handle:
+            handle.write("# repository: r U1\nkeep-me\t-\tfull\tix\n")
+        self.old = open(self.path).read()
+
+    def many_mounts(self):
+        mounts = {f"ix-{i}": ("r", f"mount-{i:03d}", "true", f"U{i}")
+                  for i in range(60)}
+        return self.serve(cluster(SNAPS, mounts))
+
+    def test_a_write_cut_off_part_way_leaves_the_earlier_file_whole(self):
+        # A full disk, a quota or a killed process cut the write short. A
+        # truncated file reads as a complete, shorter pinned set, and every
+        # snapshot past the cut becomes deletable. The child runs under a
+        # file size limit smaller than the export.
+        es = self.many_mounts()
+        done = subprocess.run(
+            [sys.executable, "-B", os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "snapshot_sizes.py"),
+             "--es", es.url, "--repo", "r", "--emit-mounted",
+             "--out", self.path],
+            capture_output=True, text=True, timeout=60,
+            preexec_fn=limit_file_size(400))
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(open(self.path).read(), self.old)
+        self.assertEqual(sorted(os.listdir(self.tmp.name)), ["mounted.tsv"])
+
+    def test_a_read_only_out_file_is_refused_and_left_alone(self):
+        # An operator write-protects a pinned set to keep it. Replacing it
+        # with exit 0 because the directory is writable would overwrite the
+        # copy they meant to keep.
+        if os.geteuid() == 0:
+            self.skipTest("root writes a 0444 file regardless")
+        os.chmod(self.path, 0o444)
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", self.path)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(open(self.path).read(), self.old)
+        self.assertEqual(es.requests, [])
+
+    def test_a_replaced_out_file_keeps_its_mode(self):
+        # Whoever set the mode on the pinned set chose who may read it. A
+        # rewrite that reset it would widen or narrow that silently.
+        os.chmod(self.path, 0o640)
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", self.path)
+        self.assertEqual(code, 0)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o640)
+        self.assertIn("mount-1", open(self.path).read())
+
+    def test_a_device_out_is_written_directly(self):
+        # /dev/null and a pipe cannot be replaced by a rename. They must
+        # still receive the export, or a process-substitution consumer
+        # reads an empty set.
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", os.devnull)
+        self.assertEqual(code, 0)
 
 
 class EmitClassified(ServerCase):
@@ -517,6 +629,68 @@ class EmitClassified(ServerCase):
         code, out, _ = run_tool(es.url, "--emit-classified")
         self.assertEqual((code, out), (1, ""))
 
+    def test_an_unusable_status_answer_writes_nothing(self):
+        # The export is the list retention tooling reads. A pinned snapshot
+        # that _status left out disappears from it, and one with no stats is
+        # exported with sizes of 0, and either way the run exited 0.
+        by_name = {s[0]: s for s in SNAPS}
+
+        def faithful(names):
+            return status_body(*[by_name[n] for n in names])
+
+        def omitting_mount(names):
+            return status_body(*[by_name[n] for n in names
+                                 if n != "mount-1"])
+
+        def null_stats(names):
+            body = faithful(names)
+            body["snapshots"][0]["stats"] = None
+            return body
+
+        def nameless(names):
+            body = faithful(names)
+            del body["snapshots"][0]["snapshot"]
+            return body
+
+        def sizeless(names):
+            body = faithful(names)
+            del body["snapshots"][0]["stats"]["total"]
+            return body
+
+        for answer in (omitting_mount, null_stats, nameless, sizeless):
+            with self.subTest(answer=answer.__name__):
+                es = self.serve(cluster(SNAPS, MOUNTS, POLICIES,
+                                        status_answer=answer))
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = os.path.join(tmp, "c.tsv")
+                    code, out, err = run_tool(es.url, "--emit-classified",
+                                              "--out", path)
+                    exists = os.path.exists(path)
+                self.assertEqual((code, out, exists), (1, "", False))
+                self.assertNotIn("Traceback", err)
+
+    def test_a_mount_of_an_older_snapshot_with_a_reused_name_is_missing(self):
+        # A snapshot deleted and re-created under the same name has a new
+        # uuid. The mount still reads the old one's blobs, which no listed
+        # snapshot references, and a name-only check calls it safe.
+        mounts = {"restored-ix": ("r", "mount-1", "true", "OLD")}
+        es = self.serve(cluster(SNAPS, mounts, POLICIES,
+                                listed_uuids={"mount-1": "NEW"}))
+        _, out, _ = run_tool(es.url, "--emit-classified")
+        states = [r[5] for r in self.rows(out) if r[0] == "mount-1"]
+        self.assertIn(sizes.MISSING_STATE, states)
+
+    def test_a_mount_of_the_listed_snapshot_is_not_missing(self):
+        # The counterpart: the same uuid on both sides is the healthy case,
+        # and a false MISSING row would send the operator to remount a
+        # working index.
+        mounts = {"restored-ix": ("r", "mount-1", "true", "SAME")}
+        es = self.serve(cluster(SNAPS, mounts, POLICIES,
+                                listed_uuids={"mount-1": "SAME"}))
+        _, out, _ = run_tool(es.url, "--emit-classified")
+        states = [r[5] for r in self.rows(out) if r[0] == "mount-1"]
+        self.assertNotIn(sizes.MISSING_STATE, states)
+
     def test_an_empty_repository_is_an_error_not_an_empty_export(self):
         # An empty file is what "nothing to protect" looks like downstream.
         es = self.serve(cluster([], None, None))
@@ -527,7 +701,8 @@ class EmitClassified(ServerCase):
         es = self.serve(cluster(SNAPS, MOUNTS, POLICIES))
         bad = os.path.join(tempfile.gettempdir(), "no-such-dir-106", "x.tsv")
         code, _, _ = run_tool(es.url, "--emit-classified", "--out", bad)
-        self.assertEqual(code, 1)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(es.requests, [])
 
     def test_out_receives_the_table_and_stdout_stays_empty(self):
         es = self.serve(cluster(SNAPS, MOUNTS, POLICIES))
@@ -809,6 +984,14 @@ class Tls(ServerCase):
         for bad in (junk, os.path.join(self.tmp.name, "absent.pem")):
             code, _, _ = run_tool(es.url, "--ca-cert", bad)
             self.assertEqual(code, 2)
+        self.assertEqual(es.requests, [])
+
+    def test_a_ca_cert_for_a_plain_http_endpoint_is_refused(self):
+        # A CA named for an http cluster is never used, so the operator who
+        # passed it believes the connection is verified when nothing is.
+        es = self.serve(cluster(SNAPS))
+        code, _, _ = run_tool(es.url, "--ca-cert", self.cert)
+        self.assertEqual(code, 2)
         self.assertEqual(es.requests, [])
 
     def test_the_context_is_verified_and_floors_tls_at_1_2(self):

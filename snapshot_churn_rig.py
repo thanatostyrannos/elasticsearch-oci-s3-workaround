@@ -520,6 +520,10 @@ class Es:
 
 _S3_OPENER = urllib.request.build_opener(_RefuseRedirects())
 
+# The audit's own lister stops at the same count. At 1000 keys a page that is
+# a hundred million objects, far past any bucket this rig writes.
+S3_MAX_LIST_PAGES = 100_000
+
 
 class S3:
     def __init__(self, endpoint, region, access_key, secret_key, bucket):
@@ -583,10 +587,19 @@ class S3:
             return e.code, body
 
     def list(self, prefix):
-        """Every object under prefix, as (key, size) pairs."""
+        """Every object under prefix, as (key, size) pairs, or EsError.
+
+        The purge deletes whatever this returns, so a listing the rig cannot
+        trust is refused rather than read. That covers a page that does not
+        say whether it is the last, a truncated page with no token, a token
+        the store already handed out, a listing that never ends, and a key
+        outside the prefix asked for.
+        """
         out = []
         token = None
-        while True:
+        seen = set()
+        url = self.endpoint + "/" + self.bucket
+        for _ in range(S3_MAX_LIST_PAGES):
             q = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
             if token:
                 q["continuation-token"] = token
@@ -600,12 +613,28 @@ class S3:
             if root.tag.startswith("{"):
                 ns = root.tag[:root.tag.index("}") + 1]
             for c in root.iter(ns + "Contents"):
-                out.append((c.find(ns + "Key").text,
-                            int(c.find(ns + "Size").text)))
-            trunc = root.find(ns + "IsTruncated")
-            if trunc is None or trunc.text != "true":
+                key = c.findtext(ns + "Key")
+                if not key or not key.startswith(prefix):
+                    raise EsError(status, "the listing for %r returned the "
+                                  "key %r, which is outside it" % (prefix, key),
+                                  url)
+                out.append((key, int(c.find(ns + "Size").text)))
+            truncated = root.findtext(ns + "IsTruncated")
+            if truncated == "false":
                 return out
-            token = root.find(ns + "NextContinuationToken").text
+            if truncated != "true":
+                raise EsError(status, "a listing page carries IsTruncated "
+                              "%r, not true or false, so the rig cannot tell "
+                              "whether the listing is complete" % truncated,
+                              url)
+            token = root.findtext(ns + "NextContinuationToken")
+            if not token or token in seen:
+                raise EsError(status, "a truncated listing page carries no "
+                              "new continuation token, so the rest of the "
+                              "listing cannot be read", url)
+            seen.add(token)
+        raise EsError(0, "the listing did not finish in %d pages"
+                      % S3_MAX_LIST_PAGES, url)
 
     def delete_object(self, key):
         """Single-object DELETE. This path works even against stores that
@@ -647,8 +676,9 @@ def names(prefix, data_stream=None):
     stream moves: the repository, policies and template stay on the prefix, so
     two rigs writing the same stream name into different buckets do not collide.
 
-    The teardown scope is computed from the resolved name, so an override
-    narrows what teardown will touch rather than widening it.
+    Preflight refuses a stream name that anything on the cluster already
+    answers to, and teardown deletes only that stream and its own backing
+    indices, so an override cannot reach another tenant's stream.
     """
     return {
         "repo": prefix + "-repo",
@@ -719,27 +749,45 @@ def check_frozen_capable(es):
     return cache_seen
 
 
+_RESOLVED_KINDS = (("indices", "index"), ("aliases", "alias"),
+                   ("data_streams", "data stream"))
+
+
+def resolved_names(es, fragment):
+    """(label, name) for every index, alias and data stream containing fragment."""
+    res = es.get_or_none(RESOLVE_PREFIX_PATH % fragment) or {}
+    return [(label, entry["name"]) for kind, label in _RESOLVED_KINDS
+            for entry in res.get(kind, [])]
+
+
+def named_objects(es, n):
+    """The rig's policies, repository and template that exist on the cluster."""
+    return ["%s %s" % (label, n[key]) for path, key, label in (
+        (ILM_POLICY_PATH, "ilm", "ilm policy"),
+        (SLM_POLICY_PATH, "slm", "slm policy"),
+        (SNAPSHOT_PATH, "repo", "snapshot repository"),
+        (INDEX_TEMPLATE_PATH, "template", "index template"))
+        if es.get_or_none(path + n[key])]
+
+
 def check_prefix_free(es, prefix, n):
-    """Refuse when anything on the cluster already answers to the prefix,
-    so the harness can never entangle itself with another tenant's work."""
+    """Refuse when anything on the cluster already answers to the prefix or
+    to the data stream name, so the harness can never entangle itself with
+    another tenant's work. The stream name is checked on its own because
+    --data-stream may name a stream that does not contain the prefix, and
+    setup claims every index under that name with its template."""
     hits = []
-    res = es.get_or_none(RESOLVE_PREFIX_PATH % prefix) or {}
-    for kind in ("indices", "aliases", "data_streams"):
-        for entry in res.get(kind, []):
-            hits.append("%s %s" % (kind[:-1] if kind != "indices"
-                                   else "index", entry["name"]))
-    if es.get_or_none(ILM_POLICY_PATH + n["ilm"]):
-        hits.append("ilm policy " + n["ilm"])
-    if es.get_or_none(SLM_POLICY_PATH + n["slm"]):
-        hits.append("slm policy " + n["slm"])
-    if es.get_or_none(SNAPSHOT_PATH + n["repo"]):
-        hits.append("snapshot repository " + n["repo"])
-    if es.get_or_none(INDEX_TEMPLATE_PATH + n["template"]):
-        hits.append("index template " + n["template"])
+    for fragment in (prefix, n["data_stream"]):
+        for label, name in resolved_names(es, fragment):
+            hit = "%s %s" % (label, name)
+            if hit not in hits:
+                hits.append(hit)
+    hits += named_objects(es, n)
     if hits:
-        die("prefix %r collides with existing cluster state: %s. Pick "
-            "another --prefix, or run teardown if these belong to a "
-            "previous run of this script" % (prefix, "; ".join(hits)))
+        die("prefix %r or data stream %r collides with existing cluster "
+            "state: %s. Pick another --prefix or --data-stream, or run "
+            "teardown if these belong to a previous run of this script"
+            % (prefix, n["data_stream"], "; ".join(hits)))
 
 
 def derive_refusal(state, derive_ok, n):
@@ -773,16 +821,17 @@ def derive_refusal(state, derive_ok, n):
 def purge_refusal(state, base_path_explicit, base_path):
     """Why a bucket purge must not run, or None when the scope was stated.
 
-    With no state file and no --base-path, teardown falls back to --prefix for
-    the path it purges. That guess is the only thing scoping the delete, and
-    the bucket here is shared: gcw, s3c3, scalerig, rv1based and rv2stale are
-    all base paths of live repositories and all valid prefixes.
+    With no base path in the state file and no --base-path, teardown falls
+    back to --prefix for the path it purges. That guess is the only thing
+    scoping the delete, and the bucket here is shared: gcw, s3c3, scalerig,
+    rv1based and rv2stale are all base paths of live repositories and all
+    valid prefixes.
 
     This stays refused even under --derive-from-prefix. A wrong index or
     repository can be rebuilt from the cluster. Objects deleted out of this
     store cannot, which is the premise the whole repository rests on.
     """
-    if state is not None or base_path_explicit:
+    if (state is not None and "base_path" in state) or base_path_explicit:
         return None
     return ("refusing to purge bucket path %r: it came from --prefix, not "
             "from a run's state file and not from you. Objects deleted here "
@@ -790,22 +839,39 @@ def purge_refusal(state, base_path_explicit, base_path):
             "teardown where the state file is." % base_path)
 
 
+def bucket_prefix(base_path):
+    """The listing prefix for a base path, or a refusal when it names the bucket.
+
+    The rig never registers a repository at the bucket root, so an empty base
+    path, or one made only of slashes, is a mistake rather than a scope. Read
+    literally it lists and purges every repository in the shared bucket.
+    """
+    base = base_path.rstrip("/") if isinstance(base_path, str) else ""
+    if not base:
+        die("base path %r names the whole bucket, which holds other "
+            "repositories. Nothing was listed or deleted. Pass --base-path "
+            "with the path the run used" % (base_path,))
+    return base + "/"
+
+
+# A backing index of the data stream named by %s, as Elasticsearch names it:
+# .ds-<stream>-<yyyy.MM.dd>-<generation>. ILM prefixes partial- or restored-
+# when it mounts one as a searchable snapshot.
+OWN_INDEX = r"(?:partial-|restored-)?\.ds-%s-\d{4}\.\d{2}\.\d{2}-\d{6}"
+
+
 def teardown_index_scope(resolved, data_stream):
     """Names from a _resolve response that teardown may delete.
 
     Every index this harness creates is a backing index of its own data
-    stream, so the name carries -<data_stream>- somewhere inside. ILM keeps
-    that intact when it mounts a searchable snapshot, prefixing partial- or
-    restored- onto the front, so the frozen mounts match too.
-
-    An index that merely starts with the prefix belongs to someone else.
-    check_prefix_free refuses to start a run while any such index exists, so
-    the harness never shares a namespace with one, and teardown has no reason
-    to reach for it. It only ever reached the wrong thing.
+    stream, and ILM keeps that name intact when it mounts a searchable
+    snapshot, so the frozen mounts match too. The whole name has to match
+    OWN_INDEX. A backing index of a stream whose name merely contains this
+    one, such as x-<stream> or <stream>-old, belongs to someone else.
     """
-    marker = "-%s-" % data_stream
+    pattern = re.compile(OWN_INDEX % re.escape(data_stream))
     return [e["name"] for e in resolved.get("indices", [])
-            if marker in e["name"]]
+            if pattern.fullmatch(e["name"])]
 
 
 def slm_schedule(version, interval_text, override):
@@ -1088,7 +1154,7 @@ def repository_section(rig, alive_uuids):
     after the prefix belongs to a shard directory, and this section is about
     the repository's own top-level metadata.
     """
-    base = rig.base_path.rstrip("/") + "/" if rig.base_path else ""
+    base = bucket_prefix(rig.base_path)
     objects = rig.s3.list(base)
     generations = []
     snapshot_blobs = []
@@ -1318,13 +1384,13 @@ def cmd_run(es, args, n, s3, s3_reason):
 # teardown
 
 
-def delete_cluster_objects(es, args, n):
+def delete_cluster_objects(es, n):
     """Remove exactly what this harness created on the cluster."""
     es.delete(SLM_POLICY_PATH + n["slm"])
     log("slm policy %s deleted" % n["slm"])
 
     es.delete(DATA_STREAM_PATH + n["data_stream"])
-    res = es.get_or_none(RESOLVE_PREFIX_PATH % args.prefix) or {}
+    res = es.get_or_none(RESOLVE_PREFIX_PATH % n["data_stream"]) or {}
     for name in teardown_index_scope(res, n["data_stream"]):
         es.delete("/" + name)
         log("leftover index %s deleted" % name)
@@ -1364,7 +1430,7 @@ def clear_bucket(s3, base_path, purge):
     Returns (purged, leftover). Without --purge-bucket nothing is deleted:
     the leaked corpus is the measurement target, so removing it is opt-in.
     """
-    base = base_path.rstrip("/") + "/" if base_path else ""
+    base = bucket_prefix(base_path)
     objects = s3.list(base)
     if not purge:
         leftover = len(objects)
@@ -1382,18 +1448,25 @@ def clear_bucket(s3, base_path, purge):
     return len(objects), leftover
 
 
-def surviving_cluster_objects(es, args, n):
-    """Anything answering to the prefix after teardown has run."""
-    res = es.get_or_none(RESOLVE_PREFIX_PATH % args.prefix) or {}
-    remaining = [e["name"] for kind in ("indices", "aliases", "data_streams")
-                 for e in res.get(kind, [])]
-    for path, label in ((ILM_POLICY_PATH + n["ilm"], "ilm policy"),
-                        (SLM_POLICY_PATH + n["slm"], "slm policy"),
-                        (SNAPSHOT_PATH + n["repo"], "repository"),
-                        (INDEX_TEMPLATE_PATH + n["template"], "template")):
-        if es.get_or_none(path):
-            remaining.append(label)
-    return remaining
+def surviving_cluster_objects(es, prefixes, n):
+    """What still answers to the rig after teardown has run.
+
+    That is anything containing one of the prefixes, the data stream name
+    itself as an index, alias or stream, the stream's own backing indices,
+    and the rig's policies, repository and template. A name that only
+    contains the stream name is left out, because under --data-stream it
+    can belong to another tenant and would keep the verdict unclean forever.
+    """
+    own = re.compile(OWN_INDEX % re.escape(n["data_stream"]))
+    remaining = []
+    for prefix in prefixes:
+        remaining += ["%s %s" % hit for hit in resolved_names(es, prefix)]
+    for label, name in resolved_names(es, n["data_stream"]):
+        hit = "%s %s" % (label, name)
+        if ((name == n["data_stream"] or own.fullmatch(name))
+                and hit not in remaining):
+            remaining.append(hit)
+    return remaining + named_objects(es, n)
 
 
 def settings_not_restored(es, state):
@@ -1407,9 +1480,16 @@ def settings_not_restored(es, state):
 
 
 def teardown_verdict(es, args, n, state):
-    """Whether teardown left the cluster as it found it, and what it did not."""
+    """Whether teardown left the cluster as it found it, and what it did not.
+
+    cmd_teardown also marks the verdict unclean when --purge-bucket left
+    objects under the base path.
+    """
     verdict = {"ts": now_iso(), "prefix": args.prefix, "clean": True}
-    remaining = surviving_cluster_objects(es, args, n)
+    prefixes = [args.prefix]
+    if state and state.get("prefix") not in (None, args.prefix):
+        prefixes.append(state["prefix"])
+    remaining = surviving_cluster_objects(es, prefixes, n)
     if remaining:
         verdict["clean"] = False
         verdict["remaining"] = remaining
@@ -1430,15 +1510,22 @@ def cmd_teardown(es, args, n, s3, s3_reason):
         log("WARNING: no state file at %s; deriving names from prefix %r "
             "and skipping settings restore because the prior values are "
             "not recorded" % (args.state_file, args.prefix))
-    base_path = (state or {}).get("base_path", args.base_path or args.prefix)
+    if state is not None and "base_path" in state:
+        base_path = state["base_path"]
+    else:
+        base_path = args.base_path
 
     refusal = derive_refusal(state, args.derive_from_prefix, n)
     if refusal is None and args.purge_bucket:
         refusal = purge_refusal(state, args.base_path_explicit, base_path)
     if refusal:
         die(refusal)
+    if s3 is not None or args.purge_bucket:
+        # bucket_prefix() refuses an empty scope here, before the cluster
+        # teardown, so a refused purge leaves nothing half done.
+        bucket_prefix(base_path)
 
-    delete_cluster_objects(es, args, n)
+    delete_cluster_objects(es, n)
     if state:
         restore_managed_settings(es, state)
 
@@ -1451,6 +1538,9 @@ def cmd_teardown(es, args, n, s3, s3_reason):
     verdict = teardown_verdict(es, args, n, state)
     verdict["leftover_bucket_objects"] = leftover
     verdict["purged"] = purged
+    if args.purge_bucket and leftover:
+        verdict["clean"] = False
+        verdict["purge_incomplete"] = True
     print(json.dumps(verdict, sort_keys=True), flush=True)
     if not verdict["clean"]:
         log("teardown left residue, state file kept; see the verdict above")

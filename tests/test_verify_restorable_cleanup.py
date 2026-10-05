@@ -28,6 +28,11 @@ class FakeElasticsearch(http.server.HTTPServer):
         self.delete_status = delete_status
         self.deletes = []
         self.drop_when = ()
+        # Path, without its query, to the (status, body) it answers with
+        # in place of the defaults below, or to a function of the whole
+        # request target that returns one. Every request target is kept.
+        self.answers = {}
+        self.targets = []
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -48,8 +53,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _answer(self):
         path = self.path.split("?")[0]
+        self.server.targets.append((self.command, self.path))
         if any(marker in path for marker in self.server.drop_when):
             return self._drop()
+        if path in self.server.answers:
+            answer = self.server.answers[path]
+            if callable(answer):
+                answer = answer(self.path)
+            return self._send(*answer)
         if self.command == "DELETE":
             self.server.deletes.append(path)
             return self._send(self.server.delete_status, {"acknowledged": True})

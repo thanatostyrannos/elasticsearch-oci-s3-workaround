@@ -26,6 +26,7 @@ import http.client
 import json
 import os
 import ssl
+import stat
 import sys
 import time
 import urllib.error
@@ -90,6 +91,10 @@ def read_secret(path, what):
     as an authentication error, which sends whoever is on call looking at
     the cluster instead of at the flag.
 
+    A file with any group or other permission bit is refused unread, and so
+    is a file that holds nothing, which would otherwise authenticate as the
+    user with an empty password and fail on the cluster instead.
+
     The message quotes the path and never the contents, because the contents
     are the secret.
     """
@@ -98,12 +103,20 @@ def read_secret(path, what):
         sys.exit(f"{what} {path!r} is not a regular file "
                  f"(it resolves to {resolved!r})")
     try:
+        mode = os.stat(resolved).st_mode
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            sys.exit(f"{what} {path!r} is mode {stat.S_IMODE(mode):04o}, "
+                     "which gives group or other users a permission bit. "
+                     f"Run `chmod 600 {path}` and try again. Nothing was read")
         with open(resolved) as handle:
-            return handle.read().strip()
+            value = handle.read().strip()
     except OSError as problem:
         sys.exit(f"{what} {path!r} could not be read: "
                  f"{problem.__class__.__name__}: "
                  f"{problem.strerror or problem}")
+    if not value:
+        sys.exit(f"{what} {path!r} is empty")
+    return value
 
 
 def _pinned_context(ca_cert):
@@ -276,6 +289,25 @@ def fail(msg):
     sys.exit(1)
 
 
+def expect_ok(code, body):
+    """Fail unless Elasticsearch answered 200.
+
+    An error body read as an answer turned a 401 or a missing repository
+    into an empty listing, and an empty listing exits 0.
+    """
+    if code != 200:
+        fail(f"{STEP}: http={code} {str(body)[:200]}")
+
+
+def snapshot_list(body):
+    """The listing's snapshots, failing on a 200 that carries no list."""
+    listed = body.get("snapshots") if isinstance(body, dict) else None
+    if not isinstance(listed, list):
+        fail(f"{STEP}: the answer holds no list of snapshots: "
+             f"{str(body)[:200]}")
+    return listed
+
+
 def delete_probe(name, restore_unanswered):
     """Remove the restored index, and report on stdout if it stays.
 
@@ -299,7 +331,8 @@ def delete_probe(name, restore_unanswered):
 
 STEP = "cluster health"
 print("== cluster ==")
-_, h = call("GET", "/_cluster/health")
+code, h = call("GET", "/_cluster/health")
+expect_ok(code, h)
 print(f"  status={h.get('status')} nodes={h.get('number_of_nodes')} "
       f"unassigned={h.get('unassigned_shards')}")
 if h.get("status") == "red":
@@ -311,13 +344,14 @@ if h.get("status") == "red":
     # an unrelated campaign months earlier, one of them ALLOCATION_FAILED and
     # one CLUSTER_RECOVERED after a pod restart. Nothing to do with the
     # repository being verified, and enough to fail every run forever.
-    _, rows = call("GET", "/_cat/shards?h=index,state&format=json")
+    code, rows = call("GET", "/_cat/shards?h=index,state&format=json")
+    expect_ok(code, rows)
     broken = sorted({r["index"] for r in (rows or [])
                      if r.get("state") != "STARTED"})
-    _, cat = call("GET", f"/_snapshot/{path_segment(REPO)}"
-                         f"/_all?ignore_unavailable=true")
+    code, cat = call("GET", f"/_snapshot/{path_segment(REPO)}/_all")
+    expect_ok(code, cat)
     covered = set()
-    for snap in (cat.get("snapshots", []) if isinstance(cat, dict) else []):
+    for snap in snapshot_list(cat):
         covered.update(snap.get("indices", []) or [])
     ours = [i for i in broken if i in covered]
     print(f"  unhealthy indices: {', '.join(broken) or 'none'}")
@@ -329,9 +363,12 @@ if h.get("status") == "red":
 
 STEP = "snapshot listing"
 print("== snapshots ==")
-_, s = call("GET",
-            f"/_snapshot/{path_segment(REPO)}/_all?ignore_unavailable=true")
-snaps = s.get("snapshots", []) if isinstance(s, dict) else []
+# No ignore_unavailable: it drops a snapshot Elasticsearch cannot load from
+# the listing, and a snapshot whose blobs were deleted is exactly the one this
+# check exists to find. An unreadable snapshot fails the listing instead.
+code, s = call("GET", f"/_snapshot/{path_segment(REPO)}/_all")
+expect_ok(code, s)
+snaps = snapshot_list(s)
 states = {}
 for x in snaps:
     states[x.get("state")] = states.get(x.get("state"), 0) + 1

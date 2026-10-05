@@ -136,13 +136,16 @@ import argparse
 import base64
 import collections
 import datetime as dt
+import ipaddress
 import json
 import math
 import os
+import re
 import ssl
 import stat
 import statistics
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -179,17 +182,34 @@ def checked_endpoint(parser: argparse.ArgumentParser, raw: str) -> str:
     trusted. What comes back is rebuilt from the parts that passed the check,
     so a query string or a fragment typed into --es cannot reappear in the
     middle of a request path further down.
+
+    No refusal quotes the raw value, because a value carrying a user name
+    and password before the host would print the password again.
     """
     split = urllib.parse.urlsplit(raw)
     if split.scheme not in ES_SCHEMES:
-        parser.error(f"--es is {raw!r}; only http and https are accepted, "
-                     f"so a {split.scheme or '(no scheme)'!r} value cannot "
-                     f"be opened")
+        parser.error(f"--es has the scheme {split.scheme or '(none)'!r}; "
+                     f"only http and https are accepted, so it cannot be "
+                     f"opened")
     if not split.hostname:
-        parser.error(f"--es is {raw!r} and names no host, so there is "
-                     f"nothing to connect to")
+        parser.error("--es names no host, so there is nothing to connect to")
+    if split.username is not None or split.password is not None:
+        parser.error("--es carries a user name or password before the host. "
+                     "That shows in the process list and is never used to "
+                     "authenticate. Pass --user with --password-file, or "
+                     "--api-key-file")
     return urllib.parse.urlunsplit(
         (split.scheme, split.netloc, split.path.rstrip("/"), "", ""))
+
+
+def is_loopback(host) -> bool:
+    """True when host names this machine: localhost or a loopback address."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def path_segment(name: str) -> str:
@@ -282,6 +302,25 @@ def confined_secret_path(path: str, flag: str) -> str:
     return resolved
 
 
+def checked_secret(parser: argparse.ArgumentParser, value: str,
+                   source: str) -> str:
+    """value with surrounding whitespace removed, or a refusal.
+
+    Every secret source goes through here, the files and the environment
+    alike. A value left empty, or one holding a line break or another
+    control character, is refused. http.client rejects such a header and
+    quotes it whole in the error this tool would print. The refusal names
+    the source and never the value.
+    """
+    value = value.strip()
+    if not value:
+        parser.error(f"{source} is empty")
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in value):
+        parser.error(f"{source} holds a line break or another control "
+                     f"character; nothing was sent")
+    return value
+
+
 def read_secret_file(parser: argparse.ArgumentParser, path: str,
                      flag: str) -> str:
     """The one line in a secret file, or a refusal that never quotes it.
@@ -306,13 +345,11 @@ def read_secret_file(parser: argparse.ArgumentParser, path: str,
                 f"can read it. Run `chmod 600 {path}` and try again. "
                 f"Nothing was read")
         with open(resolved) as handle:
-            value = handle.read().strip()
+            value = handle.read()
     except OSError as problem:
         parser.error(f"{flag} {path!r} could not be read: "
                      f"{problem.strerror or problem.__class__.__name__}")
-    if not value:
-        parser.error(f"{flag} {path!r} is empty")
-    return value
+    return checked_secret(parser, value, f"{flag} {path!r}")
 
 
 def resolve_credentials(parser: argparse.ArgumentParser,
@@ -328,12 +365,19 @@ def resolve_credentials(parser: argparse.ArgumentParser,
                      "colon would show in the process list. Put the password "
                      f"in a 0600 file and pass --password-file PATH, or set "
                      f"{PASSWORD_ENV}")
+    if args.password_argv is not None:
+        parser.error("--password takes no value on the command line, because "
+                     "it would show in the process list. Put the password in "
+                     "a 0600 file and pass --password-file PATH, or set "
+                     f"{PASSWORD_ENV}")
     if args.api_key is not None:
         parser.error("--api-key no longer takes a value, because it would "
                      "show in the process list. Put the key in a 0600 file "
                      f"and pass --api-key-file PATH, or set {API_KEY_ENV}")
 
     password = os.environ.get(PASSWORD_ENV) or None
+    if password is not None:
+        password = checked_secret(parser, password, PASSWORD_ENV)
     if args.password_file:
         if password is not None:
             parser.error(f"--password-file and {PASSWORD_ENV} are both set; "
@@ -341,6 +385,8 @@ def resolve_credentials(parser: argparse.ArgumentParser,
         password = read_secret_file(parser, args.password_file,
                                     "--password-file")
     api_key = os.environ.get(API_KEY_ENV) or None
+    if api_key is not None:
+        api_key = checked_secret(parser, api_key, API_KEY_ENV)
     if args.api_key_file:
         if api_key is not None:
             parser.error(f"--api-key-file and {API_KEY_ENV} are both set; "
@@ -482,6 +528,10 @@ class Parser(argparse.ArgumentParser):
     """
 
     def error(self, message):
+        # argparse quotes the whole token in an ambiguous-option message, so
+        # --pass=SECRET would print SECRET. The value after = is dropped.
+        message = re.sub(r"(ambiguous option: [^\s=]+)=.*?( could match )",
+                         r"\1\2", message, flags=re.S)
         if "--insecure" in message:
             message += (". TLS verification is always on. A lab cluster "
                         "serving a certificate it signed itself is reached "
@@ -533,11 +583,16 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     snapshot_uuid arrives with it and needs no extra request or filter term.
 
     Returns {snapshot_name: {"partial": bool, "full": bool, "indices": [...],
-    "uuid": str|None}} restricted to snapshots in args.repo. A snapshot backing
-    both a partial and a full mount reports both flags true.
+    "uuid": str|None, "uuids": set}} restricted to snapshots in args.repo.
+    "uuid" is the first uuid seen and "uuids" every one, since two mounts
+    can pin two snapshots that shared a name at different times. A snapshot
+    backing both a partial and a full mount reports both flags true.
     """
+    # expand_wildcards=all, because a hidden index is left out of the
+    # wildcard otherwise, and a hidden mount pins its snapshot all the same.
     data = http_get(
-        "/*/_settings?filter_path=*.settings.index.store.snapshot", args)
+        "/*/_settings?expand_wildcards=all"
+        "&filter_path=*.settings.index.store.snapshot", args)
     mounted: dict[str, dict] = {}
     for index, body in expect_object(data, "_settings").items():
         if not isinstance(body, dict):
@@ -549,28 +604,98 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
             continue
         entry = mounted.setdefault(
             name, {"partial": False, "full": False, "indices": [],
-                   "uuid": None})
+                   "uuid": None, "uuids": set()})
         tier = "partial" if is_partial_mount(snap) else "full"
         entry[tier] = True
         entry["indices"].append(index)
+        uuid = snap.get("snapshot_uuid") or None
+        if uuid:
+            entry["uuids"].add(uuid)
         if not entry["uuid"]:
-            entry["uuid"] = snap.get("snapshot_uuid") or None
+            entry["uuid"] = uuid
     return mounted
 
 
-def open_emit_sink(args: argparse.Namespace):
-    """Where an emit mode's machine-readable output goes.
+def checked_out(parser: argparse.ArgumentParser, path: str) -> str:
+    """How --out will be written, decided before the first request.
 
-    Returns (file, close_it). Without --out that is stdout, so the old
-    `--emit-mounted > file.txt` pipe still works. `getattr` rather than
-    attribute access keeps the emit functions callable with a Namespace that
-    predates the flag. Raises OSError if FILE cannot be opened; the caller
-    reports it.
+    Returns "replace" for a regular file, or a path that does not exist yet,
+    in a directory this run can write to: the export goes to a temporary
+    file beside it and a rename puts it in place whole. Returns "direct" for
+    a device, a pipe, or a regular file in a directory this run cannot write
+    to, which only an in-place write reaches. A target this run cannot write
+    is refused here, so a bad --out never costs a pass over the cluster.
     """
-    path = getattr(args, "out", None)
-    if not path:
-        return sys.stdout, False
-    return open(path, "w", encoding="utf-8"), True
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        info = None
+    except OSError as problem:
+        parser.error(f"--out {path!r} cannot be checked: "
+                     f"{problem.strerror or problem}")
+    if info is not None and stat.S_ISDIR(info.st_mode):
+        parser.error(f"--out {path!r} is a directory; name a file")
+    if info is not None and not os.access(path, os.W_OK):
+        parser.error(f"--out {path!r} cannot be written by this user, so "
+                     "it was left as it is")
+    if info is not None and not stat.S_ISREG(info.st_mode):
+        return "direct"
+    directory = os.path.dirname(os.path.realpath(path))
+    if os.access(directory, os.W_OK | os.X_OK):
+        return "replace"
+    if info is None:
+        parser.error(f"--out {path!r} cannot be created: its directory "
+                     f"{directory!r} does not exist or cannot be written")
+    return "direct"
+
+
+def write_out(args: argparse.Namespace, lines: list[str]) -> int:
+    """Write an emit mode's lines to stdout, or to --out. 0, or 1 on failure.
+
+    A replaced file keeps the mode of the file it replaces, or gets the mode
+    open() would give a new one. A failed replace leaves the earlier file as
+    it was and removes the temporary file. A failed direct write can leave
+    part of the export behind, and the message says so.
+    """
+    text = "".join(line + "\n" for line in lines)
+    if not args.out:
+        sys.stdout.write(text)
+        return 0
+    if args.out_mode == "direct":
+        try:
+            with open(args.out, "w", encoding="utf-8") as handle:
+                handle.write(text)
+        except OSError as problem:
+            print(f"cannot write --out {args.out!r}: {problem}. It may hold "
+                  "part of the export; do not use it", file=sys.stderr)
+            return 1
+        return 0
+    target = os.path.realpath(args.out)
+    try:
+        mode = stat.S_IMODE(os.stat(target).st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=os.path.dirname(target),
+        prefix="." + os.path.basename(target) + ".", delete=False)
+    try:
+        with handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(handle.name, mode)
+        os.replace(handle.name, target)
+    except OSError as problem:
+        try:
+            os.unlink(handle.name)
+        except FileNotFoundError:
+            pass
+        print(f"cannot write --out {args.out!r}: {problem}. The file there "
+              "was left as it was", file=sys.stderr)
+        return 1
+    return 0
 
 
 def emit_mounted(args: argparse.Namespace) -> int:
@@ -624,39 +749,40 @@ def emit_mounted(args: argparse.Namespace) -> int:
               f"(check the URL, the credentials and --ca-cert)",
               file=sys.stderr)
         return 1
-    try:
-        sink, close_it = open_emit_sink(args)
-    except OSError as e:
-        print(f"cannot open --out file for writing: {e}", file=sys.stderr)
-        return 1
     repo_uuid = (registered.get(args.repo) or {}).get("uuid")
-    try:
-        # Provenance, for whatever reads this back: a file generated against
-        # one repository and fed to a pass over another has to be refused
-        # rather than matched by name. Snapshot names collide across
-        # repositories routinely, uuids do not.
-        print(f"# repository: {args.repo}"
-              + (f" {repo_uuid}" if repo_uuid else ""), file=sink)
-        for name in sorted(mounted):
-            e = mounted[name]
-            print(f"{name}\t{e.get('uuid') or '-'}\t"
-                  f"{'partial' if e['partial'] else 'full'}\t"
-                  f"{','.join(sorted(e['indices']))}", file=sink)
-    finally:
-        if close_it:
-            sink.close()
+    # Provenance, for whatever reads this back: a file generated against
+    # one repository and fed to a pass over another has to be refused
+    # rather than matched by name. Snapshot names collide across
+    # repositories routinely, uuids do not.
+    lines = [f"# repository: {args.repo}"
+             + (f" {repo_uuid}" if repo_uuid else "")]
+    for name in sorted(mounted):
+        e = mounted[name]
+        lines.append(f"{name}\t{e.get('uuid') or '-'}\t"
+                     f"{'partial' if e['partial'] else 'full'}\t"
+                     f"{','.join(sorted(e['indices']))}")
+    if write_out(args, lines):
+        return 1
     print(f"# {len(mounted)} snapshot(s) in {args.repo} pinned by mounted "
           f"searchable-snapshot indices", file=sys.stderr)
     return 0
 
 
-def mounted_not_in_listing(mounted: dict, names: list[str]) -> list[str]:
+def mounted_not_in_listing(mounted: dict, listed: dict) -> list[str]:
     """Pinned snapshots that the repository listing does not contain.
 
-    Non-empty means a searchable-snapshot index is mounted against a snapshot
-    that has been deleted from the repository. See print_mounted_danger.
+    `listed` maps each listed name to its uuid, or None when the listing gave
+    none. A name counts as missing when it is not listed, or when a mount
+    pins a uuid other than the listed one: the snapshot was deleted and its
+    name reused. Non-empty means a searchable-snapshot index is mounted
+    against a snapshot that has been deleted from the repository. See
+    print_mounted_danger.
     """
-    return sorted(set(mounted) - set(names))
+    return sorted(
+        name for name, entry in mounted.items()
+        if name not in listed
+        or (listed[name] and any(uuid != listed[name]
+                                 for uuid in entry.get("uuids", ()))))
 
 
 def print_mounted_danger(missing: list[str], mounted: dict, repo: str,
@@ -928,7 +1054,8 @@ def classified_rows(rows: list[tuple], split: dict,
     `missing` is mounted_not_in_listing()'s output: snapshots a mounted index
     still pins that the repository no longer lists. They have no _status entry
     (nothing left to ask about), so state is MISSING-FROM-CATALOG and every
-    measured field is '-'. Leaving them out would make the export claim a
+    measured field is '-'. A name the listing reuses for a newer snapshot
+    gets that row beside the live one. Leaving them out would make the export claim a
     repository is clean when its riskiest state is exactly what is absent.
 
     Sorted by start time then name; the danger rows sort first (no stamp).
@@ -984,8 +1111,9 @@ def print_classified_summary(rows: list[tuple], missing: list[str],
               f"({written} row(s) written)", file=file)
 
 
-def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
-    """Snapshot names from the repository listing, or None after reporting.
+def fetch_snapshot_listing(args: argparse.Namespace) -> dict | None:
+    """{name: uuid or None} from the repository listing, in listing order,
+    or None after reporting.
 
     HTTPError is caught first on purpose: it subclasses URLError and OSError,
     and its status code is the actionable half of the message.
@@ -1015,7 +1143,39 @@ def fetch_snapshot_listing(args: argparse.Namespace) -> list[str] | None:
               f"{_describe(listing)} (is something other than the cluster "
               f"answering?)", file=sys.stderr)
         return None
-    return [s["snapshot"] for s in snapshots]
+    return {s["snapshot"]: s.get("uuid") if isinstance(s.get("uuid"), str)
+            else None for s in snapshots}
+
+
+def _count(value) -> int | None:
+    """value when it is a whole number of bytes or milliseconds, else None."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def status_row(entry: dict, asked: list[str]) -> tuple | None:
+    """One _status entry as (start_ms, name, incremental, total, state).
+
+    None when the entry names no snapshot that was asked for, or lacks a
+    start time or either size. A default would put a made-up row in a
+    report or an export that another tool acts on.
+    """
+    name = entry.get("snapshot")
+    stats = entry.get("stats")
+    if not isinstance(name, str) or name not in asked \
+            or not isinstance(stats, dict):
+        return None
+    incremental = stats.get("incremental")
+    total = stats.get("total")
+    numbers = (_count(stats.get("start_time_in_millis")),
+               _count(incremental.get("size_in_bytes"))
+               if isinstance(incremental, dict) else None,
+               _count(total.get("size_in_bytes"))
+               if isinstance(total, dict) else None)
+    if None in numbers:
+        return None
+    return (numbers[0], name, numbers[1], numbers[2], entry.get("state", "?"))
 
 
 def fetch_status_rows(args: argparse.Namespace,
@@ -1044,15 +1204,16 @@ def fetch_status_rows(args: argparse.Namespace,
                   f"{_describe(st)} (partial results discarded)",
                   file=sys.stderr)
             return None
-        for s in batch_rows:
-            stats = s.get("stats", {})
-            rows.append((
-                stats.get("start_time_in_millis", 0),
-                s.get("snapshot", "?"),
-                stats.get("incremental", {}).get("size_in_bytes", 0),
-                stats.get("total", {}).get("size_in_bytes", 0),
-                s.get("state", "?"),
-            ))
+        batch = [status_row(s, chunk) for s in batch_rows]
+        answered = {r[1] for r in batch if r is not None}
+        if None in batch or answered != set(chunk) \
+                or len(batch) != len(chunk):
+            print(f"_status fetch failed for batch {i//args.batch + 1}: "
+                  f"the answer did not carry a name and sizes for exactly "
+                  f"the {len(chunk)} snapshot(s) asked for "
+                  f"(partial results discarded)", file=sys.stderr)
+            return None
+        rows.extend(batch)
         print(f"# fetched {min(i + args.batch, len(names))}/{len(names)}",
               file=sys.stderr)
     return rows
@@ -1072,9 +1233,10 @@ def emit_classified(args: argparse.Namespace,
     snapshot as a plain backup, which is exactly the mistake the file exists
     to prevent. Discovery failure is exit 1 and no file is written.
     """
-    names = fetch_snapshot_listing(args)
-    if names is None:
+    listed = fetch_snapshot_listing(args)
+    if listed is None:
         return 1
+    names = list(listed)
     if not names:
         print("no snapshots found", file=sys.stderr)
         return 1
@@ -1098,24 +1260,15 @@ def emit_classified(args: argparse.Namespace,
     # The banner is unconditional: a --class filter changes what the FILE
     # holds, never whether the operator hears about a deleted-while-mounted
     # snapshot.
-    missing = mounted_not_in_listing(split["mounted"], names)
+    missing = mounted_not_in_listing(split["mounted"], listed)
     if missing:
         print_mounted_danger(missing, split["mounted"], args.repo)
 
     every = classified_rows(rows, split, missing)
     export = filter_classified(every, classes)
-    try:
-        sink, close_it = open_emit_sink(args)
-    except OSError as e:
-        print(f"cannot open --out file for writing: {e}", file=sys.stderr)
+    lines = ["\t".join(CLASSIFIED_HEADER)] + ["\t".join(r) for r in export]
+    if write_out(args, lines):
         return 1
-    try:
-        print("\t".join(CLASSIFIED_HEADER), file=sink)
-        for r in export:
-            print("\t".join(r), file=sink)
-    finally:
-        if close_it:
-            sink.close()
     print_classified_summary(every, missing, classes, len(export))
     return 0
 
@@ -1411,6 +1564,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--api-key", metavar="REFUSED",
                    help="refused: a key on argv shows in the process list. "
                         "Use --api-key-file")
+    p.add_argument("--password", dest="password_argv", metavar="REFUSED",
+                   help="refused: a password on argv shows in the process "
+                        "list. Use --password-file")
     p.add_argument("--ca-cert", metavar="PEM",
                    help="PEM file holding the CA that signed the cluster's "
                         "certificate. This is how a lab cluster serving its "
@@ -1445,7 +1601,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", metavar="FILE",
                    help="write the emit mode's machine-readable output to "
                         "FILE instead of stdout (requires --emit-mounted or "
-                        "--emit-classified)")
+                        "--emit-classified). A regular file is replaced "
+                        "whole, so a run that fails leaves the earlier one "
+                        "as it was")
     return p
 
 
@@ -1463,8 +1621,18 @@ def check_arguments(parser: argparse.ArgumentParser,
     if args.batch < 1:
         parser.error(f"--batch must be at least 1 (got {args.batch})")
 
+    scheme = urllib.parse.urlsplit(args.es).scheme
+    if args.ca_cert and scheme != "https":
+        parser.error("--ca-cert applies only to an https --es; with http "
+                     "nothing is verified and the CA would go unused")
     checked_ca_cert(parser, args.ca_cert)
     resolve_credentials(parser, args)
+    if scheme == "http" and (args.password or args.api_key_value) \
+            and not is_loopback(urllib.parse.urlsplit(args.es).hostname):
+        parser.error("--es is plain http to a host other than this one, and "
+                     "a credential is configured, so it would cross the "
+                     "network in the clear. Use https, or reach the cluster "
+                     "through a port-forward on localhost")
 
     if args.emit_mounted and args.emit_classified:
         parser.error("--emit-mounted and --emit-classified are mutually "
@@ -1473,6 +1641,7 @@ def check_arguments(parser: argparse.ArgumentParser,
         parser.error("--out requires an emit mode (--emit-mounted or "
                      "--emit-classified); the report tables are written for "
                      "humans and are not redirected into a file")
+    args.out_mode = checked_out(parser, args.out) if args.out else None
     if args.classes is not None and not args.emit_classified:
         parser.error("--class only applies to --emit-classified")
     try:
@@ -1481,7 +1650,7 @@ def check_arguments(parser: argparse.ArgumentParser,
         parser.error(str(e))
 
 
-def print_split_header(args: argparse.Namespace, names: list, split: dict):
+def print_split_header(args: argparse.Namespace, listed: dict, split: dict):
     """What --split-frozen found, and a banner if a mount is unbacked."""
     print(f"# --split-frozen: {len(split['mounted'])} snapshot(s) pinned by "
           f"mounted indices, {len(split['policies'])} SLM-created",
@@ -1489,7 +1658,7 @@ def print_split_header(args: argparse.Namespace, names: list, split: dict):
     # A mount pinning a snapshot the repository no longer lists is the
     # deleted-while-mounted state: the index runs on leaked blobs that a
     # reachability sweep would classify ORPHAN.
-    gone = mounted_not_in_listing(split["mounted"], names)
+    gone = mounted_not_in_listing(split["mounted"], listed)
     if gone:
         print_mounted_danger(gone, split["mounted"], args.repo)
 
@@ -1497,9 +1666,10 @@ def print_split_header(args: argparse.Namespace, names: list, split: dict):
 def period_report(args: argparse.Namespace) -> int:
     """The human-readable per-period table, and the sizing section under
     --recommend."""
-    names = fetch_snapshot_listing(args)
-    if names is None:
+    listed = fetch_snapshot_listing(args)
+    if listed is None:
         return 1
+    names = list(listed)
     if not names:
         print("no snapshots found", file=sys.stderr)
         return 1
@@ -1512,7 +1682,7 @@ def period_report(args: argparse.Namespace) -> int:
         if split_error:
             print(f"# --split-frozen skipped: {split_error}", file=sys.stderr)
         else:
-            print_split_header(args, names, split)
+            print_split_header(args, listed, split)
 
     rows = fetch_status_rows(args, names)  # (start_ms, name, inc, total, state)
     if rows is None:

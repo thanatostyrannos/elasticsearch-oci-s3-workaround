@@ -288,6 +288,39 @@ class Credentials(unittest.TestCase):
                                     "--api-key-file", key)
         self.assertEqual(code, 2)
 
+    def test_a_secret_holding_a_line_break_is_refused_unechoed(self):
+        # http.client refuses a header value with a line break and quotes
+        # the whole header in its error, which the tool printed: the API key
+        # landed on stderr and in the CI log. Every source gets the check.
+        for source in ("env", "file"):
+            with self.subTest(source=source):
+                os.environ.pop("GENCHAIN_ES_API_KEY", None)
+                extra = ()
+                if source == "env":
+                    os.environ["GENCHAIN_ES_API_KEY"] = "id:s3cr\net"
+                else:
+                    extra = ("--api-key-file", self.secret("id:s3cr\net\n"))
+                code, err, _ = self.run_check(*extra)
+                self.assertEqual(code, 2)
+                self.assertNotIn("s3cr", err)
+
+    def test_an_environment_secret_is_trimmed_like_a_file_secret(self):
+        # A variable filled from a file or a here-doc carries its trailing
+        # newline. Sent as is, the password fails as a 401 that points at
+        # the cluster rather than at the variable.
+        os.environ["ES_PASSWORD"] = "  fromenv\n"
+        code, _, args = self.run_check("--user", "bob")
+        self.assertEqual(code, 0)
+        want = base64.b64encode(b"bob:fromenv").decode()
+        self.assertEqual(self.header(args), "Basic " + want)
+
+    def test_a_blank_environment_secret_is_refused(self):
+        # Whitespace alone is not a password. Sent anyway, it authenticates
+        # as nothing and reads as a cluster fault.
+        os.environ["ES_PASSWORD"] = "   "
+        code, _, _ = self.run_check("--user", "bob")
+        self.assertEqual(code, 2)
+
     def test_a_password_file_wins_over_the_environment_only_by_refusal(self):
         # Abuse: both file and variable set. Silently preferring one hides
         # which secret was used.
@@ -295,6 +328,127 @@ class Credentials(unittest.TestCase):
         path = self.secret("s3cret")
         code, _, _ = self.run_check("--user", "bob", "--password-file", path)
         self.assertEqual(code, 2)
+
+
+
+def run_main(*argv, env=None):
+    """main() on a command line, with no request allowed out.
+
+    Returns (exit code, stderr, whether a request was attempted).
+    """
+    clean = {k: v for k, v in os.environ.items()
+             if k not in ("ES_PASSWORD", "GENCHAIN_ES_API_KEY")}
+    clean.update(env or {})
+    err = io.StringIO()
+    with mock.patch.dict(os.environ, clean, clear=True), \
+            mock.patch.object(sys, "argv", ["snapshot_sizes.py", *argv]), \
+            mock.patch.object(
+                sizes.urllib.request.OpenerDirector, "open",
+                side_effect=sizes.urllib.error.URLError("blocked")) as opened, \
+            contextlib.redirect_stderr(err), \
+            contextlib.redirect_stdout(io.StringIO()):
+        try:
+            code = sizes.main()
+        except SystemExit as exc:
+            code = exc.code
+    return code, err.getvalue(), opened.called
+
+
+class ACredentialInTheEndpointIsRefused(unittest.TestCase):
+    """--es is a host and a port. A password in it is a password on argv."""
+
+    def test_a_user_and_password_in_es_are_refused_unechoed(self):
+        # The password shows in ps and shell history, is never used to
+        # authenticate, and was printed again in every failure line.
+        for es in ("https://bob:hunter2@127.0.0.1:1",
+                   "ftp://bob:hunter2@127.0.0.1:1"):
+            with self.subTest(es=es):
+                code, err, sent = run_main("--es", es, "--repo", "r")
+                self.assertEqual(code, 2)
+                self.assertNotIn("hunter2", err)
+                self.assertFalse(sent)
+
+    def test_a_user_name_alone_in_es_is_refused(self):
+        # A name without a password still marks a URL someone meant to carry
+        # a credential, and it is never the --user the run authenticates as.
+        code, _, sent = run_main("--es", "https://bob@127.0.0.1:1",
+                                 "--repo", "r")
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_a_plain_host_and_port_is_accepted(self):
+        # The counterpart: an ordinary endpoint must get as far as a request.
+        code, _, sent = run_main("--es", "https://127.0.0.1:1", "--repo", "r")
+        self.assertTrue(sent)
+
+
+
+class PlainHttpCarriesNoCredential(unittest.TestCase):
+    """A credential goes to a remote cluster over TLS or not at all."""
+
+    def test_a_password_over_plain_http_to_a_remote_host_is_refused(self):
+        # Basic auth over http hands the cluster password to every host on
+        # the path. The run has to stop before the first request carries it.
+        code, _, sent = run_main(
+            "--es", "http://es.example:9200", "--repo", "r", "--user", "bob",
+            env={"ES_PASSWORD": "hunter2"})
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_an_api_key_over_plain_http_to_a_remote_host_is_refused(self):
+        code, _, sent = run_main(
+            "--es", "http://es.example:9200", "--repo", "r",
+            env={"GENCHAIN_ES_API_KEY": "id:key"})
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_a_credential_over_plain_http_to_loopback_is_accepted(self):
+        # kubectl port-forward serves the cluster on localhost, and the
+        # credential never leaves the host. Refusing it would break the
+        # documented lab invocation.
+        for host in ("127.0.0.1", "localhost", "[::1]"):
+            with self.subTest(host=host):
+                _, _, sent = run_main(
+                    "--es", f"http://{host}:1", "--repo", "r",
+                    "--user", "bob", env={"ES_PASSWORD": "hunter2"})
+                self.assertTrue(sent)
+
+    def test_plain_http_without_a_credential_is_accepted(self):
+        # An open lab cluster has nothing to leak and must still be read.
+        _, _, sent = run_main("--es", "http://es.example:9200", "--repo", "r")
+        self.assertTrue(sent)
+
+
+
+class APasswordOnArgvIsNeverEchoed(unittest.TestCase):
+    """argparse matches a flag by any unique prefix, and quotes what it got."""
+
+    SECRET = "FAKE-hunter2"
+
+    def test_a_password_given_as_a_flag_value_is_refused_unechoed(self):
+        # --password and its abbreviations used to land on --password-file,
+        # and the refusal to open a file of that name printed the password.
+        # A CI job log keeps it.
+        for argv in (["--password", self.SECRET], ["--pass", self.SECRET],
+                     ["--pass=" + self.SECRET],
+                     ["--password=" + self.SECRET],
+                     ["--api=" + self.SECRET]):
+            with self.subTest(argv=argv):
+                code, err, sent = run_main(
+                    "--es", "https://127.0.0.1:1", "--repo", "r",
+                    "--user", "bob", *argv)
+                self.assertEqual(code, 2)
+                self.assertNotIn(self.SECRET, err)
+                self.assertFalse(sent)
+
+    def test_the_value_stays_out_when_the_environment_also_has_one(self):
+        # The documented CI path exports ES_PASSWORD. A job that also passes
+        # --pass=$PW must not move the secret into the job log.
+        code, err, _ = run_main(
+            "--es", "https://127.0.0.1:1", "--repo", "r", "--user", "bob",
+            "--pass=" + self.SECRET, env={"ES_PASSWORD": "fromenv"})
+        self.assertEqual(code, 2)
+        self.assertNotIn(self.SECRET, err)
 
 
 if __name__ == "__main__":

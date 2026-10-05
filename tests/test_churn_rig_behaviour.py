@@ -156,14 +156,18 @@ class ReportShowsWhatTheRepositoryIsLeaking(unittest.TestCase):
         self.assertEqual(section["root_generations"], list(range(12, 20)))
         self.assertEqual(section["root_generation_count"], 20)
 
-    def test_an_empty_base_path_lists_the_bucket_root(self):
-        # A repository registered at the bucket root has no prefix to strip.
-        # Prefixing a slash anyway would list nothing and report an empty
-        # repository that is full.
-        s3 = FakeS3({"index-2": 1})
-        section = rig.repository_section(
-            make_rig(FakeEs(), s3=s3, base_path=""), set())
-        self.assertEqual(section["root_generations"], [2])
+    def test_an_empty_base_path_is_refused_rather_than_read_as_the_bucket(
+            self):
+        # The rig never registers a repository at the bucket root, so an
+        # empty base path is a mistake, and listing the whole bucket would
+        # count another repository's index-N and snap-*.dat as this rig's
+        # leak. Models a hand-edited state file or an empty template value.
+        s3 = FakeS3({"index-2": 1, "gcw/index-7": 1})
+        for empty in ("", "/", None):
+            with self.subTest(base_path=empty):
+                with self.assertRaises(SystemExit):
+                    quiet(rig.repository_section,
+                          make_rig(FakeEs(), s3=s3, base_path=empty), set())
 
     def test_a_missing_s3_is_reported_with_its_reason_not_as_empty(self):
         # An operator who forgot the S3 credentials must read why there is no
@@ -752,8 +756,7 @@ class TeardownRemovesOnlyWhatTheRigMade(TempDirCase):
         es = FakeEs()
         es.present[rig.SNAPSHOTS_IN_REPO_PATH % n["repo"]] = {"snapshots": [
             {"snapshot": "s%d" % i} for i in range(23)]}
-        quiet(rig.delete_cluster_objects, es, parse(
-            "teardown", "--es", "http://x"), n)
+        quiet(rig.delete_cluster_objects, es, n)
         batches = [p for p in es.paths("DELETE")
                    if p.startswith("/_snapshot/churnrig-repo/")]
         self.assertEqual([len(p.rsplit("/", 1)[1].split(",")) for p in batches],
@@ -765,8 +768,7 @@ class TeardownRemovesOnlyWhatTheRigMade(TempDirCase):
         # missing repository.
         n = self.names()
         es = FakeEs()
-        quiet(rig.delete_cluster_objects, es, parse(
-            "teardown", "--es", "http://x"), n)
+        quiet(rig.delete_cluster_objects, es, n)
         self.assertNotIn("/_snapshot/churnrig-repo", es.paths("DELETE"))
 
     def test_leftover_indices_are_deleted_only_when_they_are_ours(self):
@@ -774,14 +776,13 @@ class TeardownRemovesOnlyWhatTheRigMade(TempDirCase):
         # destroys data this project's recovery path runs through.
         n = self.names()
         es = FakeEs()
-        es.present[rig.RESOLVE_PREFIX_PATH % "churnrig"] = {"indices": [
+        es.present[rig.RESOLVE_PREFIX_PATH % "churnrig-stream"] = {"indices": [
             {"name": "partial-.ds-churnrig-stream-2026.01.01-000001"},
-            {"name": "churnrig-someone-elses"}]}
-        quiet(rig.delete_cluster_objects, es, parse(
-            "teardown", "--es", "http://x"), n)
+            {"name": "churnrig-stream-someone-elses"}]}
+        quiet(rig.delete_cluster_objects, es, n)
         self.assertIn("/partial-.ds-churnrig-stream-2026.01.01-000001",
                       es.paths("DELETE"))
-        self.assertNotIn("/churnrig-someone-elses", es.paths("DELETE"))
+        self.assertNotIn("/churnrig-stream-someone-elses", es.paths("DELETE"))
 
     def test_settings_are_restored_to_the_recorded_values_only(self):
         # Restoring a setting the rig never changed would overwrite an
@@ -826,9 +827,11 @@ class TeardownRemovesOnlyWhatTheRigMade(TempDirCase):
         verdict = rig.teardown_verdict(es, parse(
             "teardown", "--es", "http://x"), n, None)
         self.assertFalse(verdict["clean"])
-        self.assertEqual(verdict["remaining"], [
-            "churnrig-x", "a", "d", "ilm policy", "slm policy",
-            "repository", "template"])
+        for name in ("churnrig-x", "a", "d", n["ilm"], n["slm"], n["repo"],
+                     n["template"]):
+            with self.subTest(name=name):
+                self.assertTrue(any(entry.endswith(" " + name)
+                                    for entry in verdict["remaining"]))
 
     def test_a_cluster_with_nothing_left_is_clean(self):
         # The reverse: a false "unclean" would keep the state file forever
@@ -838,6 +841,101 @@ class TeardownRemovesOnlyWhatTheRigMade(TempDirCase):
             "teardown", "--es", "http://x"), self.names(), None)
         self.assertTrue(verdict["clean"])
         self.assertNotIn("remaining", verdict)
+
+
+class AChosenStreamNameIsCheckedAndCleanedUp(TempDirCase):
+    """--data-stream names a stream that need not contain the prefix.
+
+    Preflight, the leftover sweep and the residue check all have to look at
+    that name itself, or the override becomes a blind spot in each of them.
+    """
+
+    STREAM = "team-metrics-test"
+    ORPHAN = "partial-.ds-team-metrics-test-2026.10.05-000001"
+
+    def names(self):
+        return rig.names("octest", data_stream=self.STREAM)
+
+    def teardown_args(self):
+        return parse("teardown", "--es", "http://x", "--prefix", "octest",
+                     "--data-stream", self.STREAM)
+
+    def test_setup_refuses_a_stream_that_already_exists(self):
+        # Setup would install a priority-500 template with a delete phase
+        # over another team's stream and record the stream as the rig's own.
+        # The teardown that follows the failed run then deletes that stream
+        # and every document in it.
+        es = FakeEs()
+        es.present[rig.RESOLVE_PREFIX_PATH % self.STREAM] = {
+            "data_streams": [{"name": self.STREAM}]}
+        args = parse("run", "--es", "http://x:9200", "--prefix", "octest",
+                     "--data-stream", self.STREAM, "--bucket", "b",
+                     "--state-file", self.path("s.json"))
+        with self.assertRaises(SystemExit):
+            quiet(rig.cmd_setup, es, args, self.names(), None)
+        self.assertEqual(es.calls, [])
+        self.assertFalse(os.path.exists(self.path("s.json")))
+
+    def test_setup_proceeds_when_nothing_answers_to_the_stream(self):
+        # A preflight that refused every override would make --data-stream
+        # unusable on the clusters it exists for.
+        es = FakeEs()
+        args = parse("run", "--es", "http://x:9200", "--prefix", "octest",
+                     "--data-stream", self.STREAM, "--bucket", "b",
+                     "--state-file", self.path("s.json"))
+        quiet(rig.cmd_setup, es, args, self.names(), None)
+        self.assertIn(rig.DATA_STREAM_PATH + self.STREAM, es.paths("PUT"))
+
+    def test_teardown_sweeps_the_frozen_mounts_of_the_chosen_stream(self):
+        # A frozen mount the sweep cannot see pins snapshots after teardown
+        # reports clean, and the operator believes the rig is gone. Under an
+        # override the stream's indices never contain the prefix.
+        es = FakeEs()
+        es.present[rig.RESOLVE_PREFIX_PATH % self.STREAM] = {"indices": [
+            {"name": self.ORPHAN},
+            {"name": "partial-.ds-x-team-metrics-test-2026.10.05-000001"}]}
+        quiet(rig.delete_cluster_objects, es, self.names())
+        self.assertIn("/" + self.ORPHAN, es.paths("DELETE"))
+        self.assertNotIn(
+            "/partial-.ds-x-team-metrics-test-2026.10.05-000001",
+            es.paths("DELETE"))
+
+    def test_a_surviving_index_under_the_stream_name_is_residue(self):
+        # A bulk request that lands after the template is gone recreates the
+        # stream name as a plain index. A verdict blind to it reports clean
+        # and removes the state file while the rig's data is still there.
+        es = FakeEs()
+        es.present[rig.RESOLVE_PREFIX_PATH % self.STREAM] = {
+            "indices": [{"name": self.STREAM}]}
+        verdict = rig.teardown_verdict(
+            es, self.teardown_args(), self.names(), None)
+        self.assertFalse(verdict["clean"])
+
+    def test_a_lookalike_under_the_stream_name_is_not_residue(self):
+        # Another tenant's index that only contains the stream name would
+        # keep the verdict unclean forever, and the state file would block
+        # every later run.
+        es = FakeEs()
+        es.present[rig.RESOLVE_PREFIX_PATH % self.STREAM] = {
+            "indices": [{"name": "team-metrics-test-prod"}]}
+        verdict = rig.teardown_verdict(
+            es, self.teardown_args(), self.names(), None)
+        self.assertTrue(verdict["clean"])
+
+    def test_residue_under_the_recorded_prefix_is_seen_when_flags_differ(self):
+        # The chart's stale-state teardown passes the current --prefix with
+        # a state file an earlier run wrote under another prefix. Checking
+        # only the current prefix reports clean over the earlier rig's
+        # leftovers and deletes the only record of them.
+        es = FakeEs()
+        es.present[rig.RESOLVE_PREFIX_PATH % "leaktest"] = {
+            "indices": [{"name": "leaktest-leftover"}]}
+        state = {"prefix": "leaktest", "prior_settings": {},
+                 "settings_changed": {}}
+        verdict = rig.teardown_verdict(
+            es, parse("teardown", "--es", "http://x", "--prefix", "newrig"),
+            rig.names("leaktest"), state)
+        self.assertFalse(verdict["clean"])
 
 
 class BucketClearing(unittest.TestCase):
@@ -931,6 +1029,75 @@ class TeardownCommand(TempDirCase):
         self.assertIsNone(json.loads(out)["leftover_bucket_objects"])
         self.assertIn("bucket state not checked", err)
 
+    def test_an_empty_base_path_on_the_command_line_purges_nothing(self):
+        # An unset variable in a wrapper script renders --base-path ''. If
+        # that empty value counted as a stated path, the purge would run
+        # from the --prefix guess the refusal exists to block, or from the
+        # bucket root, and delete another live repository's objects.
+        s3 = FakeS3({"churnrig/a": 1, "gcw/index-7": 1})
+        es = FakeEs()
+        with self.assertRaises(SystemExit):
+            self.run_teardown(es, self.args(
+                "--derive-from-prefix", "--purge-bucket", "--base-path", ""),
+                s3)
+        self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_an_empty_base_path_in_the_state_file_purges_nothing(self):
+        # The rig never writes an empty base path, so one in the state file
+        # was put there by hand or by another tool. Read as written, it
+        # scopes the purge to the whole shared bucket, and every tenant's
+        # objects go with no way back.
+        for empty in ("", "/", None):
+            with self.subTest(base_path=empty):
+                self.write_state(base_path=empty)
+                s3 = FakeS3({"churnrig/a": 1, "gcw/index-7": 1})
+                es = FakeEs()
+                with self.assertRaises(SystemExit):
+                    self.run_teardown(es, self.args("--purge-bucket"), s3)
+                self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_a_state_file_without_a_base_path_does_not_license_a_purge(self):
+        # A state file that never recorded a base path states no scope.
+        # Filling the gap from --prefix would purge a guessed path, which is
+        # the one thing purge_refusal says must stay refused.
+        self.write_state(base_path=None)
+        state = json.loads(pathlib.Path(self.path("s.json")).read_text())
+        del state["base_path"]
+        pathlib.Path(self.path("s.json")).write_text(json.dumps(state))
+        s3 = FakeS3({"churnrig/a": 1})
+        es = FakeEs()
+        with self.assertRaises(SystemExit):
+            self.run_teardown(es, self.args("--purge-bucket"), s3)
+        self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_an_empty_base_path_does_not_block_a_teardown_that_skips_the_bucket(
+            self):
+        # With no S3 client and no purge the bucket is never listed, so the
+        # empty value scopes nothing. Refusing here would leave the rig's
+        # SLM policy writing snapshots and its cluster settings changed.
+        self.write_state(base_path="")
+        es = FakeEs()
+        code, _, _ = self.run_teardown(es, self.args())
+        self.assertEqual(code, 0)
+        self.assertIn(rig.SLM_POLICY_PATH + "churnrig-slm", es.paths("DELETE"))
+
+    def test_objects_a_purge_left_behind_keep_the_state_file(self):
+        # A store can acknowledge a single delete and keep the object. If
+        # teardown still called that clean, it would delete the state file,
+        # and finishing the purge would then need --base-path typed from
+        # memory in a bucket shared with live repositories.
+        class DeletesThatDoNotTake(FakeS3):
+            def delete_object(self, key):
+                self.deleted.append(key)
+
+        self.write_state()
+        s3 = DeletesThatDoNotTake({"churnrig/a": 1, "churnrig/b": 1})
+        code, out, _ = self.run_teardown(
+            FakeEs(), self.args("--purge-bucket"), s3)
+        self.assertEqual(code, 1)
+        self.assertFalse(json.loads(out)["clean"])
+        self.assertTrue(os.path.exists(self.path("s.json")))
+
     def test_purge_reports_what_it_removed(self):
         # The verdict is the audit trail of an irreversible delete.
         self.write_state()
@@ -988,6 +1155,18 @@ class StatusCommand(TempDirCase):
         code, out, _ = quiet(rig.cmd_status, es, args,
                              rig.names("churnrig"), None, "no s3")
         self.assertEqual(json.loads(out)["snapshots"]["alive"], 1)
+
+    def test_status_refuses_an_empty_base_path_instead_of_listing_the_bucket(
+            self):
+        # Setup maps an empty --base-path to the prefix, so status reading
+        # the same value as the bucket root reports another repository's
+        # generations as this rig's and sends the operator after a leak
+        # that is not there.
+        args = parse("status", "--es", "http://x:9200", "--base-path", "",
+                     "--state-file", self.path("none.json"))
+        with self.assertRaises(SystemExit):
+            quiet(rig.cmd_status, FakeEs(), args, rig.names("churnrig"),
+                  FakeS3({"gcw/index-7": 1}), None)
 
     def test_status_before_setup_falls_back_to_the_prefix(self):
         # status is useful before setup has run, which the doc promises.

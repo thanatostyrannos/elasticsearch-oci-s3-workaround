@@ -1,8 +1,9 @@
 """Teardown must delete only the indices this harness created.
 
-Teardown resolves ``*<prefix>*`` and deletes what comes back. That selection is
-the last thing standing between a prefix typed at a shell and an index nobody
-meant to touch. ``check_prefix_free`` guards the run path, but teardown accepts
+Teardown resolves ``*<data stream>*`` and deletes the indices
+``teardown_index_scope`` picks out of the answer. That selection is the last
+thing standing between a name typed at a shell and an index nobody meant to
+touch. ``check_prefix_free`` guards the run path, but teardown accepts
 a prefix, proceeds with no state file after a warning, and has no preflight of
 its own, so nothing else is in front of it.
 """
@@ -59,6 +60,23 @@ class TeardownIndexScope(unittest.TestCase):
                 got = rig.teardown_index_scope(resolved(foreign),
                                                prefix + "-stream")
                 self.assertEqual(got, [])
+
+    def test_leaves_backing_indices_of_streams_whose_name_contains_ours(self):
+        # A data stream named x-churnrig-stream, or churnrig-stream-old,
+        # belongs to someone else, and so does a plain index that merely
+        # carries -churnrig-stream- in its name. All of them contain the
+        # rig's stream name. Taking any of them deletes another tenant's
+        # data, including a frozen mount whose blobs the store may already
+        # have lost.
+        foreign = (".ds-x-churnrig-stream-2026.10.05-000001",
+                   "partial-.ds-x-churnrig-stream-2026.10.05-000001",
+                   ".ds-churnrig-stream-old-2026.10.05-000001",
+                   "logs-churnrig-stream-archive")
+        for name in foreign:
+            with self.subTest(name=name):
+                self.assertEqual(
+                    rig.teardown_index_scope(resolved(name), "churnrig-stream"),
+                    [])
 
 
 class TeardownPreconditions(unittest.TestCase):
