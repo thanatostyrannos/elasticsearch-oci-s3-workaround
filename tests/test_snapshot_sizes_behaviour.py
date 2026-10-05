@@ -12,6 +12,7 @@ import io
 import json
 import os
 import ssl
+import stat
 import subprocess
 import sys
 import tempfile
@@ -139,6 +140,16 @@ def cluster(snaps, mounts=None, policies=None, repo="r", repo_uuid="U1",
         f"/_snapshot/{repo}": (200, {repo: {"type": "s3", "uuid": repo_uuid}}),
         "/*/_settings": (200, settings_body(**(mounts or {}))),
     }
+
+
+def limit_file_size(limit):
+    """A preexec_fn capping the child's file writes at `limit` bytes."""
+    def apply():
+        import resource
+        import signal
+        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
+    return apply
 
 
 def run_tool(es_url, *argv, env=None):
@@ -474,13 +485,81 @@ class EmitMounted(ServerCase):
         self.assertEqual((code, out), (0, ""))
         self.assertEqual(written[1], "mount-1\tMU1\tpartial\trestored-ix")
 
-    def test_an_unwritable_out_path_fails_instead_of_printing_success(self):
+    def test_an_unwritable_out_path_fails_before_any_request(self):
         # Abuse: a directory that does not exist. Exiting 0 would hand the
-        # next stage a file that is not there.
+        # next stage a file that is not there, and finding out after every
+        # fetch wastes a run against a production cluster.
         es = self.serve(cluster(SNAPS, MOUNTS))
         bad = os.path.join(tempfile.gettempdir(), "no-such-dir-106", "x.tsv")
         code, _, _ = run_tool(es.url, "--emit-mounted", "--out", bad)
-        self.assertEqual(code, 1)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(es.requests, [])
+
+
+class OutIsWrittenWholeOrNotAtAll(ServerCase):
+    """--out holds the set of snapshots nothing may delete."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "mounted.tsv")
+        with open(self.path, "w") as handle:
+            handle.write("# repository: r U1\nkeep-me\t-\tfull\tix\n")
+        self.old = open(self.path).read()
+
+    def many_mounts(self):
+        mounts = {f"ix-{i}": ("r", f"mount-{i:03d}", "true", f"U{i}")
+                  for i in range(60)}
+        return self.serve(cluster(SNAPS, mounts))
+
+    def test_a_write_cut_off_part_way_leaves_the_earlier_file_whole(self):
+        # A full disk, a quota or a killed process cut the write short. A
+        # truncated file reads as a complete, shorter pinned set, and every
+        # snapshot past the cut becomes deletable. The child runs under a
+        # file size limit smaller than the export.
+        es = self.many_mounts()
+        done = subprocess.run(
+            [sys.executable, "-B", os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "snapshot_sizes.py"),
+             "--es", es.url, "--repo", "r", "--emit-mounted",
+             "--out", self.path],
+            capture_output=True, text=True, timeout=60,
+            preexec_fn=limit_file_size(400))
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(open(self.path).read(), self.old)
+        self.assertEqual(sorted(os.listdir(self.tmp.name)), ["mounted.tsv"])
+
+    def test_a_read_only_out_file_is_refused_and_left_alone(self):
+        # An operator write-protects a pinned set to keep it. Replacing it
+        # with exit 0 because the directory is writable would overwrite the
+        # copy they meant to keep.
+        if os.geteuid() == 0:
+            self.skipTest("root writes a 0444 file regardless")
+        os.chmod(self.path, 0o444)
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", self.path)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(open(self.path).read(), self.old)
+        self.assertEqual(es.requests, [])
+
+    def test_a_replaced_out_file_keeps_its_mode(self):
+        # Whoever set the mode on the pinned set chose who may read it. A
+        # rewrite that reset it would widen or narrow that silently.
+        os.chmod(self.path, 0o640)
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", self.path)
+        self.assertEqual(code, 0)
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o640)
+        self.assertIn("mount-1", open(self.path).read())
+
+    def test_a_device_out_is_written_directly(self):
+        # /dev/null and a pipe cannot be replaced by a rename. They must
+        # still receive the export, or a process-substitution consumer
+        # reads an empty set.
+        es = self.serve(cluster(SNAPS, MOUNTS))
+        code, _, _ = run_tool(es.url, "--emit-mounted", "--out", os.devnull)
+        self.assertEqual(code, 0)
 
 
 class EmitClassified(ServerCase):
@@ -622,7 +701,8 @@ class EmitClassified(ServerCase):
         es = self.serve(cluster(SNAPS, MOUNTS, POLICIES))
         bad = os.path.join(tempfile.gettempdir(), "no-such-dir-106", "x.tsv")
         code, _, _ = run_tool(es.url, "--emit-classified", "--out", bad)
-        self.assertEqual(code, 1)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(es.requests, [])
 
     def test_out_receives_the_table_and_stdout_stays_empty(self):
         es = self.serve(cluster(SNAPS, MOUNTS, POLICIES))

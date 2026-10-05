@@ -145,6 +145,7 @@ import ssl
 import stat
 import statistics
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -615,19 +616,86 @@ def fetch_mounted_set(args: argparse.Namespace) -> dict[str, dict]:
     return mounted
 
 
-def open_emit_sink(args: argparse.Namespace):
-    """Where an emit mode's machine-readable output goes.
+def checked_out(parser: argparse.ArgumentParser, path: str) -> str:
+    """How --out will be written, decided before the first request.
 
-    Returns (file, close_it). Without --out that is stdout, so the old
-    `--emit-mounted > file.txt` pipe still works. `getattr` rather than
-    attribute access keeps the emit functions callable with a Namespace that
-    predates the flag. Raises OSError if FILE cannot be opened; the caller
-    reports it.
+    Returns "replace" for a regular file, or a path that does not exist yet,
+    in a directory this run can write to: the export goes to a temporary
+    file beside it and a rename puts it in place whole. Returns "direct" for
+    a device, a pipe, or a regular file in a directory this run cannot write
+    to, which only an in-place write reaches. A target this run cannot write
+    is refused here, so a bad --out never costs a pass over the cluster.
     """
-    path = getattr(args, "out", None)
-    if not path:
-        return sys.stdout, False
-    return open(path, "w", encoding="utf-8"), True
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        info = None
+    except OSError as problem:
+        parser.error(f"--out {path!r} cannot be checked: "
+                     f"{problem.strerror or problem}")
+    if info is not None and stat.S_ISDIR(info.st_mode):
+        parser.error(f"--out {path!r} is a directory; name a file")
+    if info is not None and not os.access(path, os.W_OK):
+        parser.error(f"--out {path!r} cannot be written by this user, so "
+                     "it was left as it is")
+    if info is not None and not stat.S_ISREG(info.st_mode):
+        return "direct"
+    directory = os.path.dirname(os.path.realpath(path))
+    if os.access(directory, os.W_OK | os.X_OK):
+        return "replace"
+    if info is None:
+        parser.error(f"--out {path!r} cannot be created: its directory "
+                     f"{directory!r} does not exist or cannot be written")
+    return "direct"
+
+
+def write_out(args: argparse.Namespace, lines: list[str]) -> int:
+    """Write an emit mode's lines to stdout, or to --out. 0, or 1 on failure.
+
+    A replaced file keeps the mode of the file it replaces, or gets the mode
+    open() would give a new one. A failed replace leaves the earlier file as
+    it was and removes the temporary file. A failed direct write can leave
+    part of the export behind, and the message says so.
+    """
+    text = "".join(line + "\n" for line in lines)
+    if not args.out:
+        sys.stdout.write(text)
+        return 0
+    if args.out_mode == "direct":
+        try:
+            with open(args.out, "w", encoding="utf-8") as handle:
+                handle.write(text)
+        except OSError as problem:
+            print(f"cannot write --out {args.out!r}: {problem}. It may hold "
+                  "part of the export; do not use it", file=sys.stderr)
+            return 1
+        return 0
+    target = os.path.realpath(args.out)
+    try:
+        mode = stat.S_IMODE(os.stat(target).st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=os.path.dirname(target),
+        prefix="." + os.path.basename(target) + ".", delete=False)
+    try:
+        with handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(handle.name, mode)
+        os.replace(handle.name, target)
+    except OSError as problem:
+        try:
+            os.unlink(handle.name)
+        except FileNotFoundError:
+            pass
+        print(f"cannot write --out {args.out!r}: {problem}. The file there "
+              "was left as it was", file=sys.stderr)
+        return 1
+    return 0
 
 
 def emit_mounted(args: argparse.Namespace) -> int:
@@ -681,27 +749,20 @@ def emit_mounted(args: argparse.Namespace) -> int:
               f"(check the URL, the credentials and --ca-cert)",
               file=sys.stderr)
         return 1
-    try:
-        sink, close_it = open_emit_sink(args)
-    except OSError as e:
-        print(f"cannot open --out file for writing: {e}", file=sys.stderr)
-        return 1
     repo_uuid = (registered.get(args.repo) or {}).get("uuid")
-    try:
-        # Provenance, for whatever reads this back: a file generated against
-        # one repository and fed to a pass over another has to be refused
-        # rather than matched by name. Snapshot names collide across
-        # repositories routinely, uuids do not.
-        print(f"# repository: {args.repo}"
-              + (f" {repo_uuid}" if repo_uuid else ""), file=sink)
-        for name in sorted(mounted):
-            e = mounted[name]
-            print(f"{name}\t{e.get('uuid') or '-'}\t"
-                  f"{'partial' if e['partial'] else 'full'}\t"
-                  f"{','.join(sorted(e['indices']))}", file=sink)
-    finally:
-        if close_it:
-            sink.close()
+    # Provenance, for whatever reads this back: a file generated against
+    # one repository and fed to a pass over another has to be refused
+    # rather than matched by name. Snapshot names collide across
+    # repositories routinely, uuids do not.
+    lines = [f"# repository: {args.repo}"
+             + (f" {repo_uuid}" if repo_uuid else "")]
+    for name in sorted(mounted):
+        e = mounted[name]
+        lines.append(f"{name}\t{e.get('uuid') or '-'}\t"
+                     f"{'partial' if e['partial'] else 'full'}\t"
+                     f"{','.join(sorted(e['indices']))}")
+    if write_out(args, lines):
+        return 1
     print(f"# {len(mounted)} snapshot(s) in {args.repo} pinned by mounted "
           f"searchable-snapshot indices", file=sys.stderr)
     return 0
@@ -1205,18 +1266,9 @@ def emit_classified(args: argparse.Namespace,
 
     every = classified_rows(rows, split, missing)
     export = filter_classified(every, classes)
-    try:
-        sink, close_it = open_emit_sink(args)
-    except OSError as e:
-        print(f"cannot open --out file for writing: {e}", file=sys.stderr)
+    lines = ["\t".join(CLASSIFIED_HEADER)] + ["\t".join(r) for r in export]
+    if write_out(args, lines):
         return 1
-    try:
-        print("\t".join(CLASSIFIED_HEADER), file=sink)
-        for r in export:
-            print("\t".join(r), file=sink)
-    finally:
-        if close_it:
-            sink.close()
     print_classified_summary(every, missing, classes, len(export))
     return 0
 
@@ -1549,7 +1601,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", metavar="FILE",
                    help="write the emit mode's machine-readable output to "
                         "FILE instead of stdout (requires --emit-mounted or "
-                        "--emit-classified)")
+                        "--emit-classified). A regular file is replaced "
+                        "whole, so a run that fails leaves the earlier one "
+                        "as it was")
     return p
 
 
@@ -1587,6 +1641,7 @@ def check_arguments(parser: argparse.ArgumentParser,
         parser.error("--out requires an emit mode (--emit-mounted or "
                      "--emit-classified); the report tables are written for "
                      "humans and are not redirected into a file")
+    args.out_mode = checked_out(parser, args.out) if args.out else None
     if args.classes is not None and not args.emit_classified:
         parser.error("--class only applies to --emit-classified")
     try:
