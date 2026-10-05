@@ -134,10 +134,27 @@ class LoadManifest(unittest.TestCase):
     def test_a_foreign_header_is_refused(self):
         # Abuse case: a file from a different tool, or a listing rather than
         # a manifest, must not be read as though its first column were `key`.
+        # Everything else here is well formed, seven columns and a marker
+        # with a valid record, so only the header check stands between this
+        # file and a delete of its first column. Neutered under
+        # "a-manifest-with-a-foreign-header-is-refused".
+        foreign = "\t".join(["object", "why", "kind", "a", "b", "c", "d"])
         with open(self.path, "w", encoding="utf-8") as handle:
-            handle.write("not\tthe\tright\theader\n")
+            handle.write(foreign + "\n" + ROW + "\n"
+                         + completion_line("u", 3, 1790000000.0))
         with self.assertRaises(ManifestError):
             load_manifest(self.path)
+
+    def test_the_same_file_under_the_real_header_reads(self):
+        # Use case paired with the foreign header test above: the identical
+        # rows and marker under the header the audit writes are a manifest.
+        # Without this, the abuse case could pass because something other
+        # than the header made the file unreadable.
+        write(self.path, ROW, complete=False)
+        with open(self.path, "a", encoding="utf-8") as handle:
+            handle.write(completion_line("u", 3, 1790000000.0))
+        self.assertEqual(load_manifest(self.path).keys,
+                         ("indices/iuuid/0/__blob",))
 
     def test_a_row_with_an_empty_key_is_refused(self):
         # Abuse case: a hand edit that blanks the first column. The reader
