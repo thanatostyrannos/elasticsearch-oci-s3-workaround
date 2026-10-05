@@ -279,6 +279,23 @@ class AShortLiveListMeetsAnUnusableDeclaration(unittest.TestCase):
                          self._code(result, WIDE_0))
         self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
 
+    def test_a_malformed_size_makes_the_extent_unreadable(self):
+        # A size a decoder passed through as a string, a float, a negative,
+        # a boolean or a null used to read as "not declared", which before
+        # the missing-size drop skipped the size check and put `__w0a` in
+        # the manifest. Each is a field this reader does not understand
+        # under a name it relies on, so the document is unreadable, not
+        # merely silent about one index. Neutered under
+        # "a-declared-count-must-be-a-whole-number".
+        for value in ("210", 210.0, -5, True, None):
+            with self.subTest(size_in_bytes=value):
+                result = self._audit(index_detail_changes={
+                    ("s2", "wide"): {"size_in_bytes": value}})
+                self.assertEqual(shards.EXTENT_UNREADABLE,
+                                 self._code(result, WIDE_0))
+                self.assertEqual(set(),
+                                 self.built.live_blob_keys & set(result.keys))
+
     def test_more_successful_shards_than_total_is_still_measured(self):
         # Elasticsearch never writes more successful shards than total. The
         # partial-snapshot waiver read that contradiction as "partial" and

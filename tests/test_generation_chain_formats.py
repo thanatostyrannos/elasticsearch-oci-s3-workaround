@@ -24,6 +24,8 @@ from generation_chain.formats.repository_data import (parse_repository_data,
 from generation_chain.formats.shard_snapshots import (parse_shard_snapshots,
                                                       segment_stem)
 from generation_chain.formats.smile import decode_smile
+from generation_chain.formats.snapshot_document import parse_snapshot_document
+from generation_chain.formats.snapshot_document import parse_snapshot_document
 
 
 def shard_blob(document, **kwargs):
@@ -166,6 +168,61 @@ class ShardDocuments(unittest.TestCase):
         self.assertIsNone(segment_stem("v__a"))
         self.assertIsNone(segment_stem("snap-x.dat"))
         self.assertIsNone(segment_stem("__a.part"))
+
+
+class SnapshotDocuments(unittest.TestCase):
+    """`snap-<uuid>.dat`: the declaration the extent check measures against."""
+
+    def body(self, **changes):
+        body = {"name": "s2", "uuid": "uuid-s2", "state": "SUCCESS",
+                "indices": ["wide"], "total_shards": 2,
+                "successful_shards": 2,
+                "index_details": {"wide": {"shard_count": 2,
+                                           "size_in_bytes": 210,
+                                           "max_segments_per_shard": 2}}}
+        body.update(changes)
+        return body
+
+    def parse(self, body):
+        return parse_snapshot_document(
+            fx.codec_wrap(json.dumps({"snapshot": body}).encode("utf-8"),
+                          codec_name="snapshot"), "snap-uuid-s2.dat")
+
+    def test_a_well_formed_document_reads_its_extent(self):
+        # The use case every refusal below is measured against. A reader
+        # that refused this shape would drop every shard of every live
+        # snapshot and report an empty manifest as a careful one.
+        extent = self.parse(self.body())
+        self.assertEqual((2, 2), (extent.total_shards,
+                                  extent.successful_shards))
+        self.assertEqual((2, 210), (extent.by_index_name["wide"].shard_count,
+                                    extent.by_index_name["wide"].size_in_bytes))
+
+    def test_absent_index_details_declares_nothing_per_index(self):
+        # Use case: a document with no index_details map is silent about
+        # every index, which the extent check reads as undeclared and drops.
+        # Refusing it outright instead would change which code an operator
+        # sees for the same missing declaration.
+        body = self.body()
+        del body["index_details"]
+        self.assertEqual({}, dict(self.parse(body).by_index_name))
+
+    def test_index_details_that_is_not_an_object_is_refused(self):
+        # Abuse case: a list where the map belongs used to read as absent.
+        # Something wrote a field this reader does not understand under a
+        # name it relies on, which is the rule repository_data applies to
+        # its own fields. Neutered under "index-details-must-be-an-object".
+        with self.assertRaises(ShapeGateError):
+            self.parse(self.body(index_details=[]))
+
+    def test_a_boolean_count_is_refused(self):
+        # Abuse case: JSON true is an int to Python, so a count a decoder
+        # turned into a boolean read as 1 and was compared as if declared.
+        # Neutered under "a-declared-count-must-be-a-whole-number".
+        for field in ("total_shards", "successful_shards"):
+            with self.subTest(field=field):
+                with self.assertRaises(ShapeGateError):
+                    self.parse(self.body(**{field: True}))
 
 
 class CodecFraming(unittest.TestCase):
