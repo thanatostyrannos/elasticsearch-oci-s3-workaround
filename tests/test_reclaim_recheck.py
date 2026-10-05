@@ -11,6 +11,7 @@ That is a time-of-check gap. It is not the absence test, and it is the only
 path left where this tool could remove a blob a running cluster still needs.
 """
 
+import io
 import json
 import os
 import struct
@@ -18,13 +19,19 @@ import sys
 import time
 import types
 import unittest
+import urllib.error
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from generation_chain.reclaim import recheck
-from generation_chain.reclaim.manifest import Derivation
+import s3rig
+from generation_chain.corroboration import ElasticsearchVeto
+from generation_chain.reclaim import cli, recheck
+from generation_chain.reclaim.manifest import Derivation, load_manifest
 from generation_chain.reclaim.transport import TransportError
+from test_reclaim_cli import (ReclaimCase, repository_keys, store,
+                              write_manifest)
 
 
 class AStaleManifestIsRefused(unittest.TestCase):
@@ -177,6 +184,138 @@ class AKeyNowProtectedStopsTheRun(unittest.TestCase):
         keys = ("indices/AAAABBBB/0/__seg1",)
         self.assertEqual(recheck.newly_protected(keys, self._veto({"AAAA"})),
                          ())
+
+
+class _ClusterAnswer:
+    def __init__(self, body):
+        self.body = json.dumps(body).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def read(self, size=-1):
+        return self.body
+
+
+def _cluster(mounted_index_uuid=None, unreachable=False):
+    """An opener answering the veto's three reads the way 9.5.2 does.
+
+    Shaped like the answers in test_generation_chain_corroboration.py: the
+    repository's snapshot list, the mount settings, the in-flight status.
+    """
+    mounted = {}
+    if mounted_index_uuid is not None:
+        mounted["frozen-idx"] = {"settings": {
+            "index.store.snapshot.snapshot_uuid": "uuid-s1",
+            "index.store.snapshot.index_uuid": mounted_index_uuid,
+            "index.store.snapshot.repository_name": "repo"}}
+    answers = iter([{"snapshots": [{"snapshot": "s2", "uuid": "uuid-s2"}]},
+                    mounted, {"snapshots": []}])
+
+    def open_it(request, timeout=None, **kwargs):
+        if unreachable:
+            raise urllib.error.URLError("connection refused")
+        return _ClusterAnswer(next(answers))
+    return open_it
+
+
+class ExecuteReChecksTheClusterBeforeDeleting(ReclaimCase):
+    """The re-check wired through the command line, not the module alone.
+
+    The tests above call `newly_protected` directly, and nothing proved that
+    `--execute` hands it the manifest's keys or acts on what comes back. This
+    is the last gate before a delete, so it is checked end to end against
+    the same rig the other reclaim tests delete from.
+    """
+
+    PROTECTED = "indices/iuuid-mounted/0/__seg1"
+    OTHER = "indices/iuuid-other/0/__seg2"
+
+    def setUp(self):
+        super().setUp()
+        with open(self.credentials_path, "w", encoding="utf-8") as handle:
+            json.dump({"s3": {"access_key_id": s3rig.TEST_ACCESS_KEY,
+                              "secret_access_key": s3rig.TEST_SECRET_KEY},
+                       "elasticsearch": {"username": "u", "password": "p"}},
+                      handle)
+        os.chmod(self.credentials_path, 0o600)
+        write_manifest(self.manifest_path, [self.PROTECTED, self.OTHER])
+
+    def execute(self, rig, opener, *cluster_args):
+        # run_cli always adds --without-elasticsearch, and these tests name
+        # a cluster instead, so the command line is built here.
+        def veto_with_fake_cluster(**kwargs):
+            return ElasticsearchVeto(opener=opener, **kwargs)
+        manifest = load_manifest(self.manifest_path)
+        args = ["--manifest", self.manifest_path, "--endpoint", rig.endpoint,
+                "--region", s3rig.TEST_REGION, "--bucket", rig.bucket,
+                "--credentials", self.credentials_path, "--execute",
+                "--approve-digest", manifest.digest,
+                "--approve-rows", str(len(manifest.keys)), *cluster_args]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch.object(cli, "ElasticsearchVeto", veto_with_fake_cluster):
+            code = cli.main(args, stdout=stdout, stderr=stderr)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def test_a_key_mounted_since_derivation_stops_the_run(self):
+        # Abuse case: a searchable snapshot mounted over a manifest key
+        # between deriving and executing. If the re-check result stopped
+        # reaching the decision, this run would delete a blob the mounted
+        # index reads from, and the index would fail later with nothing
+        # tying the failure to the sweep. Neutered under
+        # "a-re-checked-protection-refuses-the-run" and
+        # "execute-hands-the-manifest-to-the-re-check".
+        with store({self.PROTECTED: b"x", self.OTHER: b"y"}) as rig:
+            code, _stdout, _stderr = self.execute(
+                rig, _cluster(mounted_index_uuid="iuuid-mounted"),
+                "--elasticsearch", "http://127.0.0.1:9200",
+                "--es-repository", "repo")
+            attempts = list(rig.batch_delete_attempts)
+            remaining = repository_keys(rig)
+        self.assertEqual(code, cli.EXIT_APPROVAL_REFUSED)
+        self.assertEqual(attempts, [])
+        self.assertEqual(remaining, {self.PROTECTED, self.OTHER})
+
+    def test_an_unrelated_mount_lets_the_run_delete(self):
+        # Use case: a cluster with mounts elsewhere must not block a manifest
+        # none of them touch. A check that refused on any mount at all would
+        # teach operators to reach for --without-elasticsearch.
+        with store({self.PROTECTED: b"x", self.OTHER: b"y"}) as rig:
+            code, _stdout, _stderr = self.execute(
+                rig, _cluster(mounted_index_uuid="iuuid-elsewhere"),
+                "--elasticsearch", "http://127.0.0.1:9200",
+                "--es-repository", "repo")
+            remaining = repository_keys(rig)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(remaining, set())
+
+    def test_a_cluster_that_cannot_be_asked_stops_the_run(self):
+        # Abuse case: a veto that could not be fetched is not a veto that
+        # said yes. If the failure fell through to the delete, a network
+        # blip at the wrong moment would skip the one re-check the operator
+        # asked for.
+        with store({self.PROTECTED: b"x", self.OTHER: b"y"}) as rig:
+            code, _stdout, _stderr = self.execute(
+                rig, _cluster(unreachable=True),
+                "--elasticsearch", "http://127.0.0.1:9200",
+                "--es-repository", "repo")
+            attempts = list(rig.batch_delete_attempts)
+        self.assertEqual(code, cli.EXIT_APPROVAL_REFUSED)
+        self.assertEqual(attempts, [])
+
+    def test_a_cluster_named_without_its_repository_is_a_usage_error(self):
+        # Abuse case: without --es-repository the re-check has no snapshot
+        # list to read, so it cannot have run. Treating that as a pass would
+        # delete on a re-check that never happened.
+        with store({self.PROTECTED: b"x", self.OTHER: b"y"}) as rig:
+            code, _stdout, _stderr = self.execute(
+                rig, _cluster(), "--elasticsearch", "http://127.0.0.1:9200")
+            attempts = list(rig.batch_delete_attempts)
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertEqual(attempts, [])
 
 
 class TheOperatorMustChooseWhetherToRecheck(unittest.TestCase):
