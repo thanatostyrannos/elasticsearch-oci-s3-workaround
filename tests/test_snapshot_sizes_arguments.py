@@ -297,5 +297,57 @@ class Credentials(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+
+def run_main(*argv, env=None):
+    """main() on a command line, with no request allowed out.
+
+    Returns (exit code, stderr, whether a request was attempted).
+    """
+    clean = {k: v for k, v in os.environ.items()
+             if k not in ("ES_PASSWORD", "GENCHAIN_ES_API_KEY")}
+    clean.update(env or {})
+    err = io.StringIO()
+    with mock.patch.dict(os.environ, clean, clear=True), \
+            mock.patch.object(sys, "argv", ["snapshot_sizes.py", *argv]), \
+            mock.patch.object(
+                sizes.urllib.request.OpenerDirector, "open",
+                side_effect=sizes.urllib.error.URLError("blocked")) as opened, \
+            contextlib.redirect_stderr(err), \
+            contextlib.redirect_stdout(io.StringIO()):
+        try:
+            code = sizes.main()
+        except SystemExit as exc:
+            code = exc.code
+    return code, err.getvalue(), opened.called
+
+
+class ACredentialInTheEndpointIsRefused(unittest.TestCase):
+    """--es is a host and a port. A password in it is a password on argv."""
+
+    def test_a_user_and_password_in_es_are_refused_unechoed(self):
+        # The password shows in ps and shell history, is never used to
+        # authenticate, and was printed again in every failure line.
+        for es in ("https://bob:hunter2@127.0.0.1:1",
+                   "ftp://bob:hunter2@127.0.0.1:1"):
+            with self.subTest(es=es):
+                code, err, sent = run_main("--es", es, "--repo", "r")
+                self.assertEqual(code, 2)
+                self.assertNotIn("hunter2", err)
+                self.assertFalse(sent)
+
+    def test_a_user_name_alone_in_es_is_refused(self):
+        # A name without a password still marks a URL someone meant to carry
+        # a credential, and it is never the --user the run authenticates as.
+        code, _, sent = run_main("--es", "https://bob@127.0.0.1:1",
+                                 "--repo", "r")
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_a_plain_host_and_port_is_accepted(self):
+        # The counterpart: an ordinary endpoint must get as far as a request.
+        code, _, sent = run_main("--es", "https://127.0.0.1:1", "--repo", "r")
+        self.assertTrue(sent)
+
+
 if __name__ == "__main__":
     unittest.main()

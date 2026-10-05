@@ -179,15 +179,22 @@ def checked_endpoint(parser: argparse.ArgumentParser, raw: str) -> str:
     trusted. What comes back is rebuilt from the parts that passed the check,
     so a query string or a fragment typed into --es cannot reappear in the
     middle of a request path further down.
+
+    No refusal quotes the raw value, because a value carrying a user name
+    and password before the host would print the password again.
     """
     split = urllib.parse.urlsplit(raw)
     if split.scheme not in ES_SCHEMES:
-        parser.error(f"--es is {raw!r}; only http and https are accepted, "
-                     f"so a {split.scheme or '(no scheme)'!r} value cannot "
-                     f"be opened")
+        parser.error(f"--es has the scheme {split.scheme or '(none)'!r}; "
+                     f"only http and https are accepted, so it cannot be "
+                     f"opened")
     if not split.hostname:
-        parser.error(f"--es is {raw!r} and names no host, so there is "
-                     f"nothing to connect to")
+        parser.error("--es names no host, so there is nothing to connect to")
+    if split.username is not None or split.password is not None:
+        parser.error("--es carries a user name or password before the host. "
+                     "That shows in the process list and is never used to "
+                     "authenticate. Pass --user with --password-file, or "
+                     "--api-key-file")
     return urllib.parse.urlunsplit(
         (split.scheme, split.netloc, split.path.rstrip("/"), "", ""))
 
