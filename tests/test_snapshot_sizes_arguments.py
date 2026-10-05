@@ -349,5 +349,42 @@ class ACredentialInTheEndpointIsRefused(unittest.TestCase):
         self.assertTrue(sent)
 
 
+
+class PlainHttpCarriesNoCredential(unittest.TestCase):
+    """A credential goes to a remote cluster over TLS or not at all."""
+
+    def test_a_password_over_plain_http_to_a_remote_host_is_refused(self):
+        # Basic auth over http hands the cluster password to every host on
+        # the path. The run has to stop before the first request carries it.
+        code, _, sent = run_main(
+            "--es", "http://es.example:9200", "--repo", "r", "--user", "bob",
+            env={"ES_PASSWORD": "hunter2"})
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_an_api_key_over_plain_http_to_a_remote_host_is_refused(self):
+        code, _, sent = run_main(
+            "--es", "http://es.example:9200", "--repo", "r",
+            env={"GENCHAIN_ES_API_KEY": "id:key"})
+        self.assertEqual(code, 2)
+        self.assertFalse(sent)
+
+    def test_a_credential_over_plain_http_to_loopback_is_accepted(self):
+        # kubectl port-forward serves the cluster on localhost, and the
+        # credential never leaves the host. Refusing it would break the
+        # documented lab invocation.
+        for host in ("127.0.0.1", "localhost", "[::1]"):
+            with self.subTest(host=host):
+                _, _, sent = run_main(
+                    "--es", f"http://{host}:1", "--repo", "r",
+                    "--user", "bob", env={"ES_PASSWORD": "hunter2"})
+                self.assertTrue(sent)
+
+    def test_plain_http_without_a_credential_is_accepted(self):
+        # An open lab cluster has nothing to leak and must still be read.
+        _, _, sent = run_main("--es", "http://es.example:9200", "--repo", "r")
+        self.assertTrue(sent)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -136,6 +136,7 @@ import argparse
 import base64
 import collections
 import datetime as dt
+import ipaddress
 import json
 import math
 import os
@@ -197,6 +198,16 @@ def checked_endpoint(parser: argparse.ArgumentParser, raw: str) -> str:
                      "--api-key-file")
     return urllib.parse.urlunsplit(
         (split.scheme, split.netloc, split.path.rstrip("/"), "", ""))
+
+
+def is_loopback(host) -> bool:
+    """True when host names this machine: localhost or a loopback address."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def path_segment(name: str) -> str:
@@ -1470,8 +1481,18 @@ def check_arguments(parser: argparse.ArgumentParser,
     if args.batch < 1:
         parser.error(f"--batch must be at least 1 (got {args.batch})")
 
+    scheme = urllib.parse.urlsplit(args.es).scheme
+    if args.ca_cert and scheme != "https":
+        parser.error("--ca-cert applies only to an https --es; with http "
+                     "nothing is verified and the CA would go unused")
     checked_ca_cert(parser, args.ca_cert)
     resolve_credentials(parser, args)
+    if scheme == "http" and (args.password or args.api_key_value) \
+            and not is_loopback(urllib.parse.urlsplit(args.es).hostname):
+        parser.error("--es is plain http to a host other than this one, and "
+                     "a credential is configured, so it would cross the "
+                     "network in the clear. Use https, or reach the cluster "
+                     "through a port-forward on localhost")
 
     if args.emit_mounted and args.emit_classified:
         parser.error("--emit-mounted and --emit-classified are mutually "

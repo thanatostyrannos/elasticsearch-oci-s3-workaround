@@ -811,6 +811,14 @@ class Tls(ServerCase):
             self.assertEqual(code, 2)
         self.assertEqual(es.requests, [])
 
+    def test_a_ca_cert_for_a_plain_http_endpoint_is_refused(self):
+        # A CA named for an http cluster is never used, so the operator who
+        # passed it believes the connection is verified when nothing is.
+        es = self.serve(cluster(SNAPS))
+        code, _, _ = run_tool(es.url, "--ca-cert", self.cert)
+        self.assertEqual(code, 2)
+        self.assertEqual(es.requests, [])
+
     def test_the_context_is_verified_and_floors_tls_at_1_2(self):
         # The floor must not depend on the host's OpenSSL build.
         args = mock.Mock(es="https://es.example:9200", ca_cert=self.cert)
