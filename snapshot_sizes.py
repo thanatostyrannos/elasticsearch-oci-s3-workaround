@@ -140,6 +140,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import ssl
 import stat
 import statistics
@@ -363,6 +364,11 @@ def resolve_credentials(parser: argparse.ArgumentParser,
                      "colon would show in the process list. Put the password "
                      f"in a 0600 file and pass --password-file PATH, or set "
                      f"{PASSWORD_ENV}")
+    if args.password_argv is not None:
+        parser.error("--password takes no value on the command line, because "
+                     "it would show in the process list. Put the password in "
+                     "a 0600 file and pass --password-file PATH, or set "
+                     f"{PASSWORD_ENV}")
     if args.api_key is not None:
         parser.error("--api-key no longer takes a value, because it would "
                      "show in the process list. Put the key in a 0600 file "
@@ -521,6 +527,10 @@ class Parser(argparse.ArgumentParser):
     """
 
     def error(self, message):
+        # argparse quotes the whole token in an ambiguous-option message, so
+        # --pass=SECRET would print SECRET. The value after = is dropped.
+        message = re.sub(r"(ambiguous option: [^\s=]+)=.*?( could match )",
+                         r"\1\2", message, flags=re.S)
         if "--insecure" in message:
             message += (". TLS verification is always on. A lab cluster "
                         "serving a certificate it signed itself is reached "
@@ -1502,6 +1512,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--api-key", metavar="REFUSED",
                    help="refused: a key on argv shows in the process list. "
                         "Use --api-key-file")
+    p.add_argument("--password", dest="password_argv", metavar="REFUSED",
+                   help="refused: a password on argv shows in the process "
+                        "list. Use --password-file")
     p.add_argument("--ca-cert", metavar="PEM",
                    help="PEM file holding the CA that signed the cluster's "
                         "certificate. This is how a lab cluster serving its "

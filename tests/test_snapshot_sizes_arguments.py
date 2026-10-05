@@ -419,5 +419,37 @@ class PlainHttpCarriesNoCredential(unittest.TestCase):
         self.assertTrue(sent)
 
 
+
+class APasswordOnArgvIsNeverEchoed(unittest.TestCase):
+    """argparse matches a flag by any unique prefix, and quotes what it got."""
+
+    SECRET = "FAKE-hunter2"
+
+    def test_a_password_given_as_a_flag_value_is_refused_unechoed(self):
+        # --password and its abbreviations used to land on --password-file,
+        # and the refusal to open a file of that name printed the password.
+        # A CI job log keeps it.
+        for argv in (["--password", self.SECRET], ["--pass", self.SECRET],
+                     ["--pass=" + self.SECRET],
+                     ["--password=" + self.SECRET],
+                     ["--api=" + self.SECRET]):
+            with self.subTest(argv=argv):
+                code, err, sent = run_main(
+                    "--es", "https://127.0.0.1:1", "--repo", "r",
+                    "--user", "bob", *argv)
+                self.assertEqual(code, 2)
+                self.assertNotIn(self.SECRET, err)
+                self.assertFalse(sent)
+
+    def test_the_value_stays_out_when_the_environment_also_has_one(self):
+        # The documented CI path exports ES_PASSWORD. A job that also passes
+        # --pass=$PW must not move the secret into the job log.
+        code, err, _ = run_main(
+            "--es", "https://127.0.0.1:1", "--repo", "r", "--user", "bob",
+            "--pass=" + self.SECRET, env={"ES_PASSWORD": "fromenv"})
+        self.assertEqual(code, 2)
+        self.assertNotIn(self.SECRET, err)
+
+
 if __name__ == "__main__":
     unittest.main()
