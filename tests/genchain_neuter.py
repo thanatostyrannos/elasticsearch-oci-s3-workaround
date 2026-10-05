@@ -70,6 +70,7 @@ MODULES = [
     "tests.test_reclaim_recheck",
     "tests.test_reclaim_target_binding",
     "tests.test_transport_targets",
+    "tests.test_generation_chain_formats",
     "tests.test_security_findings",
 ]
 
@@ -161,6 +162,39 @@ CASES = [
      "    if unaccounted:", "    if False:"),
     ("the-catalog-s-two-halves-must-agree", "formats/repository_data.py",
      "            if index_uuid not in indices:", "            if False:"),
+    ("a-catalog-without-a-snapshots-array-is-refused",
+     "formats/repository_data.py",
+     "    if \"snapshots\" not in document:\n        raise ShapeGateError(\n"
+     "            f\"generation {generation} has no snapshots array\")\n"
+     "    raw = document[\"snapshots\"]\n",
+     "    raw = document.get(\"snapshots\", [])\n"),
+    ("the-snapshots-field-must-be-a-list",
+     "formats/repository_data.py",
+     "    if not isinstance(raw, list):\n        raise ShapeGateError(\n"
+     "            f\"generation {generation} has a {type(raw).__name__} where the \"\n"
+     "            \"snapshots array belongs\")",
+     "    if not isinstance(raw, list):\n        raw = list(raw)"),
+    ("a-lookup-entry-must-be-two-strings",
+     "formats/repository_data.py",
+     "    for key, value in lookup.items():\n"
+     "        if not isinstance(key, str) or not isinstance(value, str):",
+     "    for key, value in lookup.items():\n        if False:"),
+    ("a-catalog-snapshot-needs-a-uuid",
+     "formats/repository_data.py",
+     "        if not isinstance(uuid, str) or not uuid:\n"
+     "            raise ShapeGateError(\n"
+     "                f\"generation {generation} has a snapshot with no uuid\")",
+     "        if False:\n            raise ShapeGateError(\n"
+     "                f\"generation {generation} has a snapshot with no uuid\")"),
+    ("a-shard-document-without-a-files-array-is-refused",
+     "formats/shard_snapshots.py",
+     "    if not isinstance(raw, list):\n        raise ShapeGateError(\n"
+     "            f\"{where} has no files array; the field may have been renamed\")",
+     "    if not isinstance(raw, list):\n        raw = []"),
+    ("a-snapshot-may-name-only-declared-files",
+     "formats/shard_snapshots.py",
+     "        if name not in physical:\n",
+     "        if name not in physical:\n            continue\n        if False:\n"),
     ("an-absent-shard-generations-list-is-refused",
      "formats/repository_data.py",
      "    if \"shard_generations\" not in entry:\n        raise ShapeGateError(",

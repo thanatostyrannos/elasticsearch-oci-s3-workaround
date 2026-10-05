@@ -64,41 +64,68 @@ class RootGenerationKeys(unittest.TestCase):
         self.assertIsNone(root_generation_number("index.latest"))
 
 
+def _empty_catalog(**changes):
+    """A catalog that passes every gate and holds no snapshot.
+
+    Each shape-gate test below changes one field of this. Built complete,
+    because a document missing something else is refused by whichever
+    check reads first, and the test then passes with its own check gone.
+    """
+    document = {"min_version": "7.12.0", "uuid": "u", "cluster_id": "c",
+                "snapshots": [], "indices": {},
+                "index_metadata_identifiers": {}}
+    document.update(changes)
+    return document
+
+
 class RepositoryDataShapeGate(unittest.TestCase):
 
     def parse(self, document):
-        document.setdefault("min_version", "7.12.0")
         return parse_repository_data(json.dumps(document).encode(), 4)
+
+    def assertRefusedByTheShapeGate(self, document):
+        # The floor check raises UnsupportedRepository, a ShapeGateError
+        # too. A test that accepted it would pass on the floor alone.
+        with self.assertRaises(ShapeGateError) as caught:
+            self.parse(document)
+        self.assertNotIsInstance(caught.exception, UnsupportedRepository)
 
     def test_a_catalog_with_both_halves_present_parses(self):
         # The use case the gate has to let through, including a `_na_` uuid,
         # which is what a repository that has never been assigned one writes.
-        parsed = self.parse({
-            "uuid": "_na_",
-            "snapshots": [{"name": "s", "uuid": "u",
-                           "index_metadata_lookup": {"i": "L"}}],
-            "indices": {"idx": {"id": "i", "snapshots": ["u"],
-                                "shard_generations": ["g", None]}},
-            "index_metadata_identifiers": {"L": "blob"}})
+        parsed = self.parse(_empty_catalog(
+            uuid="_na_",
+            snapshots=[{"name": "s", "uuid": "u",
+                        "index_metadata_lookup": {"i": "L"}}],
+            indices={"idx": {"id": "i", "snapshots": ["u"],
+                             "shard_generations": ["g", None]}},
+            index_metadata_identifiers={"L": "blob"}))
         self.assertEqual(parsed.repository_uuid, "_na_")
         self.assertEqual(parsed.indices["i"].shard_generation(1), None)
         self.assertEqual(parsed.indices["i"].shard_generation(9), None)
+
+    def test_a_catalog_holding_no_snapshot_parses(self):
+        # Use case paired with the refusals below: the base they each change
+        # one field of is a catalog the gate accepts. Without this, every
+        # refusal could be the base failing for some other reason.
+        self.assertEqual({}, dict(self.parse(_empty_catalog()).snapshots))
 
     def test_a_missing_snapshots_array_is_never_an_empty_catalog(self):
         # Abuse case, and the single most expensive misreading available. An
         # empty catalog says every snapshot in the previous generation was
         # just deleted, which is the largest manifest this tool could produce.
-        with self.assertRaises(ShapeGateError):
-            self.parse({"uuid": "u", "indices": {}})
+        # Neutered under "a-catalog-without-a-snapshots-array-is-refused".
+        document = _empty_catalog()
+        del document["snapshots"]
+        self.assertRefusedByTheShapeGate(document)
 
     def test_a_shard_document_is_not_mistaken_for_a_catalog(self):
         # A BlobStoreIndexShardSnapshots has a `snapshots` field too, and it
         # is an object. Requiring a list is the second guard behind the
         # key-depth check, so a shard document that reached this parser by
         # some other route still cannot become a repository history.
-        with self.assertRaises(ShapeGateError):
-            self.parse({"uuid": "u", "files": [],
-                        "snapshots": {"s": {"files": []}}, "indices": {}})
+        # Neutered under "the-snapshots-field-must-be-a-list".
+        self.assertRefusedByTheShapeGate(_empty_catalog(snapshots={}))
 
     def test_a_lookup_entry_that_is_not_two_strings_is_refused(self):
         # Abuse case, and the decision is the refusal itself rather than what
@@ -106,23 +133,24 @@ class RepositoryDataShapeGate(unittest.TestCase):
         # refusal nobody wrote: the entry vanishes, nothing is recorded, and
         # the live set built from what remains is short by one index. Every
         # silent filter in this module is one of these waiting to happen.
-        # The document is otherwise consistent, so this isolates the typing
+        # The document is otherwise complete, so this isolates the typing
         # check from the completeness cross-check that would also catch a
-        # lookup gone short.
-        with self.assertRaises(ShapeGateError):
-            self.parse({"uuid": "u",
-                        "snapshots": [{"name": "s", "uuid": "u2",
-                                       "index_metadata_lookup": {"i": 12345}}],
-                        "indices": {"idx": {"id": "i", "snapshots": ["u2"],
-                                            "shard_generations": ["g"]}}})
+        # lookup gone short. Neutered under
+        # "a-lookup-entry-must-be-two-strings".
+        self.assertRefusedByTheShapeGate(_empty_catalog(
+            snapshots=[{"name": "s", "uuid": "u2", "state": 1,
+                        "index_metadata_lookup": {"i": 12345}}],
+            indices={"idx": {"id": "i", "snapshots": ["u2"],
+                             "shard_generations": ["g"]}}))
 
     def test_a_snapshot_with_no_uuid_is_refused(self):
         # Abuse case. Snapshots are compared between generations by uuid, so a
         # catalog whose entries cannot be identified would make every snapshot
-        # in it look deleted in the next generation.
-        with self.assertRaises(ShapeGateError):
-            self.parse({"uuid": "u", "indices": {},
-                        "snapshots": [{"name": "s"}]})
+        # in it look deleted in the next generation. Neutered under
+        # "a-catalog-snapshot-needs-a-uuid".
+        self.assertRefusedByTheShapeGate(_empty_catalog(
+            snapshots=[{"name": "s", "state": 1,
+                        "index_metadata_lookup": {}}]))
 
 
 class ShardDocuments(unittest.TestCase):
@@ -143,20 +171,28 @@ class ShardDocuments(unittest.TestCase):
         # document once deleted 96.4% of a rig repository by bytes, because a
         # document that yielded no names read as "this shard references
         # nothing" instead of as a document nobody could parse.
+        # With no snapshot entry either, nothing later in the parser can
+        # refuse it, so only the missing-files check stands. Neutered under
+        # "a-shard-document-without-a-files-array-is-refused".
         with self.assertRaises(ShapeGateError):
             parse_shard_snapshots(shard_blob({
-                "fileList": [{"name": "__a"}],
-                "snapshots": {"s1": {"files": []}}}), "where")
+                "fileList": [{"name": "__a", "physical_name": "_0.cfs"}],
+                "snapshots": {}}), "where")
 
     def test_a_snapshot_naming_a_file_the_document_does_not_declare_raises(self):
         # Abuse case for a half-decoded document. The `files` array and the
         # per-snapshot lists are written from one state, so a disagreement
         # means one of them was decoded wrongly and there is no way to tell
         # which. Picking a half would attribute a file list nobody wrote.
+        # The list carries its commit, so the missing-commit gate cannot be
+        # what refuses it. Neutered under
+        # "a-snapshot-may-name-only-declared-files".
         with self.assertRaises(ShapeGateError):
             parse_shard_snapshots(shard_blob({
-                "files": [{"name": "__a", "physical_name": "_0.cfs"}],
-                "snapshots": {"s1": {"files": ["__a", "__ghost"]}}}), "where")
+                "files": [{"name": "__a", "physical_name": "_0.cfs"},
+                          {"name": "v__b", "physical_name": "segments_3"}],
+                "snapshots": {"s1": {"files": ["__a", "v__b", "__ghost"]}}}),
+                "where")
 
     def test_one_predicate_decides_what_a_segment_is(self):
         # Two predicates that disagree about what a segment is will always end
