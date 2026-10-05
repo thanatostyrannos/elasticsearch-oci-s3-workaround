@@ -72,6 +72,11 @@ MODULES = [
     "tests.test_transport_targets",
     "tests.test_path_and_endpoint_validation",
     "tests.test_store_tls_floor",
+    "tests.test_generation_chain_exit_codes",
+    "tests.test_generation_chain_forbidden_method",
+    "tests.test_refuse_redirects",
+    "tests.test_response_body_caps",
+    "tests.test_reclaim_protocol",
     "tests.test_generation_chain_formats",
     "tests.test_security_findings",
 ]
