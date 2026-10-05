@@ -195,6 +195,15 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
         result = self._rewrite_s2(lambda b: b.update(name="some-other-name"))
         self._assert_condemns_nothing_in_wide(result)
 
+    def test_an_index_listed_twice_drops_the_snapshots_shards(self):
+        # Elasticsearch never lists an index twice. The total check summed
+        # each listing, so a repeated name made a total two shards too high
+        # add up: the duplicate hid the very overstatement the total exists
+        # to catch. Neutered under "a-snapshot-lists-each-index-once".
+        result = self._rewrite_s2(lambda b: b.update(
+            indices=["wide", "wide"], total_shards=4, successful_shards=4))
+        self._assert_condemns_nothing_in_wide(result)
+
     def test_a_well_formed_snapshot_document_still_passes(self):
         # Baseline for the refusals above. If a normal document were refused,
         # every audit would drop every shard.

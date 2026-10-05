@@ -760,9 +760,8 @@ def _measure_against(extent, snapshot_name: str, touched: Set[str],
 
     total_read = 0
     for index_name in sorted(extent.index_names):
-        index_uuid = by_name.get(index_name)
-        if index_uuid is None:
-            continue
+        # Every declared name passed the absent check above, so it is a key.
+        index_uuid = by_name[index_name]
         read = _shards_naming(histories, index_uuid, snapshot_name)
         total_read += len(read)
         declared = extent.by_index_name.get(index_name)
@@ -803,7 +802,7 @@ def _measure_against(extent, snapshot_name: str, touched: Set[str],
                 f"{declared.size_in_bytes} bytes for index {index_name!r} "
                 f"and the file lists this run read add up to {total}"))
 
-    if extent.total_shards is not None and total_read != extent.total_shards:
+    if total_read != extent.total_shards:
         _drop_indices(histories, dropped, touched, Doubt(
             EXTENT_TOTAL_SHARDS,
             f"snapshot {snapshot_name!r} declares {extent.total_shards} shard(s) "

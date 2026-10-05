@@ -104,6 +104,10 @@ def parse_snapshot_document(data: bytes, where: str) -> SnapshotExtent:
             isinstance(i, str) for i in indices):
         raise ShapeGateError(
             f"{where} declares no usable indices list, so it states no extent")
+    if len(set(indices)) != len(indices):
+        raise ShapeGateError(
+            f"{where} lists an index more than once, which Elasticsearch "
+            "never writes")
     return SnapshotExtent(
         uuid=uuid, name=name, index_names=tuple(indices),
         total_shards=_count(body, "total_shards", where),

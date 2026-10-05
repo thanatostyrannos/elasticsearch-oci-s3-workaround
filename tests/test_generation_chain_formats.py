@@ -224,6 +224,14 @@ class SnapshotDocuments(unittest.TestCase):
                 with self.assertRaises(ShapeGateError):
                     self.parse(self.body(**{field: True}))
 
+    def test_an_index_listed_twice_is_refused(self):
+        # Abuse case: a repeated index name is not something Elasticsearch
+        # writes, and the extent check counted each repetition, which let a
+        # duplicate cancel out an inflated total. Neutered under
+        # "a-snapshot-lists-each-index-once".
+        with self.assertRaises(ShapeGateError):
+            self.parse(self.body(indices=["wide", "wide"]))
+
     def test_a_body_not_nested_under_snapshot_is_refused(self):
         # Abuse case: Elasticsearch nests the body under `snapshot`, and all
         # four captured documents do. Reading the top level as the body when
