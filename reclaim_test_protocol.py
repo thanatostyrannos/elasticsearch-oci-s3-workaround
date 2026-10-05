@@ -175,7 +175,7 @@ from generation_chain.redirects import refusing_urlopen  # noqa: E402
 
 COLUMNS = ["cycle", "utc", "mode", "settle", "shards_read",
            "segments_condemned", "deleted", "failed", "unconfirmed",
-           "reclaimable", "exit"]
+           "reclaimable", "exit", "dry_exit", "exec_exit"]
 
 DELETED = re.compile(r"^deleted:\s*(\d+)", re.M)
 FAILED = re.compile(r"^failed:\s*(\d+)", re.M)
@@ -251,7 +251,7 @@ def read_secret_file(path, what):
 
 
 def counted(pattern, text):
-    """The integer a reclaim summary line reports, or zero if it said nothing.
+    """The integer a reclaim summary line reports, or None if it said nothing.
 
     Every pattern it is called with is anchored at the start of a line on
     purpose. A loose substring match over this output produced a wrong
@@ -259,7 +259,7 @@ def counted(pattern, text):
     caught it.
     """
     match = pattern.search(text)
-    return int(match.group(1)) if match else 0
+    return int(match.group(1)) if match else None
 
 
 # --elasticsearch comes from configuration, not from the network, but
@@ -442,6 +442,12 @@ def cycle(args, n, mode, outdir, log):
         cmd += ["--elasticsearch", args.elasticsearch,
                 "--es-repository", args.repository] + es_ca_flags(args)
     rc, _ = run(cmd, derive, args.timeout)
+    row = {"cycle": n, "utc": stamp, "mode": mode, "settle": note,
+           "shards_read": "?", "segments_condemned": 0, "deleted": 0,
+           "failed": 0, "unconfirmed": 0, "reclaimable": "", "exit": rc,
+           "dry_exit": None, "exec_exit": None}
+    if rc != 0:
+        return row
 
     report = read_text(derive)
     m = SEGMENTS_READ.search(report)
@@ -455,29 +461,54 @@ def cycle(args, n, mode, outdir, log):
             next(fh, None)
             segs = sum(1 for line in fh if "/__" in line.split("\t")[0])
 
-    deleted = failed = unconfirmed = 0
+    row.update(shards_read=shards_read, segments_condemned=segs,
+               reclaimable=reclaimable)
     time.sleep(EXECUTION_GAP_SECONDS)
     dry = artifact(outdir, f"dry-{n}.txt")
     base = reclaim_command(args, manifest)
-    run(base, dry, args.timeout)
+    row["dry_exit"], _ = run(base, dry, args.timeout)
     text = read_text(dry)
     dg, rw = DIGEST.search(text), ROWS.search(text)
-    if dg and rw and not args.dry_run_only:
+    if row["dry_exit"] == 0 and dg and rw and not args.dry_run_only:
         time.sleep(EXECUTION_GAP_SECONDS)
         ex = artifact(outdir, f"exec-{n}.txt")
-        run(base + ["--execute", "--approve-digest", dg.group(1),
+        row["exec_exit"], _ = run(
+            base + ["--execute", "--approve-digest", dg.group(1),
                     "--approve-rows", rw.group(1),
                     "--report", artifact(outdir, f"report-{n}.jsonl")],
             ex, args.timeout)
         got = read_text(ex)
-        deleted = counted(DELETED, got)
-        failed = counted(FAILED, got)
-        unconfirmed = counted(UNCONFIRMED, got)
+        row["deleted"] = counted(DELETED, got)
+        row["failed"] = counted(FAILED, got)
+        row["unconfirmed"] = counted(UNCONFIRMED, got)
+    return row
 
-    return {"cycle": n, "utc": stamp, "mode": mode, "settle": note,
-            "shards_read": shards_read, "segments_condemned": segs,
-            "deleted": deleted, "failed": failed, "unconfirmed": unconfirmed,
-            "reclaimable": reclaimable, "exit": rc}
+
+def stop_reason(row, n, outdir):
+    """Why the run must stop after this cycle, or None when it may go on.
+
+    Each reason is a cycle whose numbers can no longer be trusted. A tally
+    missing after an execute counts too: a refused or crashed execute
+    prints none, and reading its absence as zeros made a refusal look like
+    a cycle with nothing to delete.
+    """
+    if row["exit"]:
+        return (f"the audit exited {row['exit']} on cycle {n}. Its output is "
+                f"in {outdir}/derive-{n}.txt. Nothing was audited, so the "
+                "zeroes above mean nothing.")
+    if row["dry_exit"]:
+        return (f"the dry run exited {row['dry_exit']} on cycle {n}. Its "
+                f"output is in {outdir}/dry-{n}.txt. Nothing was approved.")
+    if row["exec_exit"]:
+        return (f"the execute exited {row['exec_exit']} on cycle {n}. Its "
+                f"output is in {outdir}/exec-{n}.txt.")
+    tally = (row["deleted"], row["failed"], row["unconfirmed"])
+    if row["exec_exit"] is not None and None in tally:
+        return (f"the execute on cycle {n} printed no complete tally. Its "
+                f"output is in {outdir}/exec-{n}.txt.")
+    if row["failed"] or row["unconfirmed"]:
+        return f"failed={row['failed']} unconfirmed={row['unconfirmed']} on cycle {n}"
+    return None
 
 
 def corroboration_credential_problem(args):
@@ -518,13 +549,14 @@ def corroboration_credential_problem(args):
 def run_cycles(args, tsv, columns, log):
     """Drive the cycles, and stop the moment a cycle stops meaning anything.
 
-    Three conditions end a run early and all three are the same kind of thing:
-    a cycle whose result can no longer be trusted. A failed or unconfirmed
-    delete says the repository has a problem. A non-zero exit says the AUDIT
-    has a problem, and that one was missed once at real cost: launched from
-    outside the repository the audit could not import its own package, every
-    cycle exited 1, and the loop carried on writing tidy rows of zeroes. A
-    hundred of those read exactly like a hundred cycles that found nothing.
+    stop_reason() names the conditions, and all of them are the same kind of
+    thing: a cycle whose result can no longer be trusted. A failed or
+    unconfirmed delete says the repository has a problem. A non-zero exit
+    says the audit or the reclaim has a problem, and that one was missed once
+    at real cost: launched from outside the repository the audit could not
+    import its own package, every cycle exited 1, and the loop carried on
+    writing tidy rows of zeroes. A hundred of those read exactly like a
+    hundred cycles that found nothing.
     """
     totals = {"deleted": 0, "failed": 0, "unconfirmed": 0, "segments": 0}
     for n in range(args.start, args.start + args.cycles):
@@ -534,22 +566,18 @@ def run_cycles(args, tsv, columns, log):
         log(f"=== cycle {n} [{mode}] ===")
         row = cycle(args, n, mode, args.out, log)
         with open(tsv, "a") as fh:
-            fh.write("\t".join(str(row[c]) for c in columns) + "\n")
-        totals["deleted"] += row["deleted"]
-        totals["failed"] += row["failed"]
-        totals["unconfirmed"] += row["unconfirmed"]
+            fh.write("\t".join("-" if row.get(c) is None else str(row[c])
+                               for c in columns) + "\n")
+        totals["deleted"] += row["deleted"] or 0
+        totals["failed"] += row["failed"] or 0
+        totals["unconfirmed"] += row["unconfirmed"] or 0
         totals["segments"] += row["segments_condemned"]
         log(f"  shards {row['shards_read']}  segments {row['segments_condemned']}"
             f"  deleted {row['deleted']}  failed {row['failed']}"
             f"  unconfirmed {row['unconfirmed']}")
-        if row["exit"]:
-            log(f"  STOPPING: the audit exited {row['exit']} on cycle {n}. "
-                f"Its output is in {args.out}/derive-{n}.txt. Nothing was "
-                "audited, so the zeroes above mean nothing.")
-            break
-        if row["failed"] or row["unconfirmed"]:
-            log(f"  STOPPING: failed={row['failed']} "
-                f"unconfirmed={row['unconfirmed']} on cycle {n}")
+        reason = stop_reason(row, n, args.out)
+        if reason:
+            log(f"  STOPPING: {reason}")
             break
         time.sleep(args.sleep)
     return totals
@@ -690,6 +718,13 @@ def prepare_output(p, args):
     except OSError as exc:
         p.error(f"--out {args.out!r} could not be created: "
                 f"{exc.__class__.__name__}: {exc.strerror or exc}")
+    for n in range(args.start, args.start + args.cycles):
+        earlier = artifact(args.out, f"manifest-{n}.tsv")
+        if os.path.exists(earlier):
+            p.error(f"{earlier} already exists, and cycle {n} of this run "
+                    "would write there. If that cycle's audit failed before "
+                    "writing, the reclaim would act on the earlier file. Pass "
+                    f"--start past {n}, or use a new --out")
     tsv = artifact(args.out, "cycles.tsv")
     if not os.path.exists(tsv):
         with open(tsv, "w") as fh:

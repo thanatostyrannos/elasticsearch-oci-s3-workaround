@@ -33,7 +33,8 @@ def _args(**over):
 def _row(n, **over):
     row = {"cycle": n, "utc": "t", "mode": "metadata", "settle": "not waited",
            "shards_read": "2/2", "segments_condemned": 0, "deleted": 1,
-           "failed": 0, "unconfirmed": 0, "reclaimable": "", "exit": 0}
+           "failed": 0, "unconfirmed": 0, "reclaimable": "", "exit": 0,
+           "dry_exit": 0, "exec_exit": 0}
     row.update(over)
     return row
 
@@ -380,6 +381,169 @@ class EsCaCert(unittest.TestCase):
         src = open(os.path.join(ROOT, "reclaim_test_protocol.py")).read()
         self.assertNotIn("CERT_NONE", src)
         self.assertNotIn("--es-insecure", src)
+
+
+class FakeSubprocesses:
+    """Stands in for protocol.run, playing the audit, dry run and execute.
+
+    Each call writes the output the real tool would write to the artifact
+    path and returns the exit code the test chose. Every command is kept so
+    a test can say which of the three ran.
+    """
+
+    DRY_TEXT = "approve-digest " + "a" * 64 + "\napprove-rows 3\n"
+    TALLY = "deleted: 3\nfailed: 0\nunconfirmed: 0\n"
+
+    def __init__(self, audit_exit=0, dry_exit=0, exec_exit=0,
+                 exec_text=TALLY, write_manifest=True):
+        self.audit_exit = audit_exit
+        self.dry_exit = dry_exit
+        self.exec_exit = exec_exit
+        self.exec_text = exec_text
+        self.write_manifest = write_manifest
+        self.commands = []
+
+    def __call__(self, cmd, out_path, timeout):
+        self.commands.append(cmd)
+        if "generation_chain.reclaim" not in cmd:
+            if self.write_manifest:
+                manifest = cmd[cmd.index("--manifest") + 1]
+                with open(manifest, "w") as fh:
+                    fh.write("key\nindices/x/0/__a\n")
+            text, code = "shard directories read: 2 of 2\n", self.audit_exit
+        elif "--execute" in cmd:
+            text, code = self.exec_text, self.exec_exit
+        else:
+            text, code = self.DRY_TEXT, self.dry_exit
+        with open(out_path, "w") as fh:
+            fh.write(text)
+        return code, text
+
+    def executes(self):
+        return [c for c in self.commands if "--execute" in c]
+
+    def reclaims(self):
+        return [c for c in self.commands if "generation_chain.reclaim" in c]
+
+
+class TheReclaimsOwnOutcomeDecidesTheCycle(unittest.TestCase):
+    """Drives the real cycle() and run_cycles() with the tools faked out.
+
+    The reclaim's exit code is the only thing that tells a refused or
+    crashed execute apart from an execute that found nothing to delete.
+    Both print no tally, and a missing tally read as zero is a clean row.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="protocol-reclaim-exit-")
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.tsv = os.path.join(self.tmp, "cycles.tsv")
+        self.addCleanup(setattr, protocol, "run", protocol.run)
+        self.addCleanup(setattr, protocol, "EXECUTION_GAP_SECONDS",
+                        protocol.EXECUTION_GAP_SECONDS)
+        protocol.EXECUTION_GAP_SECONDS = 0
+
+    def drive(self, fake, **over):
+        protocol.run = fake
+        settings = dict(out=self.tmp, cycles=3, dry_run_only=False,
+                        timeout=5, transport="s3")
+        settings.update(over)
+        args = _args(**settings)
+        return protocol.run_cycles(args, self.tsv, protocol.COLUMNS,
+                                   lambda m: None)
+
+    def cycles_run(self, fake):
+        return len([c for c in fake.commands
+                    if "generation_chain.reclaim" not in c])
+
+    def test_dry_run_only_never_sends_an_execute(self):
+        # --dry-run-only is the operator's whole guarantee that a run deletes
+        # nothing. If the gate on it stopped holding, every cycle would send
+        # a DeleteObjects against an approved manifest.
+        fake = FakeSubprocesses()
+        self.drive(fake, dry_run_only=True)
+        self.assertEqual(fake.executes(), [])
+        self.assertTrue(fake.reclaims())
+
+    def test_without_dry_run_only_the_execute_is_sent(self):
+        # The abuse case for the one above: the same run with the flag off
+        # must execute, or the dry-run-only test passes on a harness that
+        # never executes at all.
+        fake = FakeSubprocesses()
+        self.drive(fake)
+        self.assertEqual(len(fake.executes()), 3)
+
+    def test_a_refused_execute_stops_the_run(self):
+        # A refused execute prints no tally. Read as zeros, the cycle looks
+        # like one that had nothing to delete, and the run carries on
+        # issuing executes against a reclaim that is refusing them.
+        fake = FakeSubprocesses(exec_exit=3, exec_text="approval refused\n")
+        self.drive(fake)
+        self.assertEqual(self.cycles_run(fake), 1)
+
+    def test_an_execute_that_prints_no_tally_stops_the_run(self):
+        # An execute that crashed after deleting part of a batch can still
+        # exit 0 through a wrapper and print nothing countable. Zeroes in
+        # place of a missing tally hide deletes that happened.
+        fake = FakeSubprocesses(exec_text="Traceback (most recent call last)\n")
+        self.drive(fake)
+        self.assertEqual(self.cycles_run(fake), 1)
+
+    def test_a_failed_dry_run_stops_the_run(self):
+        # A dry run that exits non-zero approved nothing, so the cycle's
+        # zeroes mean nothing, the same as a broken audit's.
+        fake = FakeSubprocesses(dry_exit=2)
+        self.drive(fake)
+        self.assertEqual(self.cycles_run(fake), 1)
+
+    def test_a_clean_execute_lets_the_run_continue(self):
+        # The counterpart, so the new stops cannot pass by stopping always.
+        fake = FakeSubprocesses()
+        self.drive(fake)
+        self.assertEqual(self.cycles_run(fake), 3)
+
+    def test_a_failed_audit_runs_no_reclaim_at_all(self):
+        # A failed audit can leave an earlier manifest at this cycle's path.
+        # Approving and executing that file deletes against a repository
+        # state nobody audited.
+        fake = FakeSubprocesses(audit_exit=3, write_manifest=False)
+        with open(os.path.join(self.tmp, "manifest-1.tsv"), "w") as fh:
+            fh.write("key\nindices/x/0/__stale\n")
+        self.drive(fake)
+        self.assertEqual(fake.reclaims(), [])
+
+
+class AnEarlierManifestBlocksTheRun(unittest.TestCase):
+    """--start resumes into an --out that already holds earlier cycles."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="protocol-stale-")
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+
+    def prepare(self, start):
+        args = _args(out=self.tmp, start=start, cycles=3)
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):
+            return protocol.prepare_output(protocol.build_parser(), args)
+
+    def test_a_manifest_already_at_a_cycle_this_run_will_write_is_refused(
+            self):
+        # If the audit for that cycle fails before it writes, the file left
+        # there is a manifest from another run, and nothing in the cycle can
+        # tell it from a fresh one.
+        with open(os.path.join(self.tmp, "manifest-2.tsv"), "w") as fh:
+            fh.write("key\n")
+        with self.assertRaises(SystemExit):
+            self.prepare(start=1)
+
+    def test_manifests_of_earlier_cycles_do_not_block_a_resume(self):
+        # Resuming with --start past the last finished cycle is what the
+        # flag is for. Refusing it would make every interrupted run start
+        # again in a new directory.
+        with open(os.path.join(self.tmp, "manifest-2.tsv"), "w") as fh:
+            fh.write("key\n")
+        self.assertTrue(self.prepare(start=3).endswith("cycles.tsv"))
 
 
 if __name__ == "__main__":
