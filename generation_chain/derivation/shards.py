@@ -212,6 +212,12 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     same as an unbatched one's: a snapshot whose shards land in different
     batches must still be judged against all of them together.
 
+    A directory `_check_declared_extent` drops still has its era documents
+    parsed, by `_record_era_writers`, for the writer uuids they claim and
+    nothing else. The extent check runs before any era document is read, so
+    without that read every directory it dropped would also drop out of the
+    writer-uuid collision check below as a witness.
+
     The second pass reads era documents, one group of `groups` at a time.
     This is the expensive read the memory this package holds is actually
     spent on: `ShardDocument.by_snapshot_name` is one frozenset of blob names
@@ -255,7 +261,11 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     histories, dropped, retired = _survey_current(
         source, chain, wanted, present, owners, live_documents_here,
         live_indices, index, parsed)
+    measured = list(histories)
     _check_declared_extent(source, chain, histories, dropped, notes)
+    _record_era_writers(
+        source, chain, [location for location in measured
+                        if location not in histories], wanted, parsed)
 
     for group in _shard_batches(sorted(histories, key=_location_order), groups):
         cache: Dict[str, Optional[ShardDocument]] = {}
@@ -343,7 +353,7 @@ def _shard_batches(
 
     `groups` is the caller's plan, filtered here to the directories that
     survived the current-document and declared-extent passes; either of
-    those can drop a directory before any era document is read. Without a
+    those can drop a directory before the era pass starts. Without a
     plan, everything that survived goes into one group, which is what every
     direct caller in this package's tests gets and is the batched design's
     own one-batch case.
@@ -353,6 +363,33 @@ def _shard_batches(
     survivors = set(surviving)
     return [[location for location in group if location in survivors]
             for group in groups]
+
+
+def _record_era_writers(source: RepositorySource, chain: Chain,
+                        locations: List[ShardLocation],
+                        wanted: Dict[ShardLocation, Dict[int, Optional[str]]],
+                        parsed: ParseRecord) -> None:
+    """Parse the era documents of directories the extent check dropped.
+
+    These directories contribute nothing to the manifest, so nothing here
+    decides an attribution. `_read` records the writer uuids each document
+    claims, and that record is the only reason these reads happen: an index
+    rewritten between snapshots carries some writers in its era documents
+    and not in its current one, so a directory dropped before the era pass
+    would otherwise take those writers out of the collision check. One
+    directory at a time, each with its own cache, so no more than one
+    directory's documents are held at once.
+    """
+    for location in sorted(locations, key=_location_order):
+        current = wanted[location].get(chain.current_generation)
+        era_ids = sorted({shard_generation
+                          for shard_generation in wanted[location].values()
+                          if shard_generation not in (None, current)})
+        hint(source, [f"{location.directory}/index-{shard_generation}"
+                      for shard_generation in era_ids])
+        cache: Dict[str, Optional[ShardDocument]] = {}
+        for shard_generation in era_ids:
+            _read(source, location, shard_generation, cache, parsed)
 
 
 def _read_eras(source: RepositorySource, chain: Chain, location: ShardLocation,
@@ -411,11 +448,15 @@ def _drop_global_writer_uuid_collisions(
     check rejected, still parsed a document claiming that writer under its
     own key. When the check compared survivors only, one more fault could
     remove the contradiction and admit the forged file list it pointed at.
+    A directory the extent check dropped has its era documents parsed by
+    `_record_era_writers` for the same reason.
 
     THE LIMIT. A read that fails outright parses nothing and so records no
     writer. When that document was the only one carrying the shared writer,
     the collision goes unseen, because nothing else this run reads names
-    the writer instead.
+    the writer instead. The era documents of a directory the
+    current-document pass dropped, or of a retired index, are never read,
+    so the same holds for a writer only they carry.
 
     Neither summary has to be narrowed to afford batching. Each is bounded
     by how many Lucene writers the shards have ever had, not by how much
