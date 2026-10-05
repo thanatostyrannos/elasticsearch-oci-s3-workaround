@@ -71,6 +71,7 @@ MODULES = [
     "tests.test_reclaim_target_binding",
     "tests.test_transport_targets",
     "tests.test_path_and_endpoint_validation",
+    "tests.test_store_tls_floor",
     "tests.test_generation_chain_formats",
     "tests.test_security_findings",
 ]
@@ -463,6 +464,13 @@ CASES = [
      "    _refuse_unsendable_target(scheme, host)\n"
      "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n",
      "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n"),
+
+    # -- every https request holds TLS to one floor -------------------------
+    ("the-tls-floor-is-1-2", "tls.py",
+     "    context.minimum_version = ssl.TLSVersion.TLSv1_2\n", ""),
+    ("an-https-request-gets-the-tls-floor", "redirects.py",
+     "    if context is None and request.type == \"https\":\n"
+     "        context = client_context()\n", ""),
 
     # -- reclaim: the audit path still cannot see the deleter --------------
     ("the-audit-path-never-imports-reclaim",

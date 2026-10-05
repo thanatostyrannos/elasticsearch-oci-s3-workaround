@@ -15,7 +15,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from generation_chain import corroboration
+from generation_chain import corroboration, tls
 from generation_chain import cli
 from generation_chain.credentials import CredentialFile
 from generation_chain.paths import (FILE_ROOT_ENV_VAR, PathRefused,
@@ -256,12 +256,12 @@ class TlsFloor(unittest.TestCase):
         # ssl.create_default_context leaves minimum_version at
         # MINIMUM_SUPPORTED on the Python this project supports, which lets
         # the host's OpenSSL build decide. That is a different answer on
-        # every machine.
-        context = corroboration._tls_context(None)
+        # every machine. Neutered under "the-tls-floor-is-1-2".
+        context = tls.client_context(None)
         self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
 
     def test_verification_is_still_on(self):
-        context = corroboration._tls_context(None)
+        context = tls.client_context(None)
         self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
         self.assertTrue(context.check_hostname)
 
