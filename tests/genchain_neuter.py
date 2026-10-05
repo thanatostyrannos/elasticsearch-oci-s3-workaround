@@ -350,6 +350,11 @@ CASES = [
      "    protected = set()"),
 
     # -- the Lucene commit cross-check (issue #1) -------------------------
+    ("a-blob-carries-the-codec-it-is-read-as", "formats/codec.py",
+     "    if name != codec_name.encode(\"utf-8\"):", "    if False:"),
+    ("the-codec-footer-names-algorithm-zero", "formats/codec.py",
+     "    if footer_magic != FOOTER_MAGIC or algorithm != CHECKSUM_ALGORITHM:",
+     "    if footer_magic != FOOTER_MAGIC:"),
     ("a-file-list-must-cover-what-the-commit-requires",
      "formats/shard_snapshots.py",
      "    if missing:", "    if False:"),

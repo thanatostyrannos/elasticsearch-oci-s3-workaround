@@ -110,7 +110,7 @@ def run(stream: TextIO) -> int:
     check("index.latest decode", parse_index_latest(b"\x00" * 7 + b"\x05"), 5)
     check("codec magic", CODEC_MAGIC, 0x3FD76C17)
     try:
-        unwrap(b"\x00" * 40)
+        unwrap(b"\x00" * 40, "snapshots")
     except Exception:
         pass
     else:

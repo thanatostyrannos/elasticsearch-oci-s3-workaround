@@ -77,7 +77,7 @@ class ReadIdentity(unittest.TestCase):
     def forge(self, template, change):
         """Rewrite one real document, keeping everything the test is not aiming at."""
         with open(os.path.join(self.root, template), "rb") as handle:
-            document = unwrap(handle.read())
+            document = unwrap(handle.read(), "snapshots")
         change(document)
         return fx.codec_wrap(json.dumps(document).encode())
 

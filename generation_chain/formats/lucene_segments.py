@@ -48,14 +48,12 @@ from __future__ import annotations
 
 import re
 import struct
-import zlib
 from typing import FrozenSet, Set
 
 from ..errors import BlobFormatError
-from .codec import CODEC_MAGIC, FOOTER_MAGIC, read_vint
+from .codec import CODEC_MAGIC, FOOTER_LENGTH, check_footer, read_vint
 
 SEGMENTS_CODEC_NAME = "segments"
-FOOTER_LENGTH = 16
 # Lucene names a segment "_" followed by a base36 counter, and writes that
 # exact shape into the name field of every segment entry. A value that does
 # not match it is proof the read is no longer aligned with the format, not a
@@ -219,18 +217,7 @@ def _check_footer(data: bytes, body_end: int) -> None:
         raise SegmentsFileError(
             "segments_N has trailing bytes after its footer, or its body "
             "runs past where the footer should start")
-    footer_magic = struct.unpack_from(">I", data, body_end)[0]
-    algorithm_id = struct.unpack_from(">I", data, body_end + 4)[0]
-    if footer_magic != FOOTER_MAGIC or algorithm_id != 0:
-        raise SegmentsFileError("segments_N is missing its Lucene codec footer")
-    stored_crc = struct.unpack_from(">Q", data, body_end + 8)[0]
-    computed_crc = zlib.crc32(data[:body_end + 8]) & 0xFFFFFFFF
-    if stored_crc != computed_crc:
-        # Same reasoning as the outer document footer in codec.py: a blob
-        # half-overwritten or truncated in place still carries a plausible
-        # header, and the checksum is the only thing that catches it.
-        raise SegmentsFileError(
-            "segments_N footer checksum does not match its body")
+    check_footer(data, body_end, SegmentsFileError, "segments_N")
 
 
 def required_segment_names(data: bytes) -> FrozenSet[str]:

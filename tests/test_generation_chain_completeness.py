@@ -517,7 +517,7 @@ def _strip_index_details(root: str, uuid: str) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     body.pop("index_details", None)
     repo.overwrite(root, key, repo.codec_wrap(
         json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
@@ -529,7 +529,7 @@ def _rewrite_snapshot_body(root: str, uuid: str, change) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     change(body)
     repo.overwrite(root, key, repo.codec_wrap(
         json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
@@ -541,7 +541,7 @@ def _declare_an_extra_index(root: str, uuid: str, index_name: str) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     body["indices"] = sorted(list(body["indices"]) + [index_name])
     body.setdefault("index_details", {})[index_name] = {
         "shard_count": 1, "size_in_bytes": 42, "max_segments_per_shard": 1}

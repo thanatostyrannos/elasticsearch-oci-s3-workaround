@@ -291,7 +291,7 @@ class CodecFraming(unittest.TestCase):
         for deflate in (False, True):
             self.assertEqual(
                 unwrap(fx.codec_wrap(b'{"files": [], "snapshots": {}}',
-                                     deflate=deflate)),
+                                     deflate=deflate), "snapshots"),
                 {"files": [], "snapshots": {}})
 
     def test_a_blob_whose_checksum_does_not_match_is_refused(self):
@@ -303,15 +303,15 @@ class CodecFraming(unittest.TestCase):
         blob = bytearray(fx.codec_wrap(b'{"files": [], "snapshots": {}}'))
         blob[-1] ^= 0xFF
         with self.assertRaises(BlobFormatError):
-            unwrap(bytes(blob))
+            unwrap(bytes(blob), "snapshots")
 
     def test_framing_that_is_absent_or_truncated_is_refused(self):
         # Abuse case for the two shapes a partial download takes.
         with self.assertRaises(BlobFormatError):
-            unwrap(b"\x00" * 40)
+            unwrap(b"\x00" * 40, "snapshots")
         full = fx.codec_wrap(b'{"files": [], "snapshots": {}}')
         with self.assertRaises(BlobFormatError):
-            unwrap(full[:12])
+            unwrap(full[:12], "snapshots")
 
     def test_an_over_long_vint_in_the_header_is_refused_as_a_blob_error(self):
         # Abuse case. Both Lucene readers share one vint decoder. If the shared
@@ -321,8 +321,39 @@ class CodecFraming(unittest.TestCase):
         # decide which blobs are condemned.
         blob = struct.pack(">I", 0x3FD76C17) + b"\x80" * 8 + b"\x00" * 32
         with self.assertRaisesRegex(BlobFormatError, "vint") as caught:
-            unwrap(blob)
+            unwrap(blob, "snapshots")
         self.assertIs(type(caught.exception), BlobFormatError)
+
+    def test_a_blob_framed_for_another_codec_is_refused(self):
+        # Abuse case: Elasticsearch names the format in the header,
+        # `snapshots` for a shard document and `snapshot` for a snapshot
+        # document. A reader that skipped the name decoded either as the
+        # other, so a misdirected read became a document of the wrong kind.
+        # Neutered under "a-blob-carries-the-codec-it-is-read-as".
+        blob = fx.codec_wrap(b'{"files": [], "snapshots": {}}',
+                             codec_name="snapshot")
+        with self.assertRaises(BlobFormatError):
+            unwrap(blob, "snapshots")
+
+    def test_a_format_version_elasticsearch_never_wrote_is_refused(self):
+        # Abuse case: ChecksumBlobStoreFormat writes version 1 and reads
+        # nothing else. A later version may lay out its payload differently,
+        # and reading it as version 1 would attribute what it misread.
+        blob = fx.codec_wrap(b'{"files": [], "snapshots": {}}', version=2)
+        with self.assertRaises(BlobFormatError):
+            unwrap(blob, "snapshots")
+
+    def test_a_footer_naming_another_checksum_algorithm_is_refused(self):
+        # Abuse case: Lucene writes checksum algorithm 0, a CRC32, and
+        # refuses any other. The segments_N reader already refused another
+        # id while this reader did not, so the same footer was accepted in
+        # one place and refused in the other. Neutered under
+        # "the-codec-footer-names-algorithm-zero".
+        framed = fx.codec_wrap(b'{"files": [], "snapshots": {}}')
+        body = framed[:-16] + struct.pack(">II", 0xC02893E8, 7)
+        blob = body + struct.pack(">Q", zlib.crc32(body) & 0xFFFFFFFF)
+        with self.assertRaises(BlobFormatError):
+            unwrap(blob, "snapshots")
 
 
 class Smile(unittest.TestCase):

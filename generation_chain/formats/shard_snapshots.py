@@ -95,7 +95,7 @@ def is_segment_blob(name: str) -> bool:
 
 def parse_shard_snapshots(data: bytes, where: str) -> ShardDocument:
     """Decode one shard document and put it through the shape gate."""
-    document = unwrap(data)
+    document = unwrap(data, "snapshots")
     if not isinstance(document, dict):
         raise ShapeGateError(
             f"{where} decoded to a {type(document).__name__}, not a shard "

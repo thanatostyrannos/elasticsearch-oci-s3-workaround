@@ -83,7 +83,7 @@ def snapshot_document_key(uuid: str) -> str:
 
 def parse_snapshot_document(data: bytes, where: str) -> SnapshotExtent:
     """Decode one `snap-<uuid>.dat` and read the extent it declares."""
-    document = unwrap(data)
+    document = unwrap(data, "snapshot")
     if not isinstance(document, dict):
         raise ShapeGateError(
             f"{where} decoded to a {type(document).__name__}, not a snapshot "
