@@ -835,22 +835,24 @@ def bucket_prefix(base_path):
     return base + "/"
 
 
+# A backing index of the data stream named by %s, as Elasticsearch names it:
+# .ds-<stream>-<yyyy.MM.dd>-<generation>. ILM prefixes partial- or restored-
+# when it mounts one as a searchable snapshot.
+OWN_INDEX = r"(?:partial-|restored-)?\.ds-%s-\d{4}\.\d{2}\.\d{2}-\d{6}"
+
+
 def teardown_index_scope(resolved, data_stream):
     """Names from a _resolve response that teardown may delete.
 
     Every index this harness creates is a backing index of its own data
-    stream, so the name carries -<data_stream>- somewhere inside. ILM keeps
-    that intact when it mounts a searchable snapshot, prefixing partial- or
-    restored- onto the front, so the frozen mounts match too.
-
-    An index that merely starts with the prefix belongs to someone else.
-    check_prefix_free refuses to start a run while any such index exists, so
-    the harness never shares a namespace with one, and teardown has no reason
-    to reach for it. It only ever reached the wrong thing.
+    stream, and ILM keeps that name intact when it mounts a searchable
+    snapshot, so the frozen mounts match too. The whole name has to match
+    OWN_INDEX. A backing index of a stream whose name merely contains this
+    one, such as x-<stream> or <stream>-old, belongs to someone else.
     """
-    marker = "-%s-" % data_stream
+    pattern = re.compile(OWN_INDEX % re.escape(data_stream))
     return [e["name"] for e in resolved.get("indices", [])
-            if marker in e["name"]]
+            if pattern.fullmatch(e["name"])]
 
 
 def slm_schedule(version, interval_text, override):
