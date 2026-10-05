@@ -44,27 +44,31 @@ from test_lucene_segments import lucene_commit
 
 
 def _file_entry(name, physical_name, content=None):
-    entry = {"name": name, "physical_name": physical_name}
+    entry = {"name": name, "physical_name": physical_name, "length": 1}
     if content is not None:
         entry["meta_hash"] = content
     return entry
 
 
 def _shard_document(snapshot_files, commit_name, commit_physical,
-                    commit_content):
+                    commit_content, inline_si=()):
     """One snapshot's worth of a shard document, commit included.
 
     `snapshot_files` is {declared name: physical Lucene name} for the
     ordinary segment blobs. The commit entry is added separately because its
     content, when present, is what this module's new check reads.
+    `inline_si` names segments whose `.si` file is listed as an inline
+    `v__` entry, which is how Elasticsearch stores every `.si`.
     """
+    inline = {f"v__si{segment}": f"{segment}.si" for segment in inline_si}
     files = [_file_entry(name, physical)
-             for name, physical in snapshot_files.items()]
+             for name, physical in {**snapshot_files, **inline}.items()]
     files.append(_file_entry(commit_name, commit_physical, commit_content))
     return {
         "files": files,
         "snapshots": {
-            "s1": {"files": list(snapshot_files) + [commit_name]},
+            "s1": {"files": list(snapshot_files) + list(inline)
+                   + [commit_name]},
         },
     }
 
@@ -102,6 +106,31 @@ class LuceneCommitCrossCheck(unittest.TestCase):
         document = _shard_document(
             {"__a": "_0.cfs"},
             "v__c", "segments_1", lucene_commit(["_0", "_1"]))
+        with self.assertRaises(ShapeGateError):
+            _parse(document)
+
+    def test_the_real_shape_with_every_segment_s_blob_parses(self):
+        # Use case in the shape Elasticsearch writes: each segment has an
+        # inline `.si` beside its blobs. If the stricter rule below refused
+        # this, every real shard document would be dropped.
+        document = _shard_document(
+            {"__a": "_0.cfs", "__b": "_1.cfs"},
+            "v__c", "segments_1", lucene_commit(["_0", "_1"]),
+            inline_si=["_0", "_1"])
+        parsed = _parse(document)
+        self.assertEqual(parsed.by_snapshot_name["s1"], frozenset({"__a", "__b"}))
+
+    def test_an_inline_si_alone_does_not_represent_a_segment(self):
+        # Issue #1's tamper in the shape Elasticsearch actually writes. Every
+        # `.si` is stored inline, so a file list that drops segment _1's
+        # blob keeps `_1.si`, and the oracle used to count that inline entry
+        # as _1 being present. The check then passed on every real document
+        # and `__b`'s blob could be named while the report said the oracle
+        # ran. Neutered under "an-inline-entry-does-not-represent-a-segment".
+        document = _shard_document(
+            {"__a": "_0.cfs"},
+            "v__c", "segments_1", lucene_commit(["_0", "_1"]),
+            inline_si=["_0", "_1"])
         with self.assertRaises(ShapeGateError):
             _parse(document)
 

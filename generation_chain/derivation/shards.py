@@ -56,7 +56,6 @@ from .keys import KeyIndex
 SHARD_SNAPSHOT_DOCUMENT = re.compile(r"^snap-(.+)\.dat$")
 
 INDEX_IN_USE_BUT_UNLISTED = "index-not-listed-but-a-live-snapshot-is-here"
-INDEX_REFERENCED_BUT_UNLISTED = "index-not-listed-but-a-live-lookup-names-it"
 INDEX_RETIRED = "index-no-live-snapshot-references"
 NO_SHARD_GENERATION = "catalog-names-no-generation-for-this-shard"
 CURRENT_DOCUMENT_UNREADABLE = "current-shard-document-unreadable"
@@ -67,6 +66,7 @@ EXTENT_SHARD_COUNT = "snapshot-declares-a-different-shard-count"
 EXTENT_TOTAL_SHARDS = "snapshot-declares-a-different-total-shard-count"
 EXTENT_SIZE = "snapshot-declares-a-different-size"
 EXTENT_NOT_DECLARED = "snapshot-declares-no-shard-count-for-this-index"
+EXTENT_SIZE_NOT_DECLARED = "snapshot-declares-no-size-for-this-index"
 
 
 @dataclass
@@ -212,6 +212,12 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     same as an unbatched one's: a snapshot whose shards land in different
     batches must still be judged against all of them together.
 
+    A directory `_check_declared_extent` drops still has its era documents
+    parsed, by `_record_era_writers`, for the writer uuids they claim and
+    nothing else. The extent check runs before any era document is read, so
+    without that read every directory it dropped would also drop out of the
+    writer-uuid collision check below as a witness.
+
     The second pass reads era documents, one group of `groups` at a time.
     This is the expensive read the memory this package holds is actually
     spent on: `ShardDocument.by_snapshot_name` is one frozenset of blob names
@@ -249,13 +255,16 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     present = _blobs_present(keys)
     owners = _owners(present)
     live_documents_here = _live_shard_documents(keys, set(chain.final.snapshots))
-    live_indices = _live_index_uuids(chain)
 
     parsed = ParseRecord()
     histories, dropped, retired = _survey_current(
-        source, chain, wanted, present, owners, live_documents_here,
-        live_indices, index, parsed)
+        source, chain, wanted, present, owners, live_documents_here, index,
+        parsed)
+    measured = list(histories)
     _check_declared_extent(source, chain, histories, dropped, notes)
+    _record_era_writers(
+        source, chain, [location for location in measured
+                        if location not in histories], wanted, parsed)
 
     for group in _shard_batches(sorted(histories, key=_location_order), groups):
         cache: Dict[str, Optional[ShardDocument]] = {}
@@ -302,8 +311,8 @@ def _survey_current(
         source: RepositorySource, chain: Chain,
         wanted: Dict[ShardLocation, Dict[int, Optional[str]]],
         present: Dict[str, Set[str]], owners: Dict[str, Set[str]],
-        live_documents_here: Dict[str, Set[str]], live_indices: Set[str],
-        index: KeyIndex, parsed: ParseRecord
+        live_documents_here: Dict[str, Set[str]], index: KeyIndex,
+        parsed: ParseRecord
 ) -> Tuple[Dict[ShardLocation, ShardHistory], Dict[str, Doubt], Dict[str, Doubt]]:
     """Decide which shard directories survive on their current document alone.
 
@@ -321,7 +330,7 @@ def _survey_current(
     for location in sorted(wanted, key=_location_order):
         stems = frozenset(present.get(location.directory, set()))
         live, current, doubt = _current_live_set(
-            source, chain, location, cache, stems, owners, index, live_indices,
+            source, chain, location, cache, stems, owners, index,
             live_documents_here.get(location.directory, set()), parsed)
         if doubt is not None:
             if doubt.code == INDEX_RETIRED:
@@ -343,7 +352,7 @@ def _shard_batches(
 
     `groups` is the caller's plan, filtered here to the directories that
     survived the current-document and declared-extent passes; either of
-    those can drop a directory before any era document is read. Without a
+    those can drop a directory before the era pass starts. Without a
     plan, everything that survived goes into one group, which is what every
     direct caller in this package's tests gets and is the batched design's
     own one-batch case.
@@ -353,6 +362,33 @@ def _shard_batches(
     survivors = set(surviving)
     return [[location for location in group if location in survivors]
             for group in groups]
+
+
+def _record_era_writers(source: RepositorySource, chain: Chain,
+                        locations: List[ShardLocation],
+                        wanted: Dict[ShardLocation, Dict[int, Optional[str]]],
+                        parsed: ParseRecord) -> None:
+    """Parse the era documents of directories the extent check dropped.
+
+    These directories contribute nothing to the manifest, so nothing here
+    decides an attribution. `_read` records the writer uuids each document
+    claims, and that record is the only reason these reads happen: an index
+    rewritten between snapshots carries some writers in its era documents
+    and not in its current one, so a directory dropped before the era pass
+    would otherwise take those writers out of the collision check. One
+    directory at a time, each with its own cache, so no more than one
+    directory's documents are held at once.
+    """
+    for location in sorted(locations, key=_location_order):
+        current = wanted[location].get(chain.current_generation)
+        era_ids = sorted({shard_generation
+                          for shard_generation in wanted[location].values()
+                          if shard_generation not in (None, current)})
+        hint(source, [f"{location.directory}/index-{shard_generation}"
+                      for shard_generation in era_ids])
+        cache: Dict[str, Optional[ShardDocument]] = {}
+        for shard_generation in era_ids:
+            _read(source, location, shard_generation, cache, parsed)
 
 
 def _read_eras(source: RepositorySource, chain: Chain, location: ShardLocation,
@@ -411,11 +447,15 @@ def _drop_global_writer_uuid_collisions(
     check rejected, still parsed a document claiming that writer under its
     own key. When the check compared survivors only, one more fault could
     remove the contradiction and admit the forged file list it pointed at.
+    A directory the extent check dropped has its era documents parsed by
+    `_record_era_writers` for the same reason.
 
     THE LIMIT. A read that fails outright parses nothing and so records no
     writer. When that document was the only one carrying the shared writer,
     the collision goes unseen, because nothing else this run reads names
-    the writer instead.
+    the writer instead. The era documents of a directory the
+    current-document pass dropped, or of a retired index, are never read,
+    so the same holds for a writer only they carry.
 
     Neither summary has to be narrowed to afford batching. Each is bounded
     by how many Lucene writers the shards have ever had, not by how much
@@ -454,8 +494,8 @@ def _current_live_set(source: RepositorySource, chain: Chain,
                       location: ShardLocation,
                       cache: Dict[str, Optional[ShardDocument]],
                       stems: FrozenSet[str], owners: Dict[str, Set[str]],
-                      index: KeyIndex, live_indices: Set[str],
-                      live_documents: Set[str], parsed: ParseRecord
+                      index: KeyIndex, live_documents: Set[str],
+                      parsed: ParseRecord
                       ) -> Tuple[FrozenSet[str], Optional[ShardDocument],
                                  Optional[Doubt]]:
     """What the ANCHOR generation still says lives in this shard.
@@ -477,14 +517,10 @@ def _current_live_set(source: RepositorySource, chain: Chain,
                 f"generation {chain.current_generation} does not list index "
                 f"{location.index_uuid} and the store holds the shard document "
                 f"of live snapshot(s) {', '.join(sorted(live_documents))} here")
-        if location.index_uuid in live_indices:
-            # The catalog contradicts itself: a live snapshot's lookup names
-            # this index and the indices map does not hold it. One of the two
-            # readings is wrong and there is no way to tell which.
-            return frozenset(), None, Doubt(
-                INDEX_REFERENCED_BUT_UNLISTED,
-                f"a live snapshot references index {location.index_uuid}, "
-                f"which generation {chain.current_generation} does not list")
+        # A live snapshot whose lookup names an index the map lacks never
+        # gets here: `parse_repository_data._cross_check` refuses that
+        # catalog, and `test_generation_chain_formats` pins it.
+        #
         # No live snapshot references the index by either of the two
         # independent routes the catalog carries, and no live snapshot left a
         # document here. The index was dropped, which is ordinary, and this is
@@ -600,19 +636,6 @@ def _live_shard_documents(keys: Iterable[str],
     return out
 
 
-def _live_index_uuids(chain: Chain) -> Set[str]:
-    """Every index a live snapshot references.
-
-    RepositoryData lists these in two places, the `indices` map and each
-    snapshot's `index_metadata_lookup`, and the parser refuses a catalog whose
-    two halves disagree. So this set is complete or the run never got here.
-    """
-    live: Set[str] = set()
-    for snapshot in chain.final.snapshots.values():
-        live.update(snapshot.metadata_lookup)
-    return live
-
-
 def _check_declared_extent(source: RepositorySource, chain: Chain,
                            histories: Dict[ShardLocation, ShardHistory],
                            dropped: Dict[str, Doubt],
@@ -665,6 +688,18 @@ def _check_declared_extent(source: RepositorySource, chain: Chain,
                 f"the document fetched for live snapshot {snapshot.name!r} "
                 "belongs to a different snapshot"))
             continue
+        if extent.name != snapshot.name:
+            # The measurement below finds each shard's file list by snapshot
+            # name, so a document naming another snapshot would be measured
+            # against file lists it does not describe.
+            notes.append(f"{key} declares snapshot name {extent.name!r}, so "
+                         f"the extent of snapshot {snapshot.name!r} was not "
+                         "verified")
+            _drop_indices(histories, dropped, touched, Doubt(
+                EXTENT_UNREADABLE,
+                f"the document fetched for live snapshot {snapshot.name!r} "
+                f"names snapshot {extent.name!r}"))
+            continue
         if extent.total_shards is None or extent.successful_shards is None:
             # Without both counts this run cannot tell a complete snapshot
             # from a partial one, so it cannot tell a short read from a
@@ -677,7 +712,7 @@ def _check_declared_extent(source: RepositorySource, chain: Chain,
                 f"live snapshot {snapshot.name!r} declares no usable "
                 "total_shards or successful_shards"))
             continue
-        if not extent.is_complete:
+        if extent.is_partial:
             # A partial snapshot legitimately does not cover what it set out to,
             # so a shortfall says nothing about this run's reading.
             notes.append(
@@ -706,9 +741,8 @@ def _measure_against(extent, snapshot_name: str, touched: Set[str],
 
     total_read = 0
     for index_name in sorted(extent.index_names):
-        index_uuid = by_name.get(index_name)
-        if index_uuid is None:
-            continue
+        # Every declared name passed the absent check above, so it is a key.
+        index_uuid = by_name[index_name]
         read = _shards_naming(histories, index_uuid, snapshot_name)
         total_read += len(read)
         declared = extent.by_index_name.get(index_name)
@@ -729,17 +763,27 @@ def _measure_against(extent, snapshot_name: str, touched: Set[str],
                 f"shard(s) for index {index_name!r} and this run read "
                 f"{len(read)}"))
             continue
-        if declared.size_in_bytes is not None:
-            total = sum(h.current.length_by_snapshot_name.get(snapshot_name, 0)
-                        for h in read)
-            if total != declared.size_in_bytes:
-                _drop_indices(histories, dropped, {index_uuid}, Doubt(
-                    EXTENT_SIZE,
-                    f"snapshot {snapshot_name!r} declares "
-                    f"{declared.size_in_bytes} bytes for index {index_name!r} "
-                    f"and the file lists this run read add up to {total}"))
+        if declared.size_in_bytes is None:
+            # The size is the one declaration that sees a current file list
+            # which lost an entry from both of its halves. Without it there
+            # is nothing to measure that list against, the same as a missing
+            # shard count above.
+            _drop_indices(histories, dropped, {index_uuid}, Doubt(
+                EXTENT_SIZE_NOT_DECLARED,
+                f"snapshot {snapshot_name!r} declares no size for index "
+                f"{index_name!r}, so this run cannot tell whether the file "
+                "lists it read are complete"))
+            continue
+        total = sum(h.current.length_by_snapshot_name.get(snapshot_name, 0)
+                    for h in read)
+        if total != declared.size_in_bytes:
+            _drop_indices(histories, dropped, {index_uuid}, Doubt(
+                EXTENT_SIZE,
+                f"snapshot {snapshot_name!r} declares "
+                f"{declared.size_in_bytes} bytes for index {index_name!r} "
+                f"and the file lists this run read add up to {total}"))
 
-    if extent.total_shards is not None and total_read != extent.total_shards:
+    if total_read != extent.total_shards:
         _drop_indices(histories, dropped, touched, Doubt(
             EXTENT_TOTAL_SHARDS,
             f"snapshot {snapshot_name!r} declares {extent.total_shards} shard(s) "

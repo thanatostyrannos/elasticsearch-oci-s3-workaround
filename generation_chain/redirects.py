@@ -19,6 +19,7 @@ import urllib.request
 from typing import Optional
 
 from .errors import GenerationChainError
+from .tls import client_context
 
 
 class RedirectRefused(GenerationChainError):
@@ -55,8 +56,16 @@ class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
 def refusing_urlopen(request: urllib.request.Request,
                      timeout: Optional[float] = None,
                      context: Optional[ssl.SSLContext] = None):
-    """`urllib.request.urlopen`, except that a 3xx raises RedirectRefused."""
+    """`urllib.request.urlopen`, except that a 3xx raises RedirectRefused.
+
+    An https request that names no `context` gets `tls.client_context()`,
+    so the store reads and the delete hold TLS to the same floor as the
+    cluster client. A caller that supplies a context, to load a CA file,
+    keeps its own.
+    """
     handlers = [_RefuseRedirects()]
+    if context is None and request.type == "https":
+        context = client_context()
     if context is not None:
         handlers.append(urllib.request.HTTPSHandler(context=context))
     opener = urllib.request.build_opener(*handlers)

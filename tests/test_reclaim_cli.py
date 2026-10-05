@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stderr
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -259,6 +260,44 @@ class ApprovalIsRequiredForExecute(ReclaimCase):
             self.assertEqual(code, cli.EXIT_APPROVAL_REFUSED)
             self.assertEqual(rig.batch_delete_attempts, [])
             self.assertEqual(repository_keys(rig), {"a", "b"})
+
+
+class OnlyZeroLiftsTheAgeLimit(ReclaimCase):
+
+    def write_old_manifest(self, keys):
+        # Derived ten hours ago, well past the one hour default.
+        write_manifest(self.manifest_path, keys, complete=False)
+        with open(self.manifest_path, "a", encoding="utf-8") as handle:
+            handle.write(completion_line(REPOSITORY_UUID, GENERATION,
+                                         time.time() - 10 * 3600))
+
+    def test_zero_executes_an_old_manifest(self):
+        # Use case: an operator working a long incident decides the age
+        # does not matter and says so with 0. If 0 stopped working, the only
+        # way to act on that decision would be to derive again, which may
+        # not be possible against a repository that is half broken.
+        self.write_old_manifest(["a"])
+        with store({"a": b"x"}) as rig:
+            code, _stdout, _stderr = self.run_cli(
+                rig, "--max-manifest-age", "0", execute=True, approve=True)
+            remaining = repository_keys(rig)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(remaining, set())
+
+    def test_a_negative_limit_is_refused_and_nothing_is_sent(self):
+        # Abuse case: a negative limit used to disable the age check without
+        # a word, so a typo such as -3600 executed a manifest derived long
+        # before a searchable snapshot was mounted over its blobs. It now
+        # stops at the command line, before any request.
+        self.write_old_manifest(["a"])
+        with store({"a": b"x"}) as rig:
+            with self.assertRaises(SystemExit) as caught, \
+                    redirect_stderr(io.StringIO()):
+                self.run_cli(rig, "--max-manifest-age", "-1", execute=True,
+                             approve=True)
+            self.assertEqual(rig.requests, [])
+            self.assertEqual(repository_keys(rig), {"a"})
+        self.assertEqual(caught.exception.code, cli.EXIT_USAGE)
 
 
 class PartialFailureIsReportedHonestly(ReclaimCase):

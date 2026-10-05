@@ -69,6 +69,15 @@ MODULES = [
     "tests.test_reclaim_cli",
     "tests.test_reclaim_recheck",
     "tests.test_reclaim_target_binding",
+    "tests.test_transport_targets",
+    "tests.test_path_and_endpoint_validation",
+    "tests.test_store_tls_floor",
+    "tests.test_generation_chain_exit_codes",
+    "tests.test_generation_chain_forbidden_method",
+    "tests.test_refuse_redirects",
+    "tests.test_response_body_caps",
+    "tests.test_reclaim_protocol",
+    "tests.test_generation_chain_formats",
     "tests.test_security_findings",
 ]
 
@@ -146,6 +155,9 @@ CASES = [
      "derivation/identity.py",
      "        if others:\n            out[directory] = others",
      "        if False:\n            out[directory] = others"),
+    ("an-extent-drop-keeps-its-era-witnesses",
+     "derivation/shards.py",
+     "    _record_era_writers(", "    (lambda *_: None)("),
     ("a-parsed-document-s-writer-uuids-count-whatever-checks-it-fails",
      "derivation/shards.py",
      "        parsed.writers.record(location.directory, document)",
@@ -157,6 +169,44 @@ CASES = [
      "    if unaccounted:", "    if False:"),
     ("the-catalog-s-two-halves-must-agree", "formats/repository_data.py",
      "            if index_uuid not in indices:", "            if False:"),
+    ("a-catalog-without-a-snapshots-array-is-refused",
+     "formats/repository_data.py",
+     "    if \"snapshots\" not in document:\n        raise ShapeGateError(\n"
+     "            f\"generation {generation} has no snapshots array\")\n"
+     "    raw = document[\"snapshots\"]\n",
+     "    raw = document.get(\"snapshots\", [])\n"),
+    ("the-snapshots-field-must-be-a-list",
+     "formats/repository_data.py",
+     "    if not isinstance(raw, list):\n        raise ShapeGateError(\n"
+     "            f\"generation {generation} has a {type(raw).__name__} where the \"\n"
+     "            \"snapshots array belongs\")",
+     "    if not isinstance(raw, list):\n        raw = list(raw)"),
+    ("a-lookup-entry-must-be-two-strings",
+     "formats/repository_data.py",
+     "    for key, value in lookup.items():\n"
+     "        if not isinstance(key, str) or not isinstance(value, str):",
+     "    for key, value in lookup.items():\n        if False:"),
+    ("a-catalog-snapshot-needs-a-uuid",
+     "formats/repository_data.py",
+     "        if not isinstance(uuid, str) or not uuid:\n"
+     "            raise ShapeGateError(\n"
+     "                f\"generation {generation} has a snapshot with no uuid\")",
+     "        if False:\n            raise ShapeGateError(\n"
+     "                f\"generation {generation} has a snapshot with no uuid\")"),
+    ("a-shard-document-without-a-files-array-is-refused",
+     "formats/shard_snapshots.py",
+     "    if not isinstance(raw, list):\n        raise ShapeGateError(\n"
+     "            f\"{where} has no files array; the field may have been renamed\")",
+     "    if not isinstance(raw, list):\n        raw = []"),
+    ("a-snapshot-may-name-only-declared-files",
+     "formats/shard_snapshots.py",
+     "        if name not in entries:\n",
+     "        if name not in entries:\n            continue\n        if False:\n"),
+    ("an-absent-shard-generations-list-is-refused",
+     "formats/repository_data.py",
+     "    if \"shard_generations\" not in entry:\n        raise ShapeGateError(",
+     "    if \"shard_generations\" not in entry:\n        return ()\n"
+     "        raise ShapeGateError("),
     # -- traversal completeness -------------------------------------------
     ("a-snapshot-must-account-for-its-declared-indices",
      "derivation/shards.py",
@@ -167,11 +217,14 @@ CASES = [
      "        if len(read) != declared.shard_count:", "        if False:"),
     ("a-snapshot-must-account-for-its-total-shard-count",
      "derivation/shards.py",
-     "    if extent.total_shards is not None and total_read != extent.total_shards:",
+     "    if total_read != extent.total_shards:",
      "    if False:"),
     ("a-snapshot-must-account-for-its-declared-size",
      "derivation/shards.py",
-     "            if total != declared.size_in_bytes:", "            if False:"),
+     "        if total != declared.size_in_bytes:", "        if False:"),
+    ("an-undeclared-size-is-not-a-match",
+     "derivation/shards.py",
+     "        if declared.size_in_bytes is None:", "        if False:"),
     ("an-undeclared-shard-count-is-not-a-complete-traversal",
      "derivation/shards.py",
      "        if declared is None:\n            # No shard count declared for this index, so there is nothing to\n"
@@ -191,13 +244,36 @@ CASES = [
     ("a-snapshot-document-for-another-uuid-is-not-trusted",
      "derivation/shards.py",
      "        if extent.uuid != uuid:", "        if False:"),
+    ("a-snapshot-document-for-another-name-is-not-trusted",
+     "derivation/shards.py",
+     "        if extent.name != snapshot.name:", "        if False:"),
+    ("a-snapshot-lists-each-index-once",
+     "formats/snapshot_document.py",
+     "    if len(set(indices)) != len(indices):", "    if False:"),
+    ("a-snapshot-document-must-nest-its-body",
+     "formats/snapshot_document.py",
+     "    body = document.get(\"snapshot\")\n",
+     "    body = document.get(\"snapshot\", document)\n"),
     ("a-snapshot-without-shard-counts-is-not-measured",
      "derivation/shards.py",
      "        if extent.total_shards is None or extent.successful_shards is None:",
      "        if False:"),
     ("a-partial-snapshot-is-not-measured-against-its-extent",
      "derivation/shards.py",
-     "        if not extent.is_complete:", "        if False:"),
+     "        if extent.is_partial:", "        if False:"),
+    ("a-declared-count-must-be-a-whole-number",
+     "formats/snapshot_document.py",
+     "    if isinstance(value, bool) or not isinstance(value, int) or value < 0:",
+     "    if False:"),
+    ("index-details-must-be-an-object",
+     "formats/snapshot_document.py",
+     "    if not isinstance(raw, dict):\n        raise ShapeGateError(",
+     "    if not isinstance(raw, dict):\n        return {}\n"
+     "        raise ShapeGateError("),
+    ("only-fewer-successful-shards-is-partial",
+     "formats/snapshot_document.py",
+     "                and self.successful_shards < self.total_shards)",
+     "                and self.successful_shards != self.total_shards)"),
 
     # -- attribution -------------------------------------------------------
     ("index-metadata-needs-a-complete-live-set", "derivation/garbage.py",
@@ -256,6 +332,16 @@ CASES = [
      "    return ()"),
     ("execute-must-say-whether-it-re-checked", "reclaim/recheck.py",
      "    if not elasticsearch and not without:", "    if False:"),
+    ("a-re-checked-protection-refuses-the-run", "reclaim/recheck.py",
+     "    if not protected:\n        return None",
+     "    if True:\n        return None"),
+    ("execute-hands-the-manifest-to-the-re-check", "reclaim/cli.py",
+     "recheck.newly_protected(manifest.keys, veto)",
+     "recheck.newly_protected((), veto)"),
+    ("only-zero-lifts-the-age-limit", "reclaim/recheck.py",
+     "    if maximum < 0:", "    if False:"),
+    ("a-negative-age-limit-stops-at-the-command-line", "reclaim/cli.py",
+     "type=whole_seconds,", "type=int,"),
 
     # -- the promise that this package cannot delete ----------------------
     ("the-transport-refuses-a-write-method", "sources/http_reads.py",
@@ -269,9 +355,42 @@ CASES = [
      "    protected = set()"),
 
     # -- the Lucene commit cross-check (issue #1) -------------------------
+    ("a-blob-carries-the-codec-it-is-read-as", "formats/codec.py",
+     "    if name != codec_name.encode(\"utf-8\"):", "    if False:"),
+    ("the-codec-footer-names-algorithm-zero", "formats/codec.py",
+     "    if footer_magic != FOOTER_MAGIC or algorithm != CHECKSUM_ALGORITHM:",
+     "    if footer_magic != FOOTER_MAGIC:"),
+    ("only-raw-deflate-is-read", "formats/codec.py",
+     "    inflater = zlib.decompressobj(-15)\n",
+     "    inflater = zlib.decompressobj(47)\n"
+     "    if not body.startswith(b\"\\x78\"):\n"
+     "        inflater = zlib.decompressobj(-15)\n"),
+    ("a-deflate-stream-ends-with-its-payload", "formats/codec.py",
+     "    if not inflater.eof or inflater.unused_data:", "    if False:"),
+    ("smile-shared-string-values-are-refused", "formats/smile.py",
+     "        if flags & HAS_SHARED_STRING_VALUES:", "        if False:"),
+    ("a-smile-document-ends-at-its-root-value", "formats/smile.py",
+     "        if self._at != len(self._data):", "        if False:"),
     ("a-file-list-must-cover-what-the-commit-requires",
      "formats/shard_snapshots.py",
      "    if missing:", "    if False:"),
+    ("an-inline-entry-does-not-represent-a-segment",
+     "formats/shard_snapshots.py",
+     "        if LUCENE_COMMIT.match(entries[name].physical):\n"
+     "            commit_names",
+     "        blob_physical.add(entries[name].physical)\n"
+     "        if LUCENE_COMMIT.match(entries[name].physical):\n"
+     "            commit_names"),
+    ("a-file-entry-needs-a-length", "formats/shard_snapshots.py",
+     "    if isinstance(length, bool) or not isinstance(length, int) or length < 0:\n"
+     "        raise ShapeGateError(",
+     "    if isinstance(length, bool) or not isinstance(length, int) or length < 0:\n"
+     "        length = 0\n    if False:\n        raise ShapeGateError("),
+    ("a-file-entry-needs-a-physical-name", "formats/shard_snapshots.py",
+     "    if not isinstance(physical, str) or not physical:\n"
+     "        raise ShapeGateError(",
+     "    if not isinstance(physical, str) or not physical:\n"
+     "        physical = \"\"\n    if False:\n        raise ShapeGateError("),
     ("the-commit-oracle-tally-is-recorded-per-document",
      "derivation/shards.py",
      "        parsed.tally.record(key, document)", "        pass"),
@@ -293,6 +412,14 @@ CASES = [
      "reclaim/manifest.py",
      "    if not uuid.strip() or not _GENERATION.match(generation):",
      "    if not uuid.strip() or not generation.lstrip(\"-\").isdigit():"),
+    ("a-manifest-with-a-foreign-header-is-refused",
+     "reclaim/manifest.py",
+     "    if header != EXPECTED_HEADER:",
+     "    if False:"),
+    ("a-manifest-key-the-audit-never-writes-is-refused",
+     "reclaim/manifest.py",
+     "        if not is_writable_key(key):",
+     "        if False:"),
 
     # -- reclaim: the manifest is bound to its repository and its age ------
     ("the-target-must-carry-the-manifest-s-uuid",
@@ -362,6 +489,21 @@ CASES = [
      "            try:\n"
      "                header = checksum_header(\n"
      "                    args.checksum_algorithm, batch.build_request_body(keys))"),
+
+    # -- reclaim: the one request that deletes goes only to a host ---------
+    ("the-delete-host-must-be-a-host", "reclaim/transport.py",
+     "    if re.fullmatch(HOST_PATTERN, host) is None:", "    if False:"),
+    ("the-delete-target-must-be-sendable", "reclaim/transport.py",
+     "    _refuse_unsendable_target(scheme, host)\n"
+     "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n",
+     "    canonical_uri = f\"/{sigv4.quote_path(bucket)}\"\n"),
+
+    # -- every https request holds TLS to one floor -------------------------
+    ("the-tls-floor-is-1-2", "tls.py",
+     "    context.minimum_version = ssl.TLSVersion.TLSv1_2\n", ""),
+    ("an-https-request-gets-the-tls-floor", "redirects.py",
+     "    if context is None and request.type == \"https\":\n"
+     "        context = client_context()\n", ""),
 
     # -- reclaim: the audit path still cannot see the deleter --------------
     ("the-audit-path-never-imports-reclaim",

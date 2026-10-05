@@ -62,15 +62,19 @@ class SnapshotExtent:
     by_index_name: Mapping[str, IndexExtent]
 
     @property
-    def is_complete(self) -> bool:
-        """Whether Elasticsearch itself says every shard of this snapshot took.
+    def is_partial(self) -> bool:
+        """Whether Elasticsearch itself says some shard of this snapshot failed.
 
         A partial snapshot declares fewer successful shards than total, and
         its file lists legitimately do not cover its declared extent, so the
-        caller must not read that gap as a short read.
+        caller must not read that gap as a short read. More successful
+        shards than total is not partial. Elasticsearch never writes it, and
+        reading it as partial would switch the extent check off for a
+        document this reader has already misread.
         """
         return (self.total_shards is not None
-                and self.successful_shards == self.total_shards)
+                and self.successful_shards is not None
+                and self.successful_shards < self.total_shards)
 
 
 def snapshot_document_key(uuid: str) -> str:
@@ -79,16 +83,17 @@ def snapshot_document_key(uuid: str) -> str:
 
 def parse_snapshot_document(data: bytes, where: str) -> SnapshotExtent:
     """Decode one `snap-<uuid>.dat` and read the extent it declares."""
-    document = unwrap(data)
+    document = unwrap(data, "snapshot")
     if not isinstance(document, dict):
         raise ShapeGateError(
             f"{where} decoded to a {type(document).__name__}, not a snapshot "
             "document")
-    # Real 9.5.2 nests everything under a `snapshot` key. Accepting both
-    # shapes costs nothing and the nesting is not something to depend on.
-    body = document.get("snapshot", document)
+    # Elasticsearch nests the body under a `snapshot` key, and every captured
+    # document does. A document without it is a shape this reader has never
+    # seen, so it is refused rather than read from the top level.
+    body = document.get("snapshot")
     if not isinstance(body, dict):
-        raise ShapeGateError(f"{where} has a malformed snapshot object")
+        raise ShapeGateError(f"{where} has no snapshot object")
     uuid, name = body.get("uuid"), body.get("name")
     if not isinstance(uuid, str) or not uuid:
         raise ShapeGateError(f"{where} declares no snapshot uuid")
@@ -99,33 +104,58 @@ def parse_snapshot_document(data: bytes, where: str) -> SnapshotExtent:
             isinstance(i, str) for i in indices):
         raise ShapeGateError(
             f"{where} declares no usable indices list, so it states no extent")
+    if len(set(indices)) != len(indices):
+        raise ShapeGateError(
+            f"{where} lists an index more than once, which Elasticsearch "
+            "never writes")
     return SnapshotExtent(
         uuid=uuid, name=name, index_names=tuple(indices),
-        total_shards=_count(body.get("total_shards")),
-        successful_shards=_count(body.get("successful_shards")),
-        by_index_name=_details(body.get("index_details"), where))
+        total_shards=_count(body, "total_shards", where),
+        successful_shards=_count(body, "successful_shards", where),
+        by_index_name=_details(body, where))
 
 
-def _count(value: Any) -> Optional[int]:
-    return value if isinstance(value, int) and value >= 0 else None
+def _count(fields: Mapping[str, Any], key: str, where: str) -> Optional[int]:
+    """A count the document declares, or None when it declares none.
+
+    Only an absent field reads as None. A field that is present and is not a
+    whole number, a boolean, a float, a string, a negative or a null, is
+    something written under a name this reader relies on that it does not
+    understand, so it raises rather than reading as undeclared.
+    """
+    if key not in fields:
+        return None
+    value = fields[key]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ShapeGateError(
+            f"{where} declares {key} as {value!r}, which is not a count")
+    return value
 
 
-def _details(raw: Any, where: str) -> Dict[str, IndexExtent]:
+def _details(body: Mapping[str, Any], where: str) -> Dict[str, IndexExtent]:
     """Per-index extent, or nothing when the document does not carry it.
 
-    An absent `index_details` map is no opinion about per-index size, not a
-    claim that every index is empty, so it yields an empty mapping and the
-    caller checks only what was actually declared.
+    An absent `index_details` map yields an empty mapping, and so does an
+    entry with no shard count for its index. The caller drops every index
+    it finds no declaration for, because an absent declaration does not say
+    the traversal was complete. A map or a count that is present and
+    malformed raises.
     """
-    if not isinstance(raw, dict):
+    if "index_details" not in body:
         return {}
+    raw = body["index_details"]
+    if not isinstance(raw, dict):
+        raise ShapeGateError(
+            f"{where} has a {type(raw).__name__} where index_details belongs")
     out: Dict[str, IndexExtent] = {}
     for name, detail in raw.items():
         if not isinstance(name, str) or not isinstance(detail, dict):
             raise ShapeGateError(f"{where} has a malformed index_details entry")
-        shard_count = _count(detail.get("shard_count"))
+        entry = f"{where} index_details[{name!r}]"
+        shard_count = _count(detail, "shard_count", entry)
         if shard_count is None:
             continue
-        out[name] = IndexExtent(shard_count=shard_count,
-                                size_in_bytes=_count(detail.get("size_in_bytes")))
+        out[name] = IndexExtent(
+            shard_count=shard_count,
+            size_in_bytes=_count(detail, "size_in_bytes", entry))
     return out

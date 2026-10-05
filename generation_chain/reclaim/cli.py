@@ -140,13 +140,23 @@ def build_parser() -> argparse.ArgumentParser:
              "orphaned repository. Deliberate, because it is the path with "
              "no second opinion")
     group.add_argument(
-        "--max-manifest-age", type=int, metavar="SECONDS",
+        "--max-manifest-age", type=whole_seconds, metavar="SECONDS",
         default=recheck.DEFAULT_MAX_MANIFEST_AGE_SECONDS,
         help="refuse a manifest derived longer ago than this, measured "
              "from the derivation time the manifest records, because the "
-             "cluster can change under it. 0 disables the check (default: "
-             "%(default)s)")
+             "cluster can change under it. 0 disables the check, and a "
+             "negative value is refused (default: %(default)s)")
     return parser
+
+
+def whole_seconds(value: str) -> int:
+    """`--max-manifest-age`: whole seconds, zero or more."""
+    seconds = int(value)
+    if seconds < 0:
+        raise argparse.ArgumentTypeError(
+            f"{value} is negative. Give the age in seconds, or 0 to act on "
+            "a manifest whatever its age")
+    return seconds
 
 
 MAX_DUPLICATES_NAMED = 10

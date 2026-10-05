@@ -88,7 +88,7 @@ class LuceneSegmentsDecoder(unittest.TestCase):
         # this format was understood correctly.
         path = os.path.join(FIXTURES, "real-es952-shard-index-gen.bin")
         with open(path, "rb") as handle:
-            document = codec_unwrap(handle.read())
+            document = codec_unwrap(handle.read(), "snapshots")
         commits = [entry for entry in document["files"]
                   if entry.get("physical_name", "").startswith("segments_")]
         self.assertEqual(len(commits), 1)

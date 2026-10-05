@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import base64
 import json
-import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -68,6 +67,7 @@ from .credentials import as_secret
 from .errors import GenerationChainError
 from .model import Condemnation
 from .redirects import RedirectRefused, refusing_urlopen
+from .tls import client_context
 
 SNAPSHOT_SETTINGS_PREFIX = "index.store.snapshot."
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -141,29 +141,6 @@ class Veto:
         return [row for row in condemned if not self.covers(row)]
 
 
-def _tls_context(ca_certificate: Optional[str]) -> ssl.SSLContext:
-    """A verifying context with a TLS floor this tool sets itself.
-
-    Built for every run, not only for a run that named a CA file. Without a
-    context urllib falls back to its own default, which carries the same
-    unpinned floor, and the cluster credential travels over the connection
-    either way.
-    """
-    context = ssl.create_default_context(cafile=ca_certificate)
-    # Named rather than inherited. From 3.10 onward `create_default_context`
-    # rules out TLS 1.0 and 1.1 by itself, so on the supported floor this line
-    # agrees with the default instead of changing it. It stays because a
-    # default is a decision somebody else made: setting it here makes the
-    # floor a property of this tool, readable from the line that sets it, and
-    # it cannot move when an interpreter changes its mind.
-    #
-    # 1.2 rather than 1.3, because a cluster that speaks only 1.2 is ordinary
-    # and refusing it would make this module fail to corroborate for a reason
-    # that has nothing to do with what the cluster had to say.
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    return context
-
-
 class ElasticsearchVeto:
     """Asks one cluster about one repository, or raises."""
 
@@ -176,7 +153,10 @@ class ElasticsearchVeto:
         self.repository = repository
         self.credentials = credentials
         self.timeout = timeout
-        self._context = _tls_context(ca_certificate)
+        # Built for every run, not only for a run that named a CA file, so
+        # the cluster credential never travels under a context this tool
+        # did not set the floor of.
+        self._context = client_context(ca_certificate)
         self._opener = opener or refusing_urlopen
 
     def fetch(self) -> Veto:

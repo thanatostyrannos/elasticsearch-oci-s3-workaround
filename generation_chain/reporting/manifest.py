@@ -92,9 +92,15 @@ def completion_line(repository_uuid: str, anchor_generation: int,
     """The marker line with the derivation record a reclaim run checks.
 
     `derived_at` is seconds since the epoch, written in UTC to the second.
+    Raises ValueError for a negative generation, because `reclaim` refuses
+    a marker that records one.
     """
+    generation = int(anchor_generation)
+    if generation < 0:
+        raise ValueError(
+            f"anchor generation {generation} names no repository generation")
     stamp = time.strftime(DERIVED_AT_FORMAT, time.gmtime(derived_at))
-    values = (_field(repository_uuid), str(int(anchor_generation)), stamp)
+    values = (_field(repository_uuid), str(generation), stamp)
     record = "".join(f"\t{name}={value}"
                      for name, value in zip(DERIVATION_FIELDS, values))
     return COMPLETION_MARKER.rstrip("\n") + record + "\n"

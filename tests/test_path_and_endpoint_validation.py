@@ -15,7 +15,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from generation_chain import corroboration
+from generation_chain import corroboration, tls
 from generation_chain import cli
 from generation_chain.credentials import CredentialFile
 from generation_chain.paths import (FILE_ROOT_ENV_VAR, PathRefused,
@@ -27,14 +27,34 @@ from generation_chain.sources.s3 import S3Credentials
 
 
 class _Recorder:
-    """An opener that fails the test by having been reached at all."""
+    """An opener that answers like a store and counts what reached it.
+
+    It never raises. An opener that raised to fail the test had its error
+    turned into the TransportError the refusal tests expect, because the
+    delete transport catches every exception a send can raise, so those
+    tests passed with the target check deleted.
+    """
 
     def __init__(self):
         self.calls = 0
 
     def __call__(self, *args, **kwargs):
         self.calls += 1
-        raise AssertionError("a request was sent that should have been refused")
+        return _Answer(b"<DeleteResult/>")
+
+
+class _Answer:
+    def __init__(self, body):
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def read(self, size=-1):
+        return self._body
 
 
 class PathShape(unittest.TestCase):
@@ -186,6 +206,9 @@ class DeleteTargets(unittest.TestCase):
     def setUp(self):
         self.opener = _Recorder()
         self.credentials = S3Credentials("AKIAEXAMPLE", "secret")
+        # Every refusal below also has to have sent nothing. Neutered under
+        # "the-delete-target-must-be-sendable".
+        self.addCleanup(lambda: self.assertEqual(self.opener.calls, 0))
 
     def send(self, scheme, host):
         return send_batch_delete(
@@ -225,11 +248,6 @@ class DeleteTargets(unittest.TestCase):
         with self.assertRaises(TransportError):
             self.send("https", "store.example.com\r\nX-Injected: 1")
 
-    def test_the_refusal_says_nothing_was_sent(self):
-        with self.assertRaises(TransportError) as caught:
-            self.send("gopher", "store.example.com")
-        self.assertIn("Nothing was sent", str(caught.exception))
-
 
 class TlsFloor(unittest.TestCase):
     """The cluster credential travels over this connection either way."""
@@ -238,12 +256,12 @@ class TlsFloor(unittest.TestCase):
         # ssl.create_default_context leaves minimum_version at
         # MINIMUM_SUPPORTED on the Python this project supports, which lets
         # the host's OpenSSL build decide. That is a different answer on
-        # every machine.
-        context = corroboration._tls_context(None)
+        # every machine. Neutered under "the-tls-floor-is-1-2".
+        context = tls.client_context(None)
         self.assertEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
 
     def test_verification_is_still_on(self):
-        context = corroboration._tls_context(None)
+        context = tls.client_context(None)
         self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
         self.assertTrue(context.check_hostname)
 

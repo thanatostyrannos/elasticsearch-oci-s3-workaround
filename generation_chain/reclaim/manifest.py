@@ -51,7 +51,8 @@ from typing import List, Optional, Tuple
 from ..errors import GenerationChainError
 from ..paths import PathRefused, checked_path
 from ..reporting.manifest import (COMPLETION_MARKER, DERIVATION_FIELDS,
-                                  DERIVED_AT_FORMAT, MANIFEST_COLUMNS)
+                                  DERIVED_AT_FORMAT, MANIFEST_COLUMNS,
+                                  is_writable_key)
 
 EXPECTED_HEADER = "\t".join(MANIFEST_COLUMNS)
 _KEY_COLUMN = MANIFEST_COLUMNS.index("key")
@@ -97,8 +98,9 @@ def load_manifest(path: str) -> ManifestData:
 
     Raises `ManifestError` for anything that is not unambiguously a complete,
     well-formed, marked-whole manifest: a missing or foreign header, a row
-    with the wrong number of columns, a file that does not end on a newline,
-    or a file with no completion marker as its last line.
+    with the wrong number of columns, a row whose key the audit's writer
+    would have skipped, a file that does not end on a newline, or a file
+    with no completion marker as its last line.
     """
     try:
         # Resolved before it is opened, so every message below and the
@@ -163,7 +165,16 @@ def load_manifest(path: str) -> ManifestData:
                 f"field(s), not {len(MANIFEST_COLUMNS)}. A row cut short by "
                 "an interrupted write has exactly this shape, so the whole "
                 "manifest is refused rather than read up to this line")
-        keys.append(fields[_KEY_COLUMN])
+        key = fields[_KEY_COLUMN]
+        if not is_writable_key(key):
+            # The audit's writer skips every key this test rejects, so a row
+            # holding one came from an edit or another tool. An empty key
+            # becomes the bare prefix once the store key is built.
+            raise ManifestError(
+                f"{path} line {number} names the key {key!r}, which the "
+                "audit never writes: it is empty or holds a control "
+                "character. The whole manifest is refused")
+        keys.append(key)
 
     return ManifestData(path=path, keys=tuple(keys), digest=digest,
                         byte_length=len(raw), derivation=derivation)

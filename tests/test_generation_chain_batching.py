@@ -24,16 +24,24 @@ import genchain_fixtures as fx
 import genchain_repo as repo
 from generation_chain import run_audit
 from generation_chain.derivation.chain import load_chain
+from generation_chain.derivation.garbage import CATEGORY_SEGMENT
 from generation_chain.derivation.shards import (ShardDirectoryTooLarge,
                                                 plan_shard_batches)
 from generation_chain.reporting import coverage as coverage_report
 from generation_chain.sources.budget import RESIDENT_BYTES_PER_OBJECT
 from generation_chain.sources.local import LocalMirrorSource
 
-# Three indices of two shards each, five generations. Every add generation
+# Three indices of two shards each, seven generations. Every add generation
 # gives every shard two more segments, and one snapshot is deleted per step
-# after the live window fills, so every shard directory carries orphaned
-# blobs a batched run has to find regardless of where a batch boundary falls.
+# after the live window fills. Until generation 5 every deleted snapshot's
+# segments are still held by a later one, so those deletes orphan nothing.
+# Generation 5 adds s5, a merged copy holding new segments only, and
+# generation 6 deletes s4 and adds nothing, so every shard directory ends up
+# with orphaned segments a batched run has to find regardless of where a
+# batch boundary falls.
+S5 = {"a": {0: ["__a8"], 1: ["__a9"]},
+      "b": {0: ["__b8"], 1: ["__b9"]},
+      "c": {0: ["__c8"], 1: ["__c9"]}}
 HISTORY = [
     {"s1": {"a": {0: ["__a0"], 1: ["__a1"]},
            "b": {0: ["__b0"], 1: ["__b1"]},
@@ -65,6 +73,14 @@ HISTORY = [
                  1: ["__b1", "__b3", "__b5", "__b7"]},
            "c": {0: ["__c0", "__c2", "__c4", "__c6"],
                  1: ["__c1", "__c3", "__c5", "__c7"]}}},
+    {"s4": {"a": {0: ["__a0", "__a2", "__a4", "__a6"],
+                 1: ["__a1", "__a3", "__a5", "__a7"]},
+           "b": {0: ["__b0", "__b2", "__b4", "__b6"],
+                 1: ["__b1", "__b3", "__b5", "__b7"]},
+           "c": {0: ["__c0", "__c2", "__c4", "__c6"],
+                 1: ["__c1", "__c3", "__c5", "__c7"]}},
+     "s5": S5},
+    {"s5": S5},
 ]
 
 SHARD_DIRECTORIES = 6  # three indices, two shards each
@@ -112,6 +128,22 @@ class BatchSizeNeverMovesTheAnswer(_Repository):
         self.assertTrue(all(len(g) == 1 for g in groups),
                         f"batch sizes were {[len(g) for g in groups]}, not "
                         "all singletons")
+
+    def test_segments_are_condemned_in_more_than_one_batch(self):
+        # Guards the fixture's purpose. The comparisons below are only
+        # evidence about batching if the manifest holds segment rows from
+        # directories that land in different batches. The fixture once held
+        # none, so a change that condemned segments in the first batch only
+        # left every comparison here equal.
+        chain = load_chain(self.source, self.source.list_keys())
+        budget = self.smallest_budget_that_does_not_refuse()
+        groups = plan_shard_batches(chain, self.source.list_keys(), budget)
+        result = run_audit(LocalMirrorSource(self.root), budget_bytes=budget)
+        condemned_in = {c.key.rsplit("/", 1)[0] for c in result.condemned
+                        if c.category == CATEGORY_SEGMENT}
+        batches = {number for number, group in enumerate(groups)
+                   for location in group if location.directory in condemned_in}
+        self.assertGreaterEqual(len(batches), 2)
 
     def manifest(self, budget_bytes):
         result = run_audit(LocalMirrorSource(self.root),

@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import genchain_repo as repo
 from generation_chain import run_audit
 from generation_chain.derivation.identity import WRITER_UUID_COLLISION
+from generation_chain.derivation.shards import EXTENT_SIZE_NOT_DECLARED
 
 D = repo.directory_of("i", 0)
 A = repo.directory_of("j", 0)
@@ -147,6 +148,36 @@ class AWitnessThatParsedIsNotLostToALaterCheck(unittest.TestCase):
         self.assertEqual(WRITER_UUID_COLLISION, _dropped(result).get(D))
         self.assertEqual(set(), store.live_named(result))
 
+    def test_era_documents_of_a_directory_the_extent_check_drops_still_witness(
+            self):
+        # A was rewritten, so only its era documents carry the shared writer,
+        # and the extent check drops A before the era pass. The era pass used
+        # to read only directories still standing, so A's era documents were
+        # never parsed, nothing contradicted D, and the live `__d1` went into
+        # the manifest. Every new reason the extent check gains to drop a
+        # directory widens this, so the witness has to survive the drop.
+        # Neutered under "an-extent-drop-keeps-its-era-witnesses".
+        store = _Store(self, A_FAILS_ITS_EXTENT)
+        store.forge_d()
+        store.rewrite_a()
+        result = store.audit()
+        self.assertEqual(WRITER_UUID_COLLISION, _dropped(result).get(D))
+        self.assertEqual(set(), store.live_named(result))
+
+    def test_a_witness_dropped_for_an_undeclared_size_still_witnesses(self):
+        # The same witness, dropped by the newest reason the extent check
+        # has: s2 declares no size for index j. A fix that made that drop
+        # without keeping A's era writers would trade one live key for
+        # another, `__d1` here.
+        store = _Store(self, dict(index_detail_changes={
+            ("s2", "j"): {"size_in_bytes": repo.REMOVE}}))
+        store.forge_d()
+        store.rewrite_a()
+        result = store.audit()
+        self.assertEqual(EXTENT_SIZE_NOT_DECLARED, _dropped(result).get(A))
+        self.assertEqual(WRITER_UUID_COLLISION, _dropped(result).get(D))
+        self.assertEqual(set(), store.live_named(result))
+
     def test_a_witness_in_rejected_era_documents_still_drops_the_forgery(self):
         # A was rewritten, so only its era documents carry the shared writer.
         # The newest era answers 503 and the two older ones parse and are then
@@ -199,6 +230,17 @@ class LegitimateHistoryIsNotACollision(unittest.TestCase):
         self.assertNotIn(WRITER_UUID_COLLISION, set(_dropped(result).values()))
         self.assertNotIn(A, _dropped(result))
 
+    def test_reading_an_extent_dropped_directory_s_eras_costs_no_one_else(self):
+        # The use case for reading the era documents of a directory the
+        # extent check dropped. A's rewritten history is ordinary, and its
+        # eras now count as evidence even though A itself is gone. If that
+        # evidence ever counted against a directory with no forgery in it,
+        # one snapshot document with a wrong count would cost D its coverage
+        # as well as A.
+        store = _Store(self, A_FAILS_ITS_EXTENT)
+        store.rewrite_a()
+        self.assertEqual({A}, set(_dropped(store.audit())))
+
 
 class OneMoreReadFailureNeverGrowsTheManifest(unittest.TestCase):
     """The monotonicity the module docstring claims, for these scenarios.
@@ -238,6 +280,16 @@ class OneMoreReadFailureNeverGrowsTheManifest(unittest.TestCase):
         store.rewrite_a()
         store.delete_a0()
         store.unreadable.append(_shard_key("j", 2))
+        self._assert_no_failure_grows(store)
+
+    def test_the_extent_dropped_era_scenario_is_monotone_in_one_more_failure(
+            self):
+        # A's three era documents each carry the shared writer after its
+        # extent drop. Losing any one of them must leave the other two as
+        # witnesses, and losing a document of D must not admit its forgery.
+        store = _Store(self, A_FAILS_ITS_EXTENT)
+        store.forge_d()
+        store.rewrite_a()
         self._assert_no_failure_grows(store)
 
 

@@ -194,7 +194,7 @@ class Anchoring(Repository):
         # be at that offset and hand back a file list nobody wrote.
         body = fx.codec_wrap(b'{"files": [], "snapshots": {}}')
         with self.assertRaises(BlobFormatError):
-            unwrap(b"\x00\x00\x00\x00" + body[4:])
+            unwrap(b"\x00\x00\x00\x00" + body[4:], "snapshots")
 
 
 class ShardDrops(Repository):
@@ -238,7 +238,7 @@ class ShardDrops(Repository):
             return
         for uuid in ("uuid-s2",):
             key = os.path.join(root, f"snap-{uuid}.dat")
-            body = unwrap(open(key, "rb").read())["snapshot"]
+            body = unwrap(open(key, "rb").read(), "snapshot")["snapshot"]
             body["indices"] = [i for i in body["indices"] if i != name]
             body["index_details"].pop(name, None)
             body["total_shards"] = len(body["index_details"])

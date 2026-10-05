@@ -25,11 +25,10 @@ HEADER_LENGTH = 4
 HAS_SHARED_NAMES = 0x01
 HAS_SHARED_STRING_VALUES = 0x02
 
-# Jackson resets each back-reference table once it holds this many entries,
+# Jackson resets its back-reference table once it holds this many entries,
 # so a decoder that grew its table without bound would drift out of step with
 # the writer on any document large enough to matter.
 MAX_SHARED_ENTRIES = 1024
-MAX_SHARED_LENGTH = 64
 
 TOKEN_LITERAL_EMPTY_STRING = 0x20
 TOKEN_LITERAL_NULL = 0x21
@@ -72,7 +71,7 @@ def _zigzag(value: int) -> int:
 
 
 class _SharedTable:
-    """One of SMILE's two back-reference tables.
+    """SMILE's back-reference table for property names.
 
     The writer and the reader each keep the same list and refer to entries by
     position, so the reader has to add exactly what the writer added, in the
@@ -110,15 +109,25 @@ class _Decoder:
         version = (flags >> 4) & 0x0F
         if version != 0:
             raise BlobFormatError(f"SMILE version {version} is not understood")
+        if flags & HAS_SHARED_STRING_VALUES:
+            # Elasticsearch never enables shared string values, so this
+            # reader keeps no table for them and refuses a header that says
+            # the body uses one.
+            raise BlobFormatError(
+                "SMILE header enables shared string values, which "
+                "Elasticsearch never writes")
         self._data = data
         self._at = HEADER_LENGTH
         self._names = _SharedTable(bool(flags & HAS_SHARED_NAMES))
-        self._values = _SharedTable(bool(flags & HAS_SHARED_STRING_VALUES))
 
     # -- document ---------------------------------------------------------
 
     def document(self) -> Any:
         value = self._value(self._byte(), depth=0)
+        if self._at != len(self._data):
+            raise BlobFormatError(
+                f"SMILE document carries {len(self._data) - self._at} "
+                "byte(s) after its root value")
         return value
 
     # -- raw reads --------------------------------------------------------
@@ -208,19 +217,18 @@ class _Decoder:
         return _zigzag(self._vint())
 
     def _text_or_binary(self, token: int) -> Any:
-        """A string, a back reference to one, or a run of bytes."""
-        if 0x01 <= token <= 0x1F:
-            return self._values.get(token - 1)
-        if 0x30 <= token <= 0x33:
-            return self._values.get(((token & 0x03) << 8) | self._byte())
+        """A string or a run of raw bytes, the value forms Elasticsearch writes.
+
+        Shared string value references and 7-bit binary fall through to the
+        refusal: Elasticsearch turns both off, and the 7-bit form is one
+        this reader once decoded wrongly.
+        """
         if 0x40 <= token <= 0x7F:
-            return self._shared_string(self._ascii_length(token))
+            return self._text(self._ascii_length(token))
         if 0x80 <= token <= 0xBF:
-            return self._shared_string(self._unicode_length(token))
+            return self._text(self._unicode_length(token))
         if 0xE0 <= token <= 0xE7:
             return self._long_text()
-        if 0xE8 <= token <= 0xEB:
-            return self._binary_7bit()
         if token == TOKEN_RAW_BINARY:
             return self._take(self._vint())
         raise BlobFormatError(f"SMILE value token 0x{token:02X} is reserved")
@@ -233,47 +241,12 @@ class _Decoder:
     def _unicode_length(token: int) -> int:
         return (token & 0x1F) + (2 if token < 0xA0 else 34)
 
-    def _shared_string(self, length: int) -> str:
-        text = self._text(length)
-        if length <= MAX_SHARED_LENGTH:
-            self._values.add(text)
-        return text
-
     def _bits(self, septets: int, byte_width: int) -> bytes:
         """A float written as seven bits a byte, most significant group first."""
         value = 0
         for byte in self._take(septets):
             value = (value << 7) | (byte & 0x7F)
         return (value & ((1 << (byte_width * 8)) - 1)).to_bytes(byte_width, "big")
-
-    def _binary_7bit(self) -> bytes:
-        """Seven bytes of payload per eight bytes on the wire.
-
-        The tail is not a truncated version of the same loop, it is a
-        different arithmetic, and Elasticsearch puts a writer uuid in every
-        FileInfo record so this path runs on every real document. Getting the
-        tail wrong leaves the cursor between tokens and turns the rest of the
-        file list into nonsense.
-        """
-        total = self._vint()
-        if total < 0 or total > len(self._data):
-            raise BlobFormatError("SMILE binary claims more bytes than exist")
-        out = bytearray()
-        while len(out) + 7 <= total:
-            value = 0
-            for byte in self._take(8):
-                value = (value << 7) | (byte & 0x7F)
-            out += value.to_bytes(7, "big")
-        remaining = total - len(out)
-        if remaining > 0:
-            septets = self._take(remaining + 1)
-            value = septets[0]
-            for position in range(1, remaining):
-                value = (value << 7) + septets[position]
-                out.append((value >> (7 - position)) & 0xFF)
-            value = (value << 7) + septets[remaining]
-            out.append(value & 0xFF)
-        return bytes(out)
 
     # -- containers -------------------------------------------------------
 

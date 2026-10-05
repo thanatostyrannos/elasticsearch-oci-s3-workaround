@@ -255,14 +255,19 @@ def _shard_generations(entry: Mapping[str, Any], generation: int,
                        index_name: str) -> Tuple[Optional[str], ...]:
     """Per-shard generation ids, with "no opinion" preserved as None.
 
-    A repository written before 7.6 has no shard_generations at all. That is a
-    real repository rather than a broken one, so it yields an empty tuple,
-    every shard reads as "no generation named", and the caller drops those
-    shards instead of guessing an id.
+    Elasticsearch has written shard_generations for every index since 7.6,
+    and `require_supported_format` has already refused anything below 7.12,
+    so an entry without the list is a renamed or lost field rather than an
+    index with no shards. It is refused, as an absent snapshots list is. A
+    null element is the catalog naming no generation for that one shard,
+    and the caller drops that shard instead of guessing an id.
     """
-    raw = entry.get("shard_generations")
-    if raw is None:
-        return ()
+    if "shard_generations" not in entry:
+        raise ShapeGateError(
+            f"generation {generation} index {index_name!r} has no "
+            "shard_generations list. Reading it as an index with no shards "
+            "would leave every shard of it unread")
+    raw = entry["shard_generations"]
     if not isinstance(raw, list):
         raise ShapeGateError(
             f"generation {generation} index {index_name!r} has a "

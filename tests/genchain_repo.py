@@ -37,6 +37,8 @@ FOOTER_MAGIC = (~CODEC_MAGIC) & 0xFFFFFFFF
 # size_in_bytes is a plain multiple and a shortened file list moves it visibly.
 FILE_LENGTH = 42
 INLINE_COMMIT_PREFIX = "v__commit-"
+# The value `Defects.index_detail_changes` uses to leave a field out.
+REMOVE = object()
 
 
 def lucene_vint(value: int) -> bytes:
@@ -52,7 +54,10 @@ def codec_wrap(payload: bytes, codec_name: str = "snapshots",
                version: int = 1, deflate: bool = False) -> bytes:
     """Frame a payload the way ChecksumBlobStoreFormat does."""
     if deflate:
-        payload = b"DFL\x00" + zlib.compress(payload)
+        # Raw DEFLATE, no zlib wrapper: what DeflateCompressor writes.
+        compressor = zlib.compressobj(wbits=-15)
+        payload = (b"DFL\x00" + compressor.compress(payload)
+                   + compressor.flush())
     body = (struct.pack(">I", CODEC_MAGIC)
             + lucene_vint(len(codec_name)) + codec_name.encode("utf-8")
             + struct.pack(">I", version)
@@ -140,9 +145,25 @@ class Defects:
     declared_shard_count: Mapping[Tuple[str, str], int] = field(
         default_factory=dict)
     declared_total_shards: Mapping[str, int] = field(default_factory=dict)
+    # Edits to one (snapshot, index) entry of a snapshot document's
+    # index_details. A field mapped to REMOVE is left out, and any other
+    # value is written exactly as given, malformed ones included.
+    index_detail_changes: Mapping[Tuple[str, str], Mapping[str, object]] = \
+        field(default_factory=dict)
+    # successful_shards written as given rather than computed, for a
+    # document whose two counts contradict each other.
+    declared_successful_shards: Mapping[str, object] = field(
+        default_factory=dict)
     # A snapshot document that is absent, unreadable, or declares a partial run.
     missing_snapshot_documents: Sequence[str] = ()
     partial_snapshots: Sequence[str] = ()
+    # Blob names left out of one (index, shard)'s CURRENT document, from its
+    # files array and from every snapshot's list alike, while the blobs stay
+    # on disk and in every older document. That is a short live set which
+    # still parses and still agrees with itself, so only the snapshot
+    # document's declared size can contradict it.
+    truncated_current: Mapping[Tuple[str, int], Sequence[str]] = field(
+        default_factory=dict)
     # A catalog that names no index metadata identifiers, which is the shape
     # the format floor refuses.
     drop_index_metadata: bool = False
@@ -189,8 +210,12 @@ def build(root: str, history: Sequence[Placement],
         _write_root_generation(root, generation, spec, repository_uuid, defects)
         for index, shards in _by_index(spec).items():
             for shard, per_snapshot in shards.items():
-                _write_shard_document(root, index, shard, generation,
-                                      per_snapshot, defects)
+                omitted = set(defects.truncated_current.get((index, shard), ())
+                              if generation == len(plan) - 1 else ())
+                _write_shard_document(
+                    root, index, shard, generation,
+                    {snapshot: [n for n in names if n not in omitted]
+                     for snapshot, names in per_snapshot.items()}, defects)
                 for names in per_snapshot.values():
                     for name in names:
                         key = f"{directory_of(index, shard)}/{name}"
@@ -404,8 +429,16 @@ def _write_snapshot_documents(
             "max_segments_per_shard": max(
                 (len(names) for names in shards.values()), default=0),
         }
+        for name, value in defects.index_detail_changes.get(
+                (snapshot_key, index), {}).items():
+            if value is REMOVE:
+                details[index].pop(name, None)
+            else:
+                details[index][name] = value
     total = defects.declared_total_shards.get(snapshot_key, total)
     successful = 0 if snapshot_key in defects.partial_snapshots else total
+    successful = defects.declared_successful_shards.get(snapshot_key,
+                                                        successful)
 
     uuid = snapshot_uuid(snapshot_key)
     body = {

@@ -184,6 +184,26 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
         result = self._rewrite_s2(lambda b: b.update(uuid="some-other-uuid"))
         self._assert_condemns_nothing_in_wide(result)
 
+    def test_a_snapshot_document_for_another_name_drops_its_shards(self):
+        # Every later join is by snapshot NAME: the extent is measured
+        # against the file lists the shard documents hold under that name.
+        # A document that carries this snapshot's uuid and another name is
+        # not one Elasticsearch wrote for this snapshot, and measuring it
+        # would compare the traversal with a declaration about something
+        # else. Neutered under
+        # "a-snapshot-document-for-another-name-is-not-trusted".
+        result = self._rewrite_s2(lambda b: b.update(name="some-other-name"))
+        self._assert_condemns_nothing_in_wide(result)
+
+    def test_an_index_listed_twice_drops_the_snapshots_shards(self):
+        # Elasticsearch never lists an index twice. The total check summed
+        # each listing, so a repeated name made a total two shards too high
+        # add up: the duplicate hid the very overstatement the total exists
+        # to catch. Neutered under "a-snapshot-lists-each-index-once".
+        result = self._rewrite_s2(lambda b: b.update(
+            indices=["wide", "wide"], total_shards=4, successful_shards=4))
+        self._assert_condemns_nothing_in_wide(result)
+
     def test_a_well_formed_snapshot_document_still_passes(self):
         # Baseline for the refusals above. If a normal document were refused,
         # every audit would drop every shard.
@@ -234,6 +254,77 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
             self.assertEqual(set(),
                              self.built.live_blob_keys & set(result.keys),
                              defects)
+
+
+class AShortLiveListMeetsAnUnusableDeclaration(unittest.TestCase):
+    """A truncated current file list that only the declared size can see.
+
+    `wide/0`'s current document leaves out `__w0a` from both of its halves.
+    Live `s2` still uses that blob and deleted `s1` named it, so a run that
+    believes the short list condemns a live segment. The document still
+    parses, names `s2`, and has a witness unique to its directory, so the
+    one statement left to contradict it is `s2`'s declared size for `wide`.
+    Each test below damages that statement a different way, and the check
+    has to fail closed every time rather than switch itself off.
+    """
+
+    LIVE = f"{WIDE_0}/__w0a"
+
+    def _audit(self, **defects):
+        self.dir = tempfile.mkdtemp(prefix="genchain-short-live-")
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.built = repo.build(self.dir, HISTORY, defects=repo.Defects(
+            truncated_current={("wide", 0): ["__w0a"]}, **defects))
+        return run_audit(LocalMirrorSource(self.dir))
+
+    def _code(self, result, directory):
+        doubt = result.coverage.shards_dropped.get(directory)
+        return doubt.code if doubt is not None else None
+
+    def test_the_declared_size_catches_the_short_list(self):
+        # The control. If this stopped holding, every test below would pass
+        # or fail for a reason unrelated to the declaration it damages.
+        result = self._audit()
+        self.assertEqual(shards.EXTENT_SIZE, self._code(result, WIDE_0))
+        self.assertNotIn(self.LIVE, result.keys)
+
+    def test_a_size_left_out_drops_the_index(self):
+        # A size that is not declared is not a size that matched. The skip
+        # this replaced turned the only check that sees a short live list
+        # off, and `__w0a` went into the manifest while `s2` still restores
+        # from it. Neutered under "an-undeclared-size-is-not-a-match".
+        result = self._audit(index_detail_changes={
+            ("s2", "wide"): {"size_in_bytes": repo.REMOVE}})
+        self.assertEqual(shards.EXTENT_SIZE_NOT_DECLARED,
+                         self._code(result, WIDE_0))
+        self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
+
+    def test_a_malformed_size_makes_the_extent_unreadable(self):
+        # A size a decoder passed through as a string, a float, a negative,
+        # a boolean or a null used to read as "not declared", which before
+        # the missing-size drop skipped the size check and put `__w0a` in
+        # the manifest. Each is a field this reader does not understand
+        # under a name it relies on, so the document is unreadable, not
+        # merely silent about one index. Neutered under
+        # "a-declared-count-must-be-a-whole-number".
+        for value in ("210", 210.0, -5, True, None):
+            with self.subTest(size_in_bytes=value):
+                result = self._audit(index_detail_changes={
+                    ("s2", "wide"): {"size_in_bytes": value}})
+                self.assertEqual(shards.EXTENT_UNREADABLE,
+                                 self._code(result, WIDE_0))
+                self.assertEqual(set(),
+                                 self.built.live_blob_keys & set(result.keys))
+
+    def test_more_successful_shards_than_total_is_still_measured(self):
+        # Elasticsearch never writes more successful shards than total. The
+        # partial-snapshot waiver read that contradiction as "partial" and
+        # stopped measuring, so one corrupt counter switched off the only
+        # check that sees this short list, and `__w0a` went into the
+        # manifest. Neutered under "only-fewer-successful-shards-is-partial".
+        result = self._audit(declared_successful_shards={"s2": 3})
+        self.assertEqual(shards.EXTENT_SIZE, self._code(result, WIDE_0))
+        self.assertEqual(set(), self.built.live_blob_keys & set(result.keys))
 
 
 class ADroppedShardContributesNoIndexMetadata(unittest.TestCase):
@@ -310,6 +401,16 @@ class AbsenceIsNeverEvidence(unittest.TestCase):
                          doubt.code if doubt else None)
         self.assertEqual(set(),
                          self.built.live_blob_keys & set(result.keys))
+
+    def test_an_anchor_index_with_no_shard_generations_refuses_the_run(self):
+        # A renamed shard_generations field used to read as "this index has
+        # no shards", which is an absence standing in for an answer. At the
+        # anchor that is a catalog this run cannot read, so it refuses
+        # rather than reporting a survey that skipped the index.
+        _rename_shard_generations(self.dir, 2, "wide")
+        result = run_audit(LocalMirrorSource(self.dir))
+        self.assertIsNotNone(result.coverage.refused)
+        self.assertEqual((), tuple(result.keys))
 
     def test_a_store_that_cannot_answer_is_not_a_store_that_said_no(self):
         # The one measured place where this tool's report was WRONG rather than
@@ -416,7 +517,7 @@ def _strip_index_details(root: str, uuid: str) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     body.pop("index_details", None)
     repo.overwrite(root, key, repo.codec_wrap(
         json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
@@ -428,7 +529,7 @@ def _rewrite_snapshot_body(root: str, uuid: str, change) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     change(body)
     repo.overwrite(root, key, repo.codec_wrap(
         json.dumps({"snapshot": body}, sort_keys=True).encode("utf-8"),
@@ -440,7 +541,7 @@ def _declare_an_extra_index(root: str, uuid: str, index_name: str) -> None:
     import json
     from generation_chain.formats.codec import unwrap
     key = f"snap-{uuid}.dat"
-    body = unwrap(repo.read(root, key))["snapshot"]
+    body = unwrap(repo.read(root, key), "snapshot")["snapshot"]
     body["indices"] = sorted(list(body["indices"]) + [index_name])
     body.setdefault("index_details", {})[index_name] = {
         "shard_count": 1, "size_in_bytes": 42, "max_segments_per_shard": 1}
@@ -461,6 +562,18 @@ def _blank_shard_generation(root: str, generation: int, index: str,
     for entry in document["indices"].values():
         if entry["id"] == repo.index_uuid(index):
             entry["shard_generations"][shard] = None
+    repo.overwrite(root, key,
+                   json.dumps(document, sort_keys=True).encode("utf-8"))
+
+
+def _rename_shard_generations(root: str, generation: int, index: str) -> None:
+    """Move one index's shard_generations to a name this reader does not know."""
+    import json
+    key = f"index-{generation}"
+    document = json.loads(repo.read(root, key).decode("utf-8"))
+    for entry in document["indices"].values():
+        if entry["id"] == repo.index_uuid(index):
+            entry["shard_gens"] = entry.pop("shard_generations")
     repo.overwrite(root, key,
                    json.dumps(document, sort_keys=True).encode("utf-8"))
 
