@@ -520,6 +520,10 @@ class Es:
 
 _S3_OPENER = urllib.request.build_opener(_RefuseRedirects())
 
+# The audit's own lister stops at the same count. At 1000 keys a page that is
+# a hundred million objects, far past any bucket this rig writes.
+S3_MAX_LIST_PAGES = 100_000
+
 
 class S3:
     def __init__(self, endpoint, region, access_key, secret_key, bucket):
@@ -583,10 +587,19 @@ class S3:
             return e.code, body
 
     def list(self, prefix):
-        """Every object under prefix, as (key, size) pairs."""
+        """Every object under prefix, as (key, size) pairs, or EsError.
+
+        The purge deletes whatever this returns, so a listing the rig cannot
+        trust is refused rather than read. That covers a page that does not
+        say whether it is the last, a truncated page with no token, a token
+        the store already handed out, a listing that never ends, and a key
+        outside the prefix asked for.
+        """
         out = []
         token = None
-        while True:
+        seen = set()
+        url = self.endpoint + "/" + self.bucket
+        for _ in range(S3_MAX_LIST_PAGES):
             q = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
             if token:
                 q["continuation-token"] = token
@@ -600,12 +613,28 @@ class S3:
             if root.tag.startswith("{"):
                 ns = root.tag[:root.tag.index("}") + 1]
             for c in root.iter(ns + "Contents"):
-                out.append((c.find(ns + "Key").text,
-                            int(c.find(ns + "Size").text)))
-            trunc = root.find(ns + "IsTruncated")
-            if trunc is None or trunc.text != "true":
+                key = c.findtext(ns + "Key")
+                if not key or not key.startswith(prefix):
+                    raise EsError(status, "the listing for %r returned the "
+                                  "key %r, which is outside it" % (prefix, key),
+                                  url)
+                out.append((key, int(c.find(ns + "Size").text)))
+            truncated = root.findtext(ns + "IsTruncated")
+            if truncated == "false":
                 return out
-            token = root.find(ns + "NextContinuationToken").text
+            if truncated != "true":
+                raise EsError(status, "a listing page carries IsTruncated "
+                              "%r, not true or false, so the rig cannot tell "
+                              "whether the listing is complete" % truncated,
+                              url)
+            token = root.findtext(ns + "NextContinuationToken")
+            if not token or token in seen:
+                raise EsError(status, "a truncated listing page carries no "
+                              "new continuation token, so the rest of the "
+                              "listing cannot be read", url)
+            seen.add(token)
+        raise EsError(0, "the listing did not finish in %d pages"
+                      % S3_MAX_LIST_PAGES, url)
 
     def delete_object(self, key):
         """Single-object DELETE. This path works even against stores that
