@@ -773,21 +773,37 @@ def derive_refusal(state, derive_ok, n):
 def purge_refusal(state, base_path_explicit, base_path):
     """Why a bucket purge must not run, or None when the scope was stated.
 
-    With no state file and no --base-path, teardown falls back to --prefix for
-    the path it purges. That guess is the only thing scoping the delete, and
-    the bucket here is shared: gcw, s3c3, scalerig, rv1based and rv2stale are
-    all base paths of live repositories and all valid prefixes.
+    With no base path in the state file and no --base-path, teardown falls
+    back to --prefix for the path it purges. That guess is the only thing
+    scoping the delete, and the bucket here is shared: gcw, s3c3, scalerig,
+    rv1based and rv2stale are all base paths of live repositories and all
+    valid prefixes.
 
     This stays refused even under --derive-from-prefix. A wrong index or
     repository can be rebuilt from the cluster. Objects deleted out of this
     store cannot, which is the premise the whole repository rests on.
     """
-    if state is not None or base_path_explicit:
+    if (state is not None and "base_path" in state) or base_path_explicit:
         return None
     return ("refusing to purge bucket path %r: it came from --prefix, not "
             "from a run's state file and not from you. Objects deleted here "
             "do not come back. Pass --base-path to state the path, or run "
             "teardown where the state file is." % base_path)
+
+
+def bucket_prefix(base_path):
+    """The listing prefix for a base path, or a refusal when it names the bucket.
+
+    The rig never registers a repository at the bucket root, so an empty base
+    path, or one made only of slashes, is a mistake rather than a scope. Read
+    literally it lists and purges every repository in the shared bucket.
+    """
+    base = base_path.rstrip("/") if isinstance(base_path, str) else ""
+    if not base:
+        die("base path %r names the whole bucket, which holds other "
+            "repositories. Nothing was listed or deleted. Pass --base-path "
+            "with the path the run used" % (base_path,))
+    return base + "/"
 
 
 def teardown_index_scope(resolved, data_stream):
@@ -1088,7 +1104,7 @@ def repository_section(rig, alive_uuids):
     after the prefix belongs to a shard directory, and this section is about
     the repository's own top-level metadata.
     """
-    base = rig.base_path.rstrip("/") + "/" if rig.base_path else ""
+    base = bucket_prefix(rig.base_path)
     objects = rig.s3.list(base)
     generations = []
     snapshot_blobs = []
@@ -1364,7 +1380,7 @@ def clear_bucket(s3, base_path, purge):
     Returns (purged, leftover). Without --purge-bucket nothing is deleted:
     the leaked corpus is the measurement target, so removing it is opt-in.
     """
-    base = base_path.rstrip("/") + "/" if base_path else ""
+    base = bucket_prefix(base_path)
     objects = s3.list(base)
     if not purge:
         leftover = len(objects)
@@ -1430,13 +1446,20 @@ def cmd_teardown(es, args, n, s3, s3_reason):
         log("WARNING: no state file at %s; deriving names from prefix %r "
             "and skipping settings restore because the prior values are "
             "not recorded" % (args.state_file, args.prefix))
-    base_path = (state or {}).get("base_path", args.base_path or args.prefix)
+    if state is not None and "base_path" in state:
+        base_path = state["base_path"]
+    else:
+        base_path = args.base_path
 
     refusal = derive_refusal(state, args.derive_from_prefix, n)
     if refusal is None and args.purge_bucket:
         refusal = purge_refusal(state, args.base_path_explicit, base_path)
     if refusal:
         die(refusal)
+    if s3 is not None or args.purge_bucket:
+        # bucket_prefix() refuses an empty scope here, before the cluster
+        # teardown, so a refused purge leaves nothing half done.
+        bucket_prefix(base_path)
 
     delete_cluster_objects(es, args, n)
     if state:

@@ -156,14 +156,18 @@ class ReportShowsWhatTheRepositoryIsLeaking(unittest.TestCase):
         self.assertEqual(section["root_generations"], list(range(12, 20)))
         self.assertEqual(section["root_generation_count"], 20)
 
-    def test_an_empty_base_path_lists_the_bucket_root(self):
-        # A repository registered at the bucket root has no prefix to strip.
-        # Prefixing a slash anyway would list nothing and report an empty
-        # repository that is full.
-        s3 = FakeS3({"index-2": 1})
-        section = rig.repository_section(
-            make_rig(FakeEs(), s3=s3, base_path=""), set())
-        self.assertEqual(section["root_generations"], [2])
+    def test_an_empty_base_path_is_refused_rather_than_read_as_the_bucket(
+            self):
+        # The rig never registers a repository at the bucket root, so an
+        # empty base path is a mistake, and listing the whole bucket would
+        # count another repository's index-N and snap-*.dat as this rig's
+        # leak. Models a hand-edited state file or an empty template value.
+        s3 = FakeS3({"index-2": 1, "gcw/index-7": 1})
+        for empty in ("", "/", None):
+            with self.subTest(base_path=empty):
+                with self.assertRaises(SystemExit):
+                    quiet(rig.repository_section,
+                          make_rig(FakeEs(), s3=s3, base_path=empty), set())
 
     def test_a_missing_s3_is_reported_with_its_reason_not_as_empty(self):
         # An operator who forgot the S3 credentials must read why there is no
@@ -931,6 +935,58 @@ class TeardownCommand(TempDirCase):
         self.assertIsNone(json.loads(out)["leftover_bucket_objects"])
         self.assertIn("bucket state not checked", err)
 
+    def test_an_empty_base_path_on_the_command_line_purges_nothing(self):
+        # An unset variable in a wrapper script renders --base-path ''. If
+        # that empty value counted as a stated path, the purge would run
+        # from the --prefix guess the refusal exists to block, or from the
+        # bucket root, and delete another live repository's objects.
+        s3 = FakeS3({"churnrig/a": 1, "gcw/index-7": 1})
+        es = FakeEs()
+        with self.assertRaises(SystemExit):
+            self.run_teardown(es, self.args(
+                "--derive-from-prefix", "--purge-bucket", "--base-path", ""),
+                s3)
+        self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_an_empty_base_path_in_the_state_file_purges_nothing(self):
+        # The rig never writes an empty base path, so one in the state file
+        # was put there by hand or by another tool. Read as written, it
+        # scopes the purge to the whole shared bucket, and every tenant's
+        # objects go with no way back.
+        for empty in ("", "/", None):
+            with self.subTest(base_path=empty):
+                self.write_state(base_path=empty)
+                s3 = FakeS3({"churnrig/a": 1, "gcw/index-7": 1})
+                es = FakeEs()
+                with self.assertRaises(SystemExit):
+                    self.run_teardown(es, self.args("--purge-bucket"), s3)
+                self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_a_state_file_without_a_base_path_does_not_license_a_purge(self):
+        # A state file that never recorded a base path states no scope.
+        # Filling the gap from --prefix would purge a guessed path, which is
+        # the one thing purge_refusal says must stay refused.
+        self.write_state(base_path=None)
+        state = json.loads(pathlib.Path(self.path("s.json")).read_text())
+        del state["base_path"]
+        pathlib.Path(self.path("s.json")).write_text(json.dumps(state))
+        s3 = FakeS3({"churnrig/a": 1})
+        es = FakeEs()
+        with self.assertRaises(SystemExit):
+            self.run_teardown(es, self.args("--purge-bucket"), s3)
+        self.assertEqual((es.calls, s3.deleted), ([], []))
+
+    def test_an_empty_base_path_does_not_block_a_teardown_that_skips_the_bucket(
+            self):
+        # With no S3 client and no purge the bucket is never listed, so the
+        # empty value scopes nothing. Refusing here would leave the rig's
+        # SLM policy writing snapshots and its cluster settings changed.
+        self.write_state(base_path="")
+        es = FakeEs()
+        code, _, _ = self.run_teardown(es, self.args())
+        self.assertEqual(code, 0)
+        self.assertIn(rig.SLM_POLICY_PATH + "churnrig-slm", es.paths("DELETE"))
+
     def test_purge_reports_what_it_removed(self):
         # The verdict is the audit trail of an irreversible delete.
         self.write_state()
@@ -988,6 +1044,18 @@ class StatusCommand(TempDirCase):
         code, out, _ = quiet(rig.cmd_status, es, args,
                              rig.names("churnrig"), None, "no s3")
         self.assertEqual(json.loads(out)["snapshots"]["alive"], 1)
+
+    def test_status_refuses_an_empty_base_path_instead_of_listing_the_bucket(
+            self):
+        # Setup maps an empty --base-path to the prefix, so status reading
+        # the same value as the bucket root reports another repository's
+        # generations as this rig's and sends the operator after a leak
+        # that is not there.
+        args = parse("status", "--es", "http://x:9200", "--base-path", "",
+                     "--state-file", self.path("none.json"))
+        with self.assertRaises(SystemExit):
+            quiet(rig.cmd_status, FakeEs(), args, rig.names("churnrig"),
+                  FakeS3({"gcw/index-7": 1}), None)
 
     def test_status_before_setup_falls_back_to_the_prefix(self):
         # status is useful before setup has run, which the doc promises.
