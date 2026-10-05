@@ -56,7 +56,6 @@ from .keys import KeyIndex
 SHARD_SNAPSHOT_DOCUMENT = re.compile(r"^snap-(.+)\.dat$")
 
 INDEX_IN_USE_BUT_UNLISTED = "index-not-listed-but-a-live-snapshot-is-here"
-INDEX_REFERENCED_BUT_UNLISTED = "index-not-listed-but-a-live-lookup-names-it"
 INDEX_RETIRED = "index-no-live-snapshot-references"
 NO_SHARD_GENERATION = "catalog-names-no-generation-for-this-shard"
 CURRENT_DOCUMENT_UNREADABLE = "current-shard-document-unreadable"
@@ -256,12 +255,11 @@ def survey_shards(source: RepositorySource, chain: Chain, keys: Iterable[str],
     present = _blobs_present(keys)
     owners = _owners(present)
     live_documents_here = _live_shard_documents(keys, set(chain.final.snapshots))
-    live_indices = _live_index_uuids(chain)
 
     parsed = ParseRecord()
     histories, dropped, retired = _survey_current(
-        source, chain, wanted, present, owners, live_documents_here,
-        live_indices, index, parsed)
+        source, chain, wanted, present, owners, live_documents_here, index,
+        parsed)
     measured = list(histories)
     _check_declared_extent(source, chain, histories, dropped, notes)
     _record_era_writers(
@@ -313,8 +311,8 @@ def _survey_current(
         source: RepositorySource, chain: Chain,
         wanted: Dict[ShardLocation, Dict[int, Optional[str]]],
         present: Dict[str, Set[str]], owners: Dict[str, Set[str]],
-        live_documents_here: Dict[str, Set[str]], live_indices: Set[str],
-        index: KeyIndex, parsed: ParseRecord
+        live_documents_here: Dict[str, Set[str]], index: KeyIndex,
+        parsed: ParseRecord
 ) -> Tuple[Dict[ShardLocation, ShardHistory], Dict[str, Doubt], Dict[str, Doubt]]:
     """Decide which shard directories survive on their current document alone.
 
@@ -332,7 +330,7 @@ def _survey_current(
     for location in sorted(wanted, key=_location_order):
         stems = frozenset(present.get(location.directory, set()))
         live, current, doubt = _current_live_set(
-            source, chain, location, cache, stems, owners, index, live_indices,
+            source, chain, location, cache, stems, owners, index,
             live_documents_here.get(location.directory, set()), parsed)
         if doubt is not None:
             if doubt.code == INDEX_RETIRED:
@@ -496,8 +494,8 @@ def _current_live_set(source: RepositorySource, chain: Chain,
                       location: ShardLocation,
                       cache: Dict[str, Optional[ShardDocument]],
                       stems: FrozenSet[str], owners: Dict[str, Set[str]],
-                      index: KeyIndex, live_indices: Set[str],
-                      live_documents: Set[str], parsed: ParseRecord
+                      index: KeyIndex, live_documents: Set[str],
+                      parsed: ParseRecord
                       ) -> Tuple[FrozenSet[str], Optional[ShardDocument],
                                  Optional[Doubt]]:
     """What the ANCHOR generation still says lives in this shard.
@@ -519,14 +517,10 @@ def _current_live_set(source: RepositorySource, chain: Chain,
                 f"generation {chain.current_generation} does not list index "
                 f"{location.index_uuid} and the store holds the shard document "
                 f"of live snapshot(s) {', '.join(sorted(live_documents))} here")
-        if location.index_uuid in live_indices:
-            # The catalog contradicts itself: a live snapshot's lookup names
-            # this index and the indices map does not hold it. One of the two
-            # readings is wrong and there is no way to tell which.
-            return frozenset(), None, Doubt(
-                INDEX_REFERENCED_BUT_UNLISTED,
-                f"a live snapshot references index {location.index_uuid}, "
-                f"which generation {chain.current_generation} does not list")
+        # A live snapshot whose lookup names an index the map lacks never
+        # gets here: `parse_repository_data._cross_check` refuses that
+        # catalog, and `test_generation_chain_formats` pins it.
+        #
         # No live snapshot references the index by either of the two
         # independent routes the catalog carries, and no live snapshot left a
         # document here. The index was dropped, which is ordinary, and this is
@@ -640,19 +634,6 @@ def _live_shard_documents(keys: Iterable[str],
         if match and match.group(1) in live_uuids:
             out.setdefault(directory, set()).add(match.group(1))
     return out
-
-
-def _live_index_uuids(chain: Chain) -> Set[str]:
-    """Every index a live snapshot references.
-
-    RepositoryData lists these in two places, the `indices` map and each
-    snapshot's `index_metadata_lookup`, and the parser refuses a catalog whose
-    two halves disagree. So this set is complete or the run never got here.
-    """
-    live: Set[str] = set()
-    for snapshot in chain.final.snapshots.values():
-        live.update(snapshot.metadata_lookup)
-    return live
 
 
 def _check_declared_extent(source: RepositorySource, chain: Chain,
