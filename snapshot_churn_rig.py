@@ -1480,7 +1480,11 @@ def settings_not_restored(es, state):
 
 
 def teardown_verdict(es, args, n, state):
-    """Whether teardown left the cluster as it found it, and what it did not."""
+    """Whether teardown left the cluster as it found it, and what it did not.
+
+    cmd_teardown also marks the verdict unclean when --purge-bucket left
+    objects under the base path.
+    """
     verdict = {"ts": now_iso(), "prefix": args.prefix, "clean": True}
     prefixes = [args.prefix]
     if state and state.get("prefix") not in (None, args.prefix):
@@ -1534,6 +1538,9 @@ def cmd_teardown(es, args, n, s3, s3_reason):
     verdict = teardown_verdict(es, args, n, state)
     verdict["leftover_bucket_objects"] = leftover
     verdict["purged"] = purged
+    if args.purge_bucket and leftover:
+        verdict["clean"] = False
+        verdict["purge_incomplete"] = True
     print(json.dumps(verdict, sort_keys=True), flush=True)
     if not verdict["clean"]:
         log("teardown left residue, state file kept; see the verdict above")

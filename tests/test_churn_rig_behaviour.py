@@ -1081,6 +1081,23 @@ class TeardownCommand(TempDirCase):
         self.assertEqual(code, 0)
         self.assertIn(rig.SLM_POLICY_PATH + "churnrig-slm", es.paths("DELETE"))
 
+    def test_objects_a_purge_left_behind_keep_the_state_file(self):
+        # A store can acknowledge a single delete and keep the object. If
+        # teardown still called that clean, it would delete the state file,
+        # and finishing the purge would then need --base-path typed from
+        # memory in a bucket shared with live repositories.
+        class DeletesThatDoNotTake(FakeS3):
+            def delete_object(self, key):
+                self.deleted.append(key)
+
+        self.write_state()
+        s3 = DeletesThatDoNotTake({"churnrig/a": 1, "churnrig/b": 1})
+        code, out, _ = self.run_teardown(
+            FakeEs(), self.args("--purge-bucket"), s3)
+        self.assertEqual(code, 1)
+        self.assertFalse(json.loads(out)["clean"])
+        self.assertTrue(os.path.exists(self.path("s.json")))
+
     def test_purge_reports_what_it_removed(self):
         # The verdict is the audit trail of an irreversible delete.
         self.write_state()
