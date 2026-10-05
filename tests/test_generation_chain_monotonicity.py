@@ -57,7 +57,11 @@ _S1 = {"idx": {0: ["__a", "__shared"], 1: ["__p"]}, "other": {0: ["__o"]},
        "keep": {0: ["__k1"]}}
 _S2 = {"idx": {0: ["__b", "__shared"], 1: ["__p"]}, "other": {0: ["__o"]},
        "keep": {0: ["__k1"]}}
-_S3 = {"idx": {0: ["__c"], 1: ["__q"]}, "keep": {0: ["__k2"]}}
+# `keep/0`'s `__k1` is named by s1 and s2, both deleted, and still held by
+# live s3. Without a key like this no live key is ever within reach of a
+# delete, and every live-key assertion below passes with the live-set
+# subtraction gone.
+_S3 = {"idx": {0: ["__c"], 1: ["__q"]}, "keep": {0: ["__k1", "__k2"]}}
 HISTORY = [
     {"s1": _S1},
     {"s1": _S1, "s2": _S2},
@@ -380,6 +384,20 @@ class Monotonicity(unittest.TestCase):
         for shape, built in self.built.items():
             self.assertEqual(set(),
                              built.live_blob_keys & self.baselines[shape], shape)
+
+    def test_a_live_key_is_within_reach_of_a_delete(self):
+        # Guards the fixture's purpose. The live-key assertions in this class
+        # only test the live-set subtraction if some live key was also named
+        # by a deleted snapshot. The fixture once had no such key, and those
+        # assertions stayed green with the subtraction removed; with it, the
+        # neuter case "the-shard-local-set-difference" turns this class red.
+        named_by_deleted = {f"{repo.directory_of(index, shard)}/{blob}"
+                            for spec in (_S1, _S2)
+                            for index, by_shard in spec.items()
+                            for shard, blobs in by_shard.items()
+                            for blob in blobs}
+        for shape, built in self.built.items():
+            self.assertTrue(named_by_deleted & built.live_blob_keys, shape)
 
     def test_no_combination_of_up_to_three_file_faults_grows_the_manifest(self):
         names = [name for name, _ in FILE_FAULTS]
