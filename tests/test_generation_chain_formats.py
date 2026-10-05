@@ -165,11 +165,60 @@ class ShardDocuments(unittest.TestCase):
         # backwards: the `snapshots` object is keyed by snapshot NAME, and its
         # file lists hold BLOB names rather than physical Lucene names.
         parsed = parse_shard_snapshots(shard_blob({
-            "files": [{"name": "__a", "physical_name": "_0.cfs"},
-                      {"name": "v__b", "physical_name": "segments_3"}],
+            "files": [{"name": "__a", "physical_name": "_0.cfs", "length": 1},
+                      {"name": "v__b", "physical_name": "segments_3",
+                       "length": 1}],
             "snapshots": {"s1": {"files": ["__a", "v__b"]}}}), "where")
         self.assertEqual(parsed.by_snapshot_name["s1"], frozenset({"__a"}))
         self.assertEqual(parsed.blob_names, frozenset({"__a"}))
+
+    def test_each_snapshot_s_files_add_up_to_its_byte_total(self):
+        # Use case: the extent check compares this sum with the size the
+        # snapshot document declares, and that comparison is the one check
+        # that sees a short live list. A sum that counted the wrong files, or
+        # another snapshot's, would drop healthy shards or pass short ones.
+        parsed = parse_shard_snapshots(shard_blob({
+            "files": [{"name": "__a", "physical_name": "_0.cfs", "length": 10},
+                      {"name": "__b", "physical_name": "_1.cfs", "length": 32},
+                      {"name": "v__c", "physical_name": "segments_3",
+                       "length": 5}],
+            "snapshots": {"s1": {"files": ["__a", "v__c"]},
+                          "s2": {"files": ["__a", "__b", "v__c"]}}}), "where")
+        self.assertEqual({"s1": 15, "s2": 47},
+                         dict(parsed.length_by_snapshot_name))
+
+    def test_a_file_entry_without_a_usable_length_is_refused(self):
+        # Abuse case: Elasticsearch's own FileInfo parser refuses an entry
+        # with no length or a negative one. This reader used to count such
+        # an entry as 0 bytes, so a document it had misread still produced
+        # a byte total, and that total went into the size check as if
+        # Elasticsearch had written it. Neutered under
+        # "a-file-entry-needs-a-length".
+        for length in (None, -1, True, "42", 4.5):
+            entry = {"name": "__a", "physical_name": "_0.cfs"}
+            if length is not None:
+                entry["length"] = length
+            with self.subTest(length=length):
+                with self.assertRaises(ShapeGateError):
+                    parse_shard_snapshots(shard_blob({
+                        "files": [entry, {"name": "v__b",
+                                          "physical_name": "segments_3",
+                                          "length": 1}],
+                        "snapshots": {"s1": {"files": ["__a", "v__b"]}}}),
+                        "where")
+
+    def test_a_file_entry_without_a_physical_name_is_refused(self):
+        # Abuse case: Elasticsearch refuses an entry with no physical name.
+        # This reader used to read it as "", which can never be a commit or
+        # stand for a segment, so a commit entry that lost the field was
+        # indistinguishable from an ordinary file. Neutered under
+        # "a-file-entry-needs-a-physical-name".
+        with self.assertRaises(ShapeGateError):
+            parse_shard_snapshots(shard_blob({
+                "files": [{"name": "__a", "length": 1},
+                          {"name": "v__b", "physical_name": "segments_3",
+                           "length": 1}],
+                "snapshots": {"s1": {"files": ["__a", "v__b"]}}}), "where")
 
     def test_a_renamed_files_array_raises_rather_than_yielding_nothing(self):
         # Abuse case with a measured price. Renaming one field in this
@@ -181,7 +230,8 @@ class ShardDocuments(unittest.TestCase):
         # "a-shard-document-without-a-files-array-is-refused".
         with self.assertRaises(ShapeGateError):
             parse_shard_snapshots(shard_blob({
-                "fileList": [{"name": "__a", "physical_name": "_0.cfs"}],
+                "fileList": [{"name": "__a", "physical_name": "_0.cfs",
+                              "length": 1}],
                 "snapshots": {}}), "where")
 
     def test_a_snapshot_naming_a_file_the_document_does_not_declare_raises(self):
@@ -194,8 +244,10 @@ class ShardDocuments(unittest.TestCase):
         # "a-snapshot-may-name-only-declared-files".
         with self.assertRaises(ShapeGateError):
             parse_shard_snapshots(shard_blob({
-                "files": [{"name": "__a", "physical_name": "_0.cfs"},
-                          {"name": "v__b", "physical_name": "segments_3"}],
+                "files": [{"name": "__a", "physical_name": "_0.cfs",
+                           "length": 1},
+                          {"name": "v__b", "physical_name": "segments_3",
+                           "length": 1}],
                 "snapshots": {"s1": {"files": ["__a", "v__b", "__ghost"]}}}),
                 "where")
 

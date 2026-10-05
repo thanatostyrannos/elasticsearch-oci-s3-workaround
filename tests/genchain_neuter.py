@@ -195,8 +195,8 @@ CASES = [
      "    if not isinstance(raw, list):\n        raw = []"),
     ("a-snapshot-may-name-only-declared-files",
      "formats/shard_snapshots.py",
-     "        if name not in physical:\n",
-     "        if name not in physical:\n            continue\n        if False:\n"),
+     "        if name not in entries:\n",
+     "        if name not in entries:\n            continue\n        if False:\n"),
     ("an-absent-shard-generations-list-is-refused",
      "formats/repository_data.py",
      "    if \"shard_generations\" not in entry:\n        raise ShapeGateError(",
@@ -371,9 +371,21 @@ CASES = [
      "    if missing:", "    if False:"),
     ("an-inline-entry-does-not-represent-a-segment",
      "formats/shard_snapshots.py",
-     "        if LUCENE_COMMIT.match(physical[name]):\n            commit_names",
-     "        blob_physical.add(physical[name])\n"
-     "        if LUCENE_COMMIT.match(physical[name]):\n            commit_names"),
+     "        if LUCENE_COMMIT.match(entries[name].physical):\n"
+     "            commit_names",
+     "        blob_physical.add(entries[name].physical)\n"
+     "        if LUCENE_COMMIT.match(entries[name].physical):\n"
+     "            commit_names"),
+    ("a-file-entry-needs-a-length", "formats/shard_snapshots.py",
+     "    if isinstance(length, bool) or not isinstance(length, int) or length < 0:\n"
+     "        raise ShapeGateError(",
+     "    if isinstance(length, bool) or not isinstance(length, int) or length < 0:\n"
+     "        length = 0\n    if False:\n        raise ShapeGateError("),
+    ("a-file-entry-needs-a-physical-name", "formats/shard_snapshots.py",
+     "    if not isinstance(physical, str) or not physical:\n"
+     "        raise ShapeGateError(",
+     "    if not isinstance(physical, str) or not physical:\n"
+     "        physical = \"\"\n    if False:\n        raise ShapeGateError("),
     ("the-commit-oracle-tally-is-recorded-per-document",
      "derivation/shards.py",
      "        parsed.tally.record(key, document)", "        pass"),

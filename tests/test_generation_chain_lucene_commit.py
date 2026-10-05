@@ -44,7 +44,7 @@ from test_lucene_segments import lucene_commit
 
 
 def _file_entry(name, physical_name, content=None):
-    entry = {"name": name, "physical_name": physical_name}
+    entry = {"name": name, "physical_name": physical_name, "length": 1}
     if content is not None:
         entry["meta_hash"] = content
     return entry
