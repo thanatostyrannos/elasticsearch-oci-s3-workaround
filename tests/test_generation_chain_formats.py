@@ -410,6 +410,24 @@ class Smile(unittest.TestCase):
         with self.assertRaises(BlobFormatError):
             decode_smile(b":)\n\x05\xfa\x83name\x2c\xfb")
 
+    def test_a_header_enabling_shared_string_values_is_refused(self):
+        # Abuse case: Elasticsearch never turns on shared string values,
+        # and all 34 captured documents leave the flag off. A header that
+        # sets it describes a writer nobody tested against, and answering
+        # value back references from a table this reader only guesses at
+        # would rename values silently. Neutered under
+        # "smile-shared-string-values-are-refused".
+        with self.assertRaises(BlobFormatError):
+            decode_smile(b":)\n\x07\xfa\xfb")
+
+    def test_seven_bit_binary_is_refused(self):
+        # Abuse case: Elasticsearch writes binary raw, and the 7-bit decoder
+        # this replaced lost bits in its last group, so a writer uuid
+        # written that way read back as a different one. A token this
+        # reader cannot decode correctly is refused rather than misread.
+        with self.assertRaises(BlobFormatError):
+            decode_smile(b":)\n\x05\xe8\x81\x00\x00")
+
     def test_bytes_after_the_root_value_are_refused(self):
         # Abuse case: the JSON branch refused trailing bytes and the SMILE
         # branch returned after the first value, so `{}` followed by junk,

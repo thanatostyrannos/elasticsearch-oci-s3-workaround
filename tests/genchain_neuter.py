@@ -362,6 +362,8 @@ CASES = [
      "        inflater = zlib.decompressobj(-15)\n"),
     ("a-deflate-stream-ends-with-its-payload", "formats/codec.py",
      "    if not inflater.eof or inflater.unused_data:", "    if False:"),
+    ("smile-shared-string-values-are-refused", "formats/smile.py",
+     "        if flags & HAS_SHARED_STRING_VALUES:", "        if False:"),
     ("a-smile-document-ends-at-its-root-value", "formats/smile.py",
      "        if self._at != len(self._data):", "        if False:"),
     ("a-file-list-must-cover-what-the-commit-requires",
