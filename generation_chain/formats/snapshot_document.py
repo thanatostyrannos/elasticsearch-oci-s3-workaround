@@ -88,11 +88,12 @@ def parse_snapshot_document(data: bytes, where: str) -> SnapshotExtent:
         raise ShapeGateError(
             f"{where} decoded to a {type(document).__name__}, not a snapshot "
             "document")
-    # Real 9.5.2 nests everything under a `snapshot` key. Accepting both
-    # shapes costs nothing and the nesting is not something to depend on.
-    body = document.get("snapshot", document)
+    # Elasticsearch nests the body under a `snapshot` key, and every captured
+    # document does. A document without it is a shape this reader has never
+    # seen, so it is refused rather than read from the top level.
+    body = document.get("snapshot")
     if not isinstance(body, dict):
-        raise ShapeGateError(f"{where} has a malformed snapshot object")
+        raise ShapeGateError(f"{where} has no snapshot object")
     uuid, name = body.get("uuid"), body.get("name")
     if not isinstance(uuid, str) or not uuid:
         raise ShapeGateError(f"{where} declares no snapshot uuid")

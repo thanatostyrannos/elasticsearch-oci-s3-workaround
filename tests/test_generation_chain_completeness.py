@@ -184,6 +184,17 @@ class ADeclarationTheTraversalDoesNotMeet(unittest.TestCase):
         result = self._rewrite_s2(lambda b: b.update(uuid="some-other-uuid"))
         self._assert_condemns_nothing_in_wide(result)
 
+    def test_a_snapshot_document_for_another_name_drops_its_shards(self):
+        # Every later join is by snapshot NAME: the extent is measured
+        # against the file lists the shard documents hold under that name.
+        # A document that carries this snapshot's uuid and another name is
+        # not one Elasticsearch wrote for this snapshot, and measuring it
+        # would compare the traversal with a declaration about something
+        # else. Neutered under
+        # "a-snapshot-document-for-another-name-is-not-trusted".
+        result = self._rewrite_s2(lambda b: b.update(name="some-other-name"))
+        self._assert_condemns_nothing_in_wide(result)
+
     def test_a_well_formed_snapshot_document_still_passes(self):
         # Baseline for the refusals above. If a normal document were refused,
         # every audit would drop every shard.

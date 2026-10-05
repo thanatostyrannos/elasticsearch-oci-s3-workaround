@@ -224,6 +224,17 @@ class SnapshotDocuments(unittest.TestCase):
                 with self.assertRaises(ShapeGateError):
                     self.parse(self.body(**{field: True}))
 
+    def test_a_body_not_nested_under_snapshot_is_refused(self):
+        # Abuse case: Elasticsearch nests the body under `snapshot`, and all
+        # four captured documents do. Reading the top level as the body when
+        # that key is missing guessed at a shape nobody has seen, and the
+        # guess decided which extent a traversal was measured against.
+        # Neutered under "a-snapshot-document-must-nest-its-body".
+        with self.assertRaises(ShapeGateError):
+            parse_snapshot_document(
+                fx.codec_wrap(json.dumps(self.body()).encode("utf-8"),
+                              codec_name="snapshot"), "snap-uuid-s2.dat")
+
 
 class CodecFraming(unittest.TestCase):
 

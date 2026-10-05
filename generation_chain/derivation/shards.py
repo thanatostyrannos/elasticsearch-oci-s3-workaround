@@ -707,6 +707,18 @@ def _check_declared_extent(source: RepositorySource, chain: Chain,
                 f"the document fetched for live snapshot {snapshot.name!r} "
                 "belongs to a different snapshot"))
             continue
+        if extent.name != snapshot.name:
+            # The measurement below finds each shard's file list by snapshot
+            # name, so a document naming another snapshot would be measured
+            # against file lists it does not describe.
+            notes.append(f"{key} declares snapshot name {extent.name!r}, so "
+                         f"the extent of snapshot {snapshot.name!r} was not "
+                         "verified")
+            _drop_indices(histories, dropped, touched, Doubt(
+                EXTENT_UNREADABLE,
+                f"the document fetched for live snapshot {snapshot.name!r} "
+                f"names snapshot {extent.name!r}"))
+            continue
         if extent.total_shards is None or extent.successful_shards is None:
             # Without both counts this run cannot tell a complete snapshot
             # from a partial one, so it cannot tell a short read from a
