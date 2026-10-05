@@ -557,14 +557,19 @@ def run_cycles(args, tsv, columns, log):
     import its own package, every cycle exited 1, and the loop carried on
     writing tidy rows of zeroes. A hundred of those read exactly like a
     hundred cycles that found nothing.
+
+    Returns the totals, the number of cycles that ran, and the reason the
+    run stopped early, or None when every cycle ran.
     """
     totals = {"deleted": 0, "failed": 0, "unconfirmed": 0, "segments": 0}
+    completed = 0
     for n in range(args.start, args.start + args.cycles):
         mode = args.mode
         if mode == "mixed":
             mode = "segment" if n % 2 else "metadata"
         log(f"=== cycle {n} [{mode}] ===")
         row = cycle(args, n, mode, args.out, log)
+        completed += 1
         with open(tsv, "a") as fh:
             fh.write("\t".join("-" if row.get(c) is None else str(row[c])
                                for c in columns) + "\n")
@@ -578,9 +583,9 @@ def run_cycles(args, tsv, columns, log):
         reason = stop_reason(row, n, args.out)
         if reason:
             log(f"  STOPPING: {reason}")
-            break
+            return totals, completed, reason
         time.sleep(args.sleep)
-    return totals
+    return totals, completed, None
 
 
 def build_parser():
@@ -733,6 +738,11 @@ def prepare_output(p, args):
 
 
 def main():
+    """Run the cycles. Returns 1 when a cycle stopped the run, 0 otherwise.
+
+    run-test-cycle.sh and the chart's qualify Job both exit with this status,
+    so a stopped run has to fail them.
+    """
     p = build_parser()
     args = p.parse_args()
     check_arguments(p, args)
@@ -741,12 +751,13 @@ def main():
     def log(msg):
         print(msg, flush=True)
 
-    totals = run_cycles(args, tsv, COLUMNS, log)
+    totals, completed, stopped = run_cycles(args, tsv, COLUMNS, log)
 
-    log(f"=== totals over {args.cycles} cycles ===")
+    log(f"=== totals over {completed} of {args.cycles} cycles ===")
     for k, v in totals.items():
         log(f"  {k}: {v}")
+    return 1 if stopped else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

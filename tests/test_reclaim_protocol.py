@@ -546,5 +546,48 @@ class AnEarlierManifestBlocksTheRun(unittest.TestCase):
         self.assertTrue(self.prepare(start=3).endswith("cycles.tsv"))
 
 
+class AStoppedRunExitsNonZero(unittest.TestCase):
+    """Both wrappers pass the harness's exit status on as their own."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="protocol-exit-")
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+        self.addCleanup(setattr, protocol, "cycle", protocol.cycle)
+
+    def main(self, rows):
+        produced = iter(rows)
+        protocol.cycle = lambda args, n, mode, outdir, log: next(produced)
+        creds = os.path.join(self.tmp, "c.json")
+        with open(creds, "w") as fh:
+            fh.write("{}")
+        argv = ["reclaim_test_protocol.py", "--cycles", str(len(rows)),
+                "--mode", "metadata", "--sleep", "0",
+                "--endpoint", "http://127.0.0.1:1", "--region", "r",
+                "--bucket", "b", "--prefix", "p/", "--credentials", creds,
+                "--out", os.path.join(self.tmp, "out")]
+        import contextlib
+        import io
+        original, sys.argv = sys.argv, argv
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                code = protocol.main()
+        finally:
+            sys.argv = original
+        return code, out.getvalue()
+
+    def test_a_run_that_stopped_on_failed_deletes_exits_non_zero(self):
+        # The chart's Job and run-test-cycle.sh report success on exit 0.
+        # A run that stopped because deletes failed would otherwise finish
+        # as a completed Job, and nobody would read the log that said STOP.
+        code, _ = self.main([_row(1, failed=2), _row(2)])
+        self.assertEqual(code, 1)
+
+    def test_a_run_that_finished_every_cycle_exits_zero(self):
+        # The counterpart: a clean run that exited non-zero would make every
+        # qualify Job fail and the stop above mean nothing.
+        code, _ = self.main([_row(1), _row(2)])
+        self.assertEqual(code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
