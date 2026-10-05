@@ -47,6 +47,16 @@ class AStaleManifestIsRefused(unittest.TestCase):
             recheck.staleness_problem(age_seconds=999999, maximum=0,
                                       path="m.tsv"))
 
+    def test_a_negative_bound_does_not_lift_the_limit(self):
+        # Abuse case: only zero is the stated way to switch the check off. A
+        # negative bound used to switch it off too, so a typo such as -3600
+        # let a manifest derived years ago through, after a searchable
+        # snapshot could have been mounted over its blobs. Neutered under
+        # "only-zero-lifts-the-age-limit".
+        for age in (31 * 365 * 86400, 60, -30):
+            self.assertIsNotNone(recheck.staleness_problem(
+                age_seconds=age, maximum=-1, path="m.tsv"))
+
     def test_the_message_says_what_to_do(self):
         problem = recheck.staleness_problem(age_seconds=7200, maximum=3600,
                                             path="m.tsv")

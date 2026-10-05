@@ -256,6 +256,10 @@ CASES = [
      "    return ()"),
     ("execute-must-say-whether-it-re-checked", "reclaim/recheck.py",
      "    if not elasticsearch and not without:", "    if False:"),
+    ("only-zero-lifts-the-age-limit", "reclaim/recheck.py",
+     "    if maximum < 0:", "    if False:"),
+    ("a-negative-age-limit-stops-at-the-command-line", "reclaim/cli.py",
+     "type=whole_seconds,", "type=int,"),
 
     # -- the promise that this package cannot delete ----------------------
     ("the-transport-refuses-a-write-method", "sources/http_reads.py",

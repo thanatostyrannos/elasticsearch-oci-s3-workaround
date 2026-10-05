@@ -60,10 +60,16 @@ def staleness_problem(age_seconds: float, maximum: float,
     A maximum of zero disables the check. That has to be possible, because an
     operator working a long incident may have decided for themselves, and it
     has to be an explicit act rather than the default, because the failure it
-    guards against is silent.
+    guards against is silent. Zero is the only value that disables it: a
+    negative maximum is refused, because a typo must not switch it off.
     """
-    if maximum <= 0:
+    if maximum == 0:
         return None
+    if maximum < 0:
+        return (f"the manifest age limit {maximum} is negative, so it names "
+                f"no age {path} could be checked against. Nothing was "
+                "deleted. To act on the manifest whatever its age, say so "
+                "with --max-manifest-age 0.")
     if age_seconds < -CLOCK_SKEW_SECONDS:
         return (f"{path} records a derivation time {int(-age_seconds)}s in "
                 "the future, so its age cannot be measured. A clock on the "
