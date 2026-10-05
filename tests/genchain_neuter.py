@@ -312,6 +312,11 @@ CASES = [
     ("a-file-list-must-cover-what-the-commit-requires",
      "formats/shard_snapshots.py",
      "    if missing:", "    if False:"),
+    ("an-inline-entry-does-not-represent-a-segment",
+     "formats/shard_snapshots.py",
+     "        if LUCENE_COMMIT.match(physical[name]):\n            commit_names",
+     "        blob_physical.add(physical[name])\n"
+     "        if LUCENE_COMMIT.match(physical[name]):\n            commit_names"),
     ("the-commit-oracle-tally-is-recorded-per-document",
      "derivation/shards.py",
      "        parsed.tally.record(key, document)", "        pass"),
