@@ -139,6 +139,25 @@ class LoadManifest(unittest.TestCase):
         with self.assertRaises(ManifestError):
             load_manifest(self.path)
 
+    def test_a_row_with_an_empty_key_is_refused(self):
+        # Abuse case: a hand edit that blanks the first column. The reader
+        # used to hand back '', which the delete path turns into the bare
+        # prefix 'repo/', a key the audit never derived and the operator
+        # never meant to approve. Neutered under
+        # "a-manifest-key-the-audit-never-writes-is-refused".
+        write(self.path, ROW, "\t" + ROW.split("\t", 1)[1])
+        with self.assertRaises(ManifestError):
+            load_manifest(self.path)
+
+    def test_a_row_whose_key_holds_a_control_character_is_refused(self):
+        # Abuse case: the audit's writer leaves out any key holding a
+        # control character, so such a key in a manifest came from an edit
+        # or another tool. Reading it would delete an object whose name the
+        # operator could not even see printed correctly.
+        write(self.path, ROW.replace("__blob", "__bl\x1bob", 1))
+        with self.assertRaises(ManifestError):
+            load_manifest(self.path)
+
     def test_an_empty_file_is_refused_rather_than_read_as_zero_keys(self):
         # Abuse case distinguishing "zero rows after a real header" (valid)
         # from "nothing was ever written" (not a manifest at all).
@@ -185,6 +204,25 @@ class DerivationRecord(unittest.TestCase):
         self.assertEqual(derivation.repository_uuid, "repo-uuid-aaaa")
         self.assertEqual(derivation.anchor_generation, 41)
         self.assertEqual(derivation.derived_at, 1790000000.0)
+
+    def test_the_first_generation_is_written_and_reads_back(self):
+        # Use case for the writer's floor: generation 0 is a real anchor,
+        # the first catalog a repository ever wrote. A floor set one too
+        # high would leave a fresh repository's manifest with no marker, and
+        # reclaim would refuse every manifest derived from it.
+        self.write_with_marker(
+            completion_line("u", 0, 1790000000.0).rstrip("\n"))
+        self.assertEqual(load_manifest(self.path).derivation.anchor_generation,
+                         0)
+
+    def test_the_writer_never_records_a_generation_the_reader_refuses(self):
+        # Abuse case: a negative generation used to be written as-is, so the
+        # audit could finish a manifest with a marker that reclaim then
+        # refuses as damaged. A writer and a reader that disagree about what
+        # a complete manifest looks like leave the operator unable to tell
+        # an audit bug from an edited file.
+        with self.assertRaises(ValueError):
+            completion_line("u", -1, 1790000000.0)
 
     def test_a_bare_marker_reads_but_carries_no_record(self):
         # A manifest from before the record existed is still a complete

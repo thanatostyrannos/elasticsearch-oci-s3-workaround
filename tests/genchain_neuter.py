@@ -293,6 +293,10 @@ CASES = [
      "reclaim/manifest.py",
      "    if not uuid.strip() or not _GENERATION.match(generation):",
      "    if not uuid.strip() or not generation.lstrip(\"-\").isdigit():"),
+    ("a-manifest-key-the-audit-never-writes-is-refused",
+     "reclaim/manifest.py",
+     "        if not is_writable_key(key):",
+     "        if False:"),
 
     # -- reclaim: the manifest is bound to its repository and its age ------
     ("the-target-must-carry-the-manifest-s-uuid",
