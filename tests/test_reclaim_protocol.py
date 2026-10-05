@@ -589,5 +589,61 @@ class AStoppedRunExitsNonZero(unittest.TestCase):
         self.assertEqual(code, 0)
 
 
+class TheClusterChoiceIsOneThatCanWork(unittest.TestCase):
+    """--elasticsearch is the operator asking for the veto. Honour it or refuse."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="protocol-es-choice-")
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
+
+    def check(self, *extra):
+        creds = os.path.join(self.tmp, "c.json")
+        with open(creds, "w") as fh:
+            fh.write('{"elasticsearch": {"api_key": "k"}}')
+        os.chmod(creds, 0o600)
+        argv = ["--endpoint", "http://127.0.0.1:1", "--region", "r",
+                "--bucket", "b", "--prefix", "p/", "--credentials", creds,
+                "--out", os.path.join(self.tmp, "out")] + list(extra)
+        parser = protocol.build_parser()
+        args = parser.parse_args(argv)
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):
+            protocol.check_arguments(parser, args)
+        return args
+
+    def test_a_cluster_without_a_repository_is_refused(self):
+        # The harness used to turn this into --without-elasticsearch for
+        # both the audit and the execute. The operator asked for the veto
+        # that protects blobs under mounted searchable snapshots, and the
+        # run deleted without it.
+        with self.assertRaises(SystemExit):
+            self.check("--mode", "metadata",
+                       "--elasticsearch", "http://127.0.0.1:9200")
+
+    def test_a_segment_cycle_without_a_cluster_is_refused(self):
+        # The settle wait asks the cluster before every segment cycle. With
+        # no cluster the first cycle crashed after --out was created, with a
+        # traceback instead of a usage line. Mixed mode starts on one.
+        for mode in ("segment", "mixed"):
+            with self.subTest(mode=mode):
+                with self.assertRaises(SystemExit):
+                    self.check("--mode", mode, "--data-stream", "logs")
+
+    def test_a_cluster_with_its_repository_is_accepted(self):
+        # The counterpart: the documented corroborated run must still start.
+        args = self.check("--mode", "segment", "--data-stream", "logs",
+                          "--elasticsearch", "http://127.0.0.1:9200",
+                          "--repository", "repo")
+        self.assertEqual(args.repository, "repo")
+
+    def test_a_metadata_run_without_a_cluster_is_accepted(self):
+        # Running without corroboration is documented and states itself to
+        # the reclaim. Refusing it would break run-test-cycle.sh with no
+        # ELASTICSEARCH set.
+        args = self.check("--mode", "metadata")
+        self.assertIsNone(args.elasticsearch)
+
+
 if __name__ == "__main__":
     unittest.main()

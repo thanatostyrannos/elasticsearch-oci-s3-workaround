@@ -610,7 +610,8 @@ def build_parser():
                    default="mixed",
                    help="segment waits for a complete shard view before each "
                         "audit; metadata does not; mixed alternates, which is "
-                        "the only setting that exercises both (default: mixed)")
+                        "the only setting that exercises both. segment and "
+                        "mixed need --elasticsearch (default: mixed)")
     p.add_argument("--min-docs-per-shard", type=int, default=1000,
                    help="in segment mode, hold until the emptiest primary "
                         "shard holds this many documents. A shard with none "
@@ -649,9 +650,9 @@ def build_parser():
                         "cluster credential from this harness")
     p.add_argument("--elasticsearch",
                    help="ask the cluster what to protect while deriving. "
-                        "Needs an 'elasticsearch' section in --credentials; "
-                        "checked before the first cycle rather than "
-                        "discovered during it")
+                        "Needs --repository and an 'elasticsearch' section in "
+                        "--credentials; both are checked before the first "
+                        "cycle rather than discovered during it")
     p.add_argument("--es-user", default="elastic",
                    help="user for THIS harness's own calls to the cluster, "
                         "the ones driving the segment-mode wait. It does not "
@@ -693,6 +694,13 @@ def check_arguments(p, args):
             es_tls_context(args)
         except (OSError, ssl.SSLError) as exc:
             p.error(f"--es-ca-cert {args.es_ca_cert!r} cannot be loaded: {exc}")
+    if args.elasticsearch and not args.repository:
+        p.error("--elasticsearch needs --repository. Without it the audit "
+                "and the reclaim would both run without the cluster check "
+                "--elasticsearch asked for")
+    if args.mode != "metadata" and not args.elasticsearch:
+        p.error(f"--mode {args.mode} asks the cluster before every segment "
+                "cycle, so it needs --elasticsearch and --repository")
     if args.mode != "metadata" and not args.data_stream:
         p.error("segment mode needs --data-stream to check shard population")
     args.es_password = ""
