@@ -283,8 +283,8 @@ flowchart TD
         Op3["Human operator, runs helm upgrade --install; not present during the run"]
     end
     subgraph K8sZone3["Kubernetes namespace, one Helm release"]
-        K8sSecret3["Secret: release credentials, root-owned, mode 0600, Path C"]
-        StageInit3["stage-credentials initContainer, runAsUser 0"]
+        K8sSecret3["Secret: release credentials, root-owned, mode 0440 to the pod fsGroup, Path C"]
+        StageInit3["stage-credentials initContainer, runtime uid, non-root"]
         EmptyDir3["emptyDir /secrets, non-root owned, mode 0600"]
         ChurnJob3["churn-rig Job: snapshot_churn_rig.py run"]
         QualifyJob3["qualify Job: reclaim_test_protocol.py"]
@@ -299,7 +299,7 @@ flowchart TD
     Op3 -->|"sets values.credentials, or points at an existing Secret"| K8sSecret3
     Op3 -->|"triggers deploy:rig, manual only, refused on a schedule"| ChurnJob3
     K8sSecret3 -->|"mounted read-only"| StageInit3
-    StageInit3 -->|"copies, chowns, chmods a copy"| EmptyDir3
+    StageInit3 -->|"copies at 0600 as the runtime uid"| EmptyDir3
     EmptyDir3 --> ChurnJob3
     EmptyDir3 --> QualifyJob3
     ChurnJob3 -->|"writes documents, takes and deletes snapshots and indices; the harness's own credential"| ES3
@@ -319,10 +319,10 @@ values file; the default is `true`, dry-run-only.
 **Which credential it holds and how it arrives.** Path C: a Kubernetes
 Secret, rendered by
 `gitlab/kubernetes-test-rig/chart/templates/credentials-secret.yaml`,
-mounted read-only at 0600 and root-owned, staged by a root-run
-`stage-credentials` initContainer into a non-root-owned `emptyDir` copy
-at the same mode, because the Secret volume itself is unreadable to the
-non-root main container. See section 3 for the full path, including the
+mounted read-only at 0440, root-owned and group-readable by the pod's
+`fsGroup`, then copied by the `stage-credentials` initContainer, running
+as the same non-root uid as the main container, into an `emptyDir` copy at
+0600, because every tool refuses a credentials file the group can read. See section 3 for the full path, including the
 point that whether the Secret is encrypted at rest depends on the
 cluster's own etcd configuration, which this chart does not control.
 This mode also holds a second, separate credential the other two modes
@@ -356,8 +356,8 @@ already has real destructive reach through Elasticsearch's own API
 `qualify.dryRunOnly` is false, a delete loop against the object store
 that is already running with no human watching it. Compromising the
 `stage-credentials` initContainer specifically reaches every credential
-this release holds at once, from the one container in the whole chart
-that runs as root.
+this release holds at once; it runs as the same non-root uid as every
+other container in these pods.
 
 **What is different about this mode.** It is the only one where a
 delete can happen as a matter of normal, intended operation without a
@@ -482,7 +482,7 @@ flowchart TD
     HostCredFile -->|"same check"| HostReclaim
     CIVar -->|"install -m 600, staged to a job-local path"| CIJob
     K8sSecret -->|"mounted read-only"| K8sEmptyDir
-    K8sEmptyDir -->|"a root initContainer chowns and chmods a copy for the non-root main container"| K8sPod
+    K8sEmptyDir -->|"a non-root initContainer copies it at 0600 for the main container"| K8sPod
 
     HostAudit -->|"GET and HEAD only; listing is a GET; nothing else can leave this process"| Store
     HostReclaim -->|"GET, HEAD for its own reads; one POST /bucket?delete per batch, only past the approval gate"| Store
@@ -533,9 +533,9 @@ flowchart TD
 
     subgraph PathC["Path C: a Kubernetes Secret staged into an emptyDir"]
         C1["Operator sets values.credentials, or points at an existing Secret"] --> C2["Helm renders a Secret object, base64 in etcd"]
-        C2 --> C3["Secret volume mounted read-only, root-owned, defaultMode 0600"]
-        C3 --> C4["stage-credentials initContainer, the one container in this chart that runs as root"]
-        C4 --> C5["copies each file into an emptyDir, chowns to the runtime uid, chmods 0600"]
+        C2 --> C3["Secret volume mounted read-only, root-owned, defaultMode 0440 to the pod fsGroup"]
+        C3 --> C4["stage-credentials initContainer, runtime uid, non-root"]
+        C4 --> C5["copies each file into an emptyDir, created 0600 by the runtime uid"]
         C5 --> C6["main container, non-root uid, reads the emptyDir copy"]
         C6 --> C7["CredentialFile.read opens and parses the JSON"]
         C7 --> C8["Secret wraps every value that came out of it"]
@@ -591,14 +591,14 @@ an `inspect`.
   encryption. Whether it is encrypted at rest depends on whether the
   cluster's etcd has encryption-at-rest configured, which is a cluster
   property this chart does not control and this document cannot verify.
-- **Path C, the root-privileged staging step.** `stage-credentials` is the
-  one container in every pod this chart creates that runs as `runAsUser: 0`.
-  It exists solely because a Secret volume is root-owned at 0600 and the
-  main container runs non-root (uid 1001 in the published image), so
-  nothing else can open it. That is a deliberate, narrow privilege
-  escalation inside the pod, not a bug: the container does nothing but copy,
-  `chown` and `chmod`, and it runs before the main container starts, never
-  alongside it.
+- **Path C, the group-readable Secret mount.** The Secret volume is mounted
+  0440 so the `stage-credentials` initContainer, running as the same
+  non-root uid as the main container (1001 in the published image), can
+  read it through the pod's `fsGroup`. Any container in the pod that mounts
+  that volume can read it the same way; only `stage-credentials` mounts it.
+  The step copies each file into an `emptyDir` at 0600, because the tools
+  refuse a credentials file the group can read, and it runs before the main
+  container starts, never alongside it.
 
 ## 4. Attack surface: data flow diagram with STRIDE
 
