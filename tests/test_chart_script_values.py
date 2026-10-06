@@ -114,13 +114,31 @@ class CloneSnippet(unittest.TestCase):
         return subprocess.run(["git", *args], cwd=cwd, env=self.env, check=True,
                               capture_output=True, text=True).stdout.strip()
 
-    def clone(self, ref, script=None):
+    def clone(self, ref, script=None, **extra_env):
         dest = self.tmp / "ws"
         shutil.rmtree(dest, ignore_errors=True)
         script = (script or clone_script()).replace("/workspace", str(dest))
         run = subprocess.run(["sh", "-c", script], env={**self.env, "REPO_URL": str(self.bare),
-                             "REPO_REF": ref}, capture_output=True, text=True)
+                             "REPO_REF": ref, **extra_env}, capture_output=True, text=True)
         return run, dest
+
+    def test_a_workspace_owned_by_another_user_still_checks_out(self):
+        # In the pods the clone runs as uid 1001 inside an emptyDir root owns,
+        # so git calls the repository "dubious" and refuses every command
+        # after the clone. No rig pod could start. git's own test knob makes
+        # it treat the directory as foreign, which reproduces that here
+        # without root.
+        # The pod clones over https, which has no ownership check; here the
+        # source is a local bare repository, so a throwaway global config
+        # trusts it alone and the workspace is the only directory git treats
+        # as foreign.
+        trust = self.tmp / "trust-source.gitconfig"
+        trust.write_text(f"[safe]\n\tdirectory = {self.bare}\n")
+        run, dest = self.clone(
+            "main", GIT_TEST_ASSUME_DIFFERENT_OWNER="1",
+            GIT_CONFIG_GLOBAL=str(trust))
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual((dest / "f").read_text(), "two")
 
     def test_full_commit_sha_checks_out_that_commit(self):
         # source.ref is documented as the way to pin the code a run executes.
