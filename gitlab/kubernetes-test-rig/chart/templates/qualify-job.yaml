@@ -146,6 +146,9 @@ spec:
               set -- "$@" --sleep "$Q_SLEEP"
               set -- "$@" --transport "$Q_TRANSPORT"
               set -- "$@" --endpoint "$Q_ENDPOINT" --region "$Q_REGION"
+              {{- if .Values.qualify.insecureHttp }}
+              set -- "$@" --insecure-http
+              {{- end }}
               {{- if .Values.qualify.ociNamespace }}
               set -- "$@" --namespace "$Q_OCI_NAMESPACE"
               {{- end }}

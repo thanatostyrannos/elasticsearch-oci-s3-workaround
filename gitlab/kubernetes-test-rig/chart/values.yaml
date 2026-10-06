@@ -398,6 +398,11 @@ qualify:
                                           # --state-file, so a Job that inspects it later
                                           # (or `kubectl cp`) finds it without a second volume
   timeout: ""                      # --timeout; empty uses the tool's own default
+  # --insecure-http; the audit and reclaim the loop starts then accept a
+  # plain http store or cluster that is not loopback. This chart's MinIO
+  # serves plain http inside the cluster, so a run against it needs this.
+  # Leave it false for any real store.
+  insecureHttp: false
   dryRunOnly: true                 # --dry-run-only; audit and dry run, never execute.
                                     # DELETES STAY OFF UNTIL THIS IS EXPLICITLY SET TO false.
 
