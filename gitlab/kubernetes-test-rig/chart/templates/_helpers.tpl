@@ -165,10 +165,14 @@ unconditionally.
       case "$REPO_REF" in -*) echo "source.ref must not start with a dash" >&2; exit 1;; esac
       git clone --no-checkout -- "$REPO_URL" /workspace
       cd /workspace
-      commit="$(git rev-parse --verify --quiet "refs/remotes/origin/$REPO_REF^{commit}" \
-        || git rev-parse --verify --quiet "$REPO_REF^{commit}")" \
+      # The pod runs as a non-root uid inside an emptyDir root owns, so git
+      # treats /workspace as another user's repository and refuses to work in
+      # it. The root filesystem is read-only, so the exception is passed on
+      # each command rather than written to a global config.
+      commit="$(git -c safe.directory=/workspace rev-parse --verify --quiet "refs/remotes/origin/$REPO_REF^{commit}" \
+        || git -c safe.directory=/workspace rev-parse --verify --quiet "$REPO_REF^{commit}")" \
         || { echo "source.ref $REPO_REF is not a branch, tag or commit in $REPO_URL" >&2; exit 1; }
-      git checkout --detach "$commit"
+      git -c safe.directory=/workspace checkout --detach "$commit"
   env:
     - name: REPO_URL
       value: {{ .Values.source.repoUrl | quote }}
