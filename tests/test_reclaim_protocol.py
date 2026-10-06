@@ -114,6 +114,42 @@ class BothStreamsReachTheFileTheCountsAreReadFrom(unittest.TestCase):
         self.assertEqual(protocol.counted(protocol.DELETED, text), 5)
 
 
+class TheLabStoreOptInReachesBothChildren(unittest.TestCase):
+    """--insecure-http is the harness's opt-in for a plain-http lab store.
+
+    The test-rig chart serves MinIO over plain http inside the cluster, and
+    the audit and reclaim both refuse a non-loopback http endpoint unless
+    told it is a lab store. Without a way to say so, every cycle of the
+    chart's qualify Job failed before it read a single object.
+    """
+
+    def test_the_opt_in_reaches_the_audit_and_reclaim(self):
+        # If either child misses the flag, the cycle fails at that step: an
+        # audit that refuses finds nothing, a reclaim that refuses deletes
+        # nothing, and the run reads as a store that never leaks.
+        args = _args(insecure_http=True, transport="s3")
+        self.assertIn("--insecure-http", protocol.transport_flags(args))
+        self.assertIn("--insecure-http", protocol.reclaim_command(args, "m.tsv"))
+
+    def test_abuse_without_the_opt_in_neither_child_gets_it(self):
+        # Abuse: the flag must never appear on its own. A harness that added
+        # it for every http endpoint would send a production manifest and its
+        # signed requests in the clear without anyone having asked for that.
+        args = _args(insecure_http=False, transport="s3")
+        self.assertNotIn("--insecure-http", protocol.transport_flags(args))
+        self.assertNotIn("--insecure-http",
+                         protocol.reclaim_command(args, "m.tsv"))
+
+    def test_the_command_line_accepts_the_opt_in(self):
+        # The chart passes the flag on the qualify Job's command line; a
+        # parser that rejected it would fail the Job at argument parsing.
+        args = protocol.build_parser().parse_args(
+            ["--endpoint", "http://minio:9000", "--region", "r",
+             "--bucket", "b", "--prefix", "p/", "--credentials", "c.json",
+             "--out", "o", "--insecure-http"])
+        self.assertTrue(args.insecure_http)
+
+
 class TheReclaimCallStatesItsCorroborationChoice(unittest.TestCase):
     """The harness drives the reclaim CLI, so it has to satisfy its contract.
 

@@ -394,12 +394,17 @@ def run(cmd, out_path, timeout):
     return completed.returncode, completed.stdout
 
 
+def lab_store_flags(args):
+    """--insecure-http for the children, only when the operator asked for it."""
+    return ["--insecure-http"] if getattr(args, "insecure_http", False) else []
+
+
 def transport_flags(args):
     if args.transport == "oci":
         return ["--transport", "oci", "--namespace", args.namespace,
                 "--oci-region", args.region]
     return ["--transport", "s3", "--endpoint", args.endpoint,
-            "--region", args.region]
+            "--region", args.region] + lab_store_flags(args)
 
 
 def reclaim_command(args, manifest):
@@ -419,6 +424,7 @@ def reclaim_command(args, manifest):
                "--manifest", manifest, "--endpoint", args.endpoint,
                "--region", args.region, "--bucket", args.bucket,
                "--prefix", args.prefix, "--credentials", args.credentials]
+    command += lab_store_flags(args)
     if args.elasticsearch and args.repository:
         command += ["--elasticsearch", args.elasticsearch,
                     "--es-repository", args.repository] + es_ca_flags(args)
@@ -632,6 +638,11 @@ def build_parser():
                         "cluster, for this harness's own calls and for the "
                         "audit and reclaim runs it starts. Verification "
                         "stays on; there is no flag to turn it off")
+    p.add_argument("--insecure-http", action="store_true",
+                   help="pass --insecure-http to the audit and reclaim runs "
+                        "this harness starts, so they accept a plain http "
+                        "store or cluster that is not loopback. Only for a "
+                        "lab store, such as the test-rig chart's MinIO")
     p.add_argument("--repository")
     p.add_argument("--data-stream", default="",
                    help="data stream whose shards are checked in segment mode")
