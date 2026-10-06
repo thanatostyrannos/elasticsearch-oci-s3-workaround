@@ -202,13 +202,14 @@ unconditionally.
 Stage the credentials where the runtime user can actually read them.
 
 A Secret volume is owned by root. Every tool here refuses a credentials file
-carrying any group or world bit, so the mount has to be 0600, and 0600 owned by
-root is unreadable to a container that does not run as root. The UBI base image
-runs as uid 1001, so the tools cannot open their own credential.
+carrying any group or world bit, so the tools cannot read the mount directly:
+the runtime user (uid 1001 in the UBI base image) can only reach it through
+the pod's fsGroup, and a file the group can read is one the tools refuse.
 
-This copies each file into an emptyDir, owned by the runtime user and still
-0600. It is the only container here that runs as root, it runs before anything
-else, and it does nothing but the copy.
+The Secret is mounted 0440, group-owned by the fsGroup, and this step copies
+each file into an emptyDir as the runtime user, so the copy is owned by that
+user and 0600 from the moment it exists. It runs as the same non-root user as
+every other container, before anything else, and does nothing but the copy.
 
 Called with a dict: root is the chart context, keys is the list of Secret keys
 this pod's command reads. Only those keys are mounted (see
@@ -219,15 +220,11 @@ rig.credentialVolumes), so only those keys are copied.
 {{- $eck := and (not $root.Values.elasticsearch.external) (has $root.Values.credentials.keys.esPassword .keys) -}}
 - name: stage-credentials
   image: {{ $root.Values.image.python | quote }}
-  # The deliberate exception: this step exists only because a Secret volume
-  # is owned by root at mode 0600 and the UBI image's runtime user (uid
-  # 1001) cannot read it, so something has to run as root to copy it out.
-  # Everything else about it is locked down the same as every other
-  # container: no privilege escalation, no capabilities, and its only write
-  # target (/secrets) is an emptyDir, so the root filesystem stays read-only
-  # even here.
+  # Runs as the pod's user, like every other container. It reads the
+  # Secret through the fsGroup and writes only to /secrets, an emptyDir, so
+  # it needs no root, no capabilities and no writable root filesystem.
   securityContext:
-    runAsUser: 0
+    runAsNonRoot: true
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
@@ -237,10 +234,6 @@ rig.credentialVolumes), so only those keys are copied.
   env:
     - name: PYTHONDONTWRITEBYTECODE
       value: "1"
-    - name: RUN_AS_UID
-      value: {{ $root.Values.securityContext.runAsUser | int64 | quote }}
-    - name: RUN_AS_GID
-      value: {{ $root.Values.securityContext.runAsGroup | int64 | quote }}
     {{- if $eck }}
     - name: PASSWORD_KEY
       value: {{ $root.Values.credentials.keys.esPassword | quote }}
@@ -251,13 +244,13 @@ rig.credentialVolumes), so only those keys are copied.
     - |
       import os, pathlib, shutil
       raw, out = pathlib.Path("/secrets-raw"), pathlib.Path("/secrets")
-      uid, gid = int(os.environ["RUN_AS_UID"]), int(os.environ["RUN_AS_GID"])
+      # Every file this step creates is owner-only from the start.
+      os.umask(0o077)
 
       for src in sorted(raw.iterdir()):
           if src.is_file():
               dst = out / src.name
               shutil.copyfile(src, dst)
-              os.chown(dst, uid, gid)
               os.chmod(dst, 0o600)
       {{- if $eck }}
 
@@ -271,7 +264,6 @@ rig.credentialVolumes), so only those keys are copied.
       if eck.exists():
           path = out / os.environ["PASSWORD_KEY"]
           path.write_text(eck.read_text().strip())
-          os.chown(path, uid, gid)
           os.chmod(path, 0o600)
           print("harness login password taken from the ECK-generated secret")
       {{- end }}
@@ -290,7 +282,8 @@ rig.credentialVolumes), so only those keys are copied.
 
 {{/*
 The Secret as mounted, and the emptyDir the staging step writes into. Tools
-read /secrets and never see /secrets-raw. Called with a dict (root, keys): the
+read /secrets and never see /secrets-raw. The Secret volumes are 0440 so the
+staging step can read them through the pod's fsGroup without running as root. Called with a dict (root, keys): the
 Secret volume lists exactly those keys, so a pod cannot read a credential its
 command does not use. A key missing from the Secret stops the pod at start
 instead of mounting less than the command expects.
@@ -300,7 +293,7 @@ instead of mounting less than the command expects.
 - name: credentials-raw
   secret:
     secretName: {{ include "rig.credentialsSecretName" $root }}
-    defaultMode: 0600
+    defaultMode: 0440
     items:
       {{- range .keys }}
       - key: {{ . | quote }}
@@ -312,7 +305,7 @@ instead of mounting less than the command expects.
 - name: eck-elastic-user
   secret:
     secretName: {{ include "rig.fullname" $root }}-es-elastic-user
-    defaultMode: 0600
+    defaultMode: 0440
 {{- end }}
 {{- end -}}
 

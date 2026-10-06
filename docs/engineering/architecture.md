@@ -380,9 +380,10 @@ Three things an architect should take from this one. First, every pod that
 touches a credential runs the same three init containers in the same order;
 `stage-credentials` exists purely because a Kubernetes `Secret` volume is
 owned by `root` and every one of these tools refuses a credentials file
-looser than `0600`, so a root-owned init container copies it into an
-`emptyDir` and `chown`s it to the runtime uid (1001, matching the UBI base
-image) before the real container starts. Second, `qualify` is the only Job
+looser than `0600`, so an init container running as the runtime uid (1001,
+matching the UBI base image) reads the `0440` Secret through the pod's
+`fsGroup` and copies it into an `emptyDir` at `0600` before the real
+container starts. Second, `qualify` is the only Job
 that can delete anything, and it is `values.yaml`'s own `qualify.dryRunOnly`
 flag, not a Kubernetes construct, that gates whether its cycles ever pass
 `--execute` to `generation_chain.reclaim`; the chart never invokes
@@ -609,7 +610,7 @@ flowchart TD
 
     subgraph EachWorkload["inside every Job/CronJob pod in wave 2 (and the teardown hook)"]
         direction LR
-        CloneSource["init: clone-source\ngit clone --depth 1"] --> StageCreds["init: stage-credentials\nchown/chmod 0600 to runtime uid"] --> WaitEs["init: wait-for-elasticsearch\nany HTTP answer, including 401"]
+        CloneSource["init: clone-source\ngit clone --depth 1"] --> StageCreds["init: stage-credentials\ncopy at 0600 as runtime uid"] --> WaitEs["init: wait-for-elasticsearch\nany HTTP answer, including 401"]
     end
 
     Wave2 -.-> EachWorkload

@@ -67,9 +67,10 @@ source:
   # refuses any host key not listed here.
   sshKnownHosts: ""
 
-# The user every tool runs as. The UBI base image ships uid 1001, and these
-# values must match it: the staging init container chowns the credentials to
-# this uid, and a mismatch leaves the tools unable to read their own secret.
+# The user every container runs as. The UBI base image ships uid 1001, and
+# these values must match it. The staging init container reads the Secret
+# through fsGroup and copies each credential as this user, so a mismatch leaves
+# it unable to read the Secret or the tools unable to read their copy.
 securityContext:
   runAsUser: 1001
   runAsGroup: 0
